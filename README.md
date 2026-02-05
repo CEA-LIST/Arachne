@@ -1,24 +1,65 @@
 # Atraktos
 
-**Atraktos** is a Rust-based code generator that compile Domain-Specific Modeling Language (DSML) designed using Ecore metamodels to Conflict-free Replicated Data Types (CRDT) using the Moirai library.
+**Atraktos** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSML) designed using Ecore metamodels to Conflict-free Replicated Data Types (CRDT) using the Moirai library.
 
-## Management of references
+## Overview
+
+This code generator bridges the gap between high-level domain models (defined in Ecore) and distributed, eventually consistent data structures (CRDTs). It automatically generates Rust code that leverages the Moirai library to provide conflict-free replication semantics for your domain models.
+
+## Management of References
 
 An important challenge in generating code from a metamodel into a composition of CRDTs is the management of references. The approach to CRDT composition and nesting proposed by *Bauwens et al.* is hierarchical: a parent CRDT can propagate its conflict-resolution policy to its children using a causal reset. However, references represent relationships between siblings in the hierarchy. To support them, we adopt the following design:
 
 - Each class instance is assigned a unique identifier and stored in a `UWMap<ID, Object>` within its containing package.
 - An auxiliary, specialized *typed graph CRDT*, called the `ReferenceManager`, is responsible for registering references between classifiers. This CRDT encodes which classes may reference which other classes, together with the associated multiplicity constraints (in particular, upper bounds). When interpreting the state of the model, elements are first evaluated independently; the links between them are then established by reading and applying the state of the `ReferenceManager`.
 
-## Mapping
+## Customizing the Code Generator Mapping
 
-- [Ecore documentation](https://download.eclipse.org/modeling/emf/emf/javadoc/2.9.0/org/eclipse/emf/ecore/package-summary.html#details)
+The Ecore metamodeling language allows annotating model elements with `EAnnotation`s. A language engineer can use them to give hints to the code generator on the kind of replicated data type it wants to be used for specific model elements.
+
+### Specifying a Particular Data Type
+
+```xml
+<eAnnotations source="urn:atraktos:semantics">
+    <details key="datatype" value="lww-register"/>
+</eAnnotations>
+```
+
+### Specifying a Total or Partial Order Among the Literals of an `EEnum`
+
+```xml
+<eClassifiers xsi:type="ecore:EEnum" name="name">
+    <eAnnotations source="urn:atraktos:order">
+        <details key="order" value="partial-order"/>
+    </eAnnotations>
+    <eLiterals name="ADD">
+        <eAnnotations source="urn:atraktos:order">
+            <details key="rank" value="1"/>
+        </eAnnotations>
+    </eLiterals>
+    <eLiterals name="UPDATE">
+        <eAnnotations source="urn:atraktos:order">
+            <details key="rank" value="1"/>
+        </eAnnotations>
+    </eLiterals>
+    <eLiterals name="REMOVE">
+        <eAnnotations source="urn:atraktos:order">
+            <details key="rank" value="2"/>
+        </eAnnotations>
+    </eLiterals>
+</eClassifiers>
+```
+
+## Mapping Reference
+
+For detailed Ecore documentation, see: [Ecore API Documentation](https://download.eclipse.org/modeling/emf/emf/javadoc/2.9.0/org/eclipse/emf/ecore/package-summary.html#details)
 
 ### Primitive Data Types
 
 |Ecore|CRDT|
 |-----|----|
 |`EByte`|`Counter<i8>` or any `Register`|
-|`EShort|`Counter<i16>` or any `Register`|
+|`EShort`|`Counter<i16>` or any `Register`|
 |`EInt`|`Counter<i32>` or any `Register`|
 |`ELong`|`Counter<i64>` or any `Register`|
 |`EFloat`|`Counter<f32>` or any `Register`|
@@ -32,8 +73,8 @@ An important challenge in generating code from a metamodel into a composition of
 |Ecore|CRDT|
 |-----|----|
 |`EDataType`|See [Primitive Data Types](#primitive-data-types)|
-|`EClass`|See [`Eclass`](#eclass)|
-|`EEnum`|Rust enum (see [Customizing](#specifying-a-total-or-partial-order-among-the-litterals-of-an-eenum)) + any `Register`|
+|`EClass`|See [`EClass`](#eclass)|
+|`EEnum`|Rust enum (see [Customizing](#specifying-a-total-or-partial-order-among-the-literals-of-an-eenum)) + any `Register`|
 
 #### `EClass`
 
@@ -99,41 +140,12 @@ An exception is made for queries on values derived from the CRDT state. For exam
 
 ### Package
 
-A `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not supported
+An `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported.
 
-## Customizing the code generator mapping
+## Contributing
 
-The Ecore metamodeling language allows annotating model elements with `EAnnotation`s. A language engineer can use them to give hints to the code generator on the kind of replicated data type it wants to be used for specific model elements.
+Contributions are welcome! Please feel free to submit issues or pull requests.
 
-### Specifying a particular data type
+## License
 
-```xml
-<eAnnotations source="urn:atraktos:semantics">
-    <details key="datatype" value="lww-register"/>
-</eAnnotations>
-```
-
-### Specifying a total or partial order among the litterals of an `EEnum`
-
-```xml
-<eClassifiers xsi:type="ecore:EEnum" name="name">
-    <eAnnotations source="urn:atraktos:order">
-        <details key="order" value="partial-order"/>
-    </eAnnotations>
-    <eLiterals name="ADD">
-        <eAnnotations source="urn:atraktos:order">
-            <details key="rank" value="1"/>
-        </eAnnotations>
-    </eLiterals>
-    <eLiterals name="UPDATE">
-        <eAnnotations source="urn:atraktos:order">
-            <details key="rank" value="1"/>
-        </eAnnotations>
-    </eLiterals>
-    <eLiterals name="REMOVE">
-        <eAnnotations source="urn:atraktos:order">
-            <details key="rank" value="2"/>
-        </eAnnotations>
-    </eLiterals>
-</eClassifiers>
-```
+See the LICENSE file for details.
