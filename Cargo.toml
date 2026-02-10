@@ -2,6 +2,7 @@
 name = "atraktos"
 version = "0.1.0"
 edition = "2024"
+description = "Atraktos - A code generator for CRDTs from Ecore metamodels. This library provides functionality to parse Ecore metamodels and generate Conflict-free Replicated Data Types (CRDTs) using the Moirai library."
 
 [dependencies]
 ecore_rs = { version = "*", path = "../ecore.rs" }

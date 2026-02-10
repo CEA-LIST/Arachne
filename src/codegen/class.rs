@@ -2,32 +2,33 @@ use ecore_rs::repr::Class;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::error::Result;
+use crate::codegen::import::{CrdtImport, Import, LogImport, MacrosImport};
+use crate::{codegen::GEN_MOD, error::Result};
 
-/// Generates CRDT code for an EClass
 pub struct ClassGenerator<'a> {
     class: &'a Class,
 }
 
-const LOG_PATH: &'static str =
-    "moirai_protocol::state::po_log::VecLog::<moirai_crdt::flag::ew_flag::EWFlag>";
-
 impl<'a> ClassGenerator<'a> {
-    /// Creates a new class generator
     pub fn new(class: &'a Class) -> Self {
         Self { class }
     }
 
-    /// Generates the CRDT type for this class
-    pub fn generate(&self) -> Result<Option<TokenStream>> {
-        let class_name = self.class.name();
-        let name = proc_macro2::Ident::new(class_name, proc_macro2::Span::call_site());
+    pub fn generate(
+        &self,
+        generator: &mut crate::codegen::Generator,
+    ) -> Result<Option<TokenStream>> {
+        let name = proc_macro2::Ident::new(self.class.name(), proc_macro2::Span::call_site());
+        let gen_mod: syn::Path = syn::parse_str(GEN_MOD).unwrap();
 
-        let ty: syn::Type = syn::parse_str(LOG_PATH)?;
+        // Register imports on first use
+        generator.register_import(Import::Crdt(CrdtImport::Counter));
+        generator.register_import(Import::Log(LogImport::VecLog));
+        generator.register_import(Import::Macros(MacrosImport::Record));
 
         let code = quote! {
-            moirai_macros::record!(#name {
-                placeholder: #ty,
+            #gen_mod::record!(#name {
+                placeholder: #gen_mod::VecLog<#gen_mod::Counter<i32>>,
             });
         };
 

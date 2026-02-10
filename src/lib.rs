@@ -1,19 +1,3 @@
-//! Atraktos - A code generator for CRDTs from Ecore metamodels
-//!
-//! This library provides functionality to parse Ecore metamodels and generate
-//! Conflict-free Replicated Data Types (CRDTs) using the Moirai library.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use atraktos::{Config, generate};
-//!
-//! let config = Config::new("./examples/bt.ecore")
-//!     .with_output_dir(".output/generated_project");
-//!
-//! generate(config).expect("Failed to generate code");
-//! ```
-
 pub mod codegen;
 pub mod config;
 pub mod error;
@@ -70,7 +54,7 @@ pub fn generate_from_parser(parser: &EcoreParser) -> Result<TokenStream> {
     {
         let class_gen = codegen::class::ClassGenerator::new(class);
 
-        if let Some(tokens) = class_gen.generate()? {
+        if let Some(tokens) = class_gen.generate(&mut generator)? {
             generator.concat(tokens);
         }
     }
