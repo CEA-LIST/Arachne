@@ -6,67 +6,6 @@
 
 This code generator bridges the gap between high-level domain models (defined in Ecore) and distributed, eventually consistent data structures (CRDTs). It automatically generates Rust code that leverages the Moirai library to provide conflict-free replication semantics for your domain models.
 
-## Getting Started
-
-### Usage
-
-Run the code generator with the default configuration:
-
-```bash
-cargo run
-```
-
-This will parse the Ecore metamodel at `./examples/bt.ecore` and generate CRDT code in `generated_code.rs`.
-
-### As a Library
-
-```rust
-use atraktos::{Config, generate};
-
-let config = Config::new("./path/to/model.ecore")
-    .with_output("output.rs")
-    .with_debug(true);
-
-generate(config)?;
-```
-
-## Project Structure
-
-```
-atraktos/
-├── Cargo.toml              # Project dependencies
-├── README.md               # This file
-├── src/
-│   ├── main.rs            # CLI entry point
-│   ├── lib.rs             # Library interface
-│   ├── error.rs           # Error types with thiserror
-│   ├── config.rs          # Configuration management
-│   ├── parser.rs          # Ecore parsing using ecore.rs
-│   └── codegen/           # Code generation modules
-│       ├── mod.rs         # Generator coordinator
-│       ├── class.rs       # EClass to CRDT mapping
-│       └── record.rs      # Record macro builder
-└── examples/
-    └── bt.ecore           # Example Ecore metamodel
-```
-
-### Module Architecture
-
-- **`config`**: Configuration management for input/output paths and options
-- **`error`**: Centralized error handling with detailed error chains
-- **`parser`**: Ecore metamodel parsing using `ecore.rs`, providing a clean API over the parsed AST
-- **`codegen`**: Modular code generation pipeline
-  - `class`: Maps concrete EClasses to CRDT types
-  - `record`: Builds `record!` macro invocations using the builder pattern
-  - Extensible architecture for adding attribute, reference, and package generators
-
-### Design Patterns
-
-1. **Builder Pattern**: Used in `RecordBuilder` for constructing CRDT records
-2. **Strategy Pattern**: Different generators for different Ecore elements
-3. **Separation of Concerns**: Clear boundaries between parsing, generation, and output
-4. **Error Handling**: Custom error types with source chains for debugging
-
 ## Management of References
 
 An important challenge in generating code from a metamodel into a composition of CRDTs is the management of references. The approach to CRDT composition and nesting proposed by *Bauwens et al.* is hierarchical: a parent CRDT can propagate its conflict-resolution policy to its children using a causal reset. However, references represent relationships between siblings in the hierarchy. To support them, we adopt the following design:
@@ -86,7 +25,7 @@ The Ecore metamodeling language allows annotating model elements with `EAnnotati
 </eAnnotations>
 ```
 
-### Specifying a Total or Partial Order Among the Literals of an `EEnum`
+### Specifying a Total or Partial Order Among the Literals of a `EEnum`
 
 ```xml
 <eClassifiers xsi:type="ecore:EEnum" name="name">
@@ -149,7 +88,7 @@ This approach eliminates runtime inheritance while preserving substitutability a
 
 ##### Interface
 
-Not supported. See [Operations](#operations).
+Operations are not supported. See [Operations](#operations). Features are statically flattened into each concrete subclass that implement the interface during generation.
 
 ### Structural features
 
