@@ -3,9 +3,9 @@ use proc_macro2::TokenStream;
 use crate::codegen::{import::Import, warnings::Warning};
 
 pub struct Fragment {
-    pub tokens: TokenStream,
-    pub imports: Vec<Import>,
-    pub warnings: Vec<Warning>,
+    tokens: TokenStream,
+    imports: Vec<Import>,
+    warnings: Vec<Warning>,
 }
 
 impl Fragment {
@@ -15,6 +15,22 @@ impl Fragment {
             imports,
             warnings,
         }
+    }
+
+    pub fn into(self) -> (TokenStream, Vec<Import>, Vec<Warning>) {
+        (self.tokens, self.imports, self.warnings)
+    }
+
+    pub fn tokens(&self) -> &TokenStream {
+        &self.tokens
+    }
+
+    pub fn imports(&self) -> &[Import] {
+        &self.imports
+    }
+
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
     }
 }
 

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use crate::codegen::{generate::Fragment, import::Import, warnings::Warning};
 
-pub const GEN_MOD: &'static str = "__generated";
+pub const PATH_MOD: &str = "__gen";
 
 pub struct Generator {
     import_set: HashSet<String>,
@@ -24,16 +24,17 @@ impl Generator {
     }
 
     pub fn register(&mut self, fragment: Fragment) {
+        let (tokens, imports, warnings) = fragment.into();
         // Register imports
-        for import in fragment.imports {
+        for import in imports {
             self.register_import(import);
         }
 
         // Collect tokens
-        self.tokens.push(fragment.tokens);
+        self.tokens.push(tokens);
 
         // Collect warnings
-        self.warnings.extend(fragment.warnings);
+        self.warnings.extend(warnings);
     }
 
     /// Register an import on first use. Subsequent uses of the same import are ignored.
@@ -55,15 +56,14 @@ impl Generator {
     }
 
     pub fn build(self) -> TokenStream {
-        let gen_mod: syn::Path = syn::parse_str(GEN_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
         let imports = &self.imports;
         let tokens = &self.tokens;
 
         quote! {
-            mod #gen_mod {
+            mod #path {
                 #(#imports)*
             }
-            use #gen_mod::*;
 
             #(#tokens)*
         }

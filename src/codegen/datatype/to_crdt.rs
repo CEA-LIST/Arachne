@@ -1,0 +1,41 @@
+use ecore_rs::repr::builtin::Typ as EcoreType;
+use proc_macro2::TokenStream;
+use quote::quote;
+
+use crate::codegen::datatype::crdt::{Counter, Crdt, SimpleCrdt};
+
+pub trait ToCrdt {
+    fn to_crdt_container(&self) -> Crdt;
+    fn to_rust_type(&self) -> Option<TokenStream>;
+}
+
+impl ToCrdt for EcoreType {
+    fn to_crdt_container(&self) -> Crdt {
+        match self {
+            EcoreType::EByte
+            | EcoreType::EShort
+            | EcoreType::EInt
+            | EcoreType::ELong
+            | EcoreType::EFloat
+            | EcoreType::EDouble => Crdt::Simple(SimpleCrdt::Counter(Counter::default())),
+            EcoreType::EBoolean => Crdt::Simple(SimpleCrdt::Flag(Default::default())),
+            EcoreType::EChar => Crdt::Simple(SimpleCrdt::Register(Default::default())),
+            EcoreType::EString => Crdt::Simple(SimpleCrdt::List),
+            EcoreType::Object => unimplemented!(),
+        }
+    }
+
+    fn to_rust_type(&self) -> Option<TokenStream> {
+        match self {
+            EcoreType::EByte => Some(quote! { u8 }),
+            EcoreType::EShort => Some(quote! { i16 }),
+            EcoreType::EInt => Some(quote! { i32 }),
+            EcoreType::ELong => Some(quote! { i64 }),
+            EcoreType::EFloat => Some(quote! { f32 }),
+            EcoreType::EDouble => Some(quote! { f64 }),
+            EcoreType::EChar => Some(quote! {char }),
+            EcoreType::EString => Some(quote! { String}),
+            EcoreType::Object | EcoreType::EBoolean => None,
+        }
+    }
+}
