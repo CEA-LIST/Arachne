@@ -5,17 +5,16 @@ pub mod parser;
 mod project;
 mod utils;
 
-use proc_macro2::TokenStream;
-
 pub use config::Config;
+use ecore_rs::repr::Class;
 pub use error::{AtraktosError, Result};
 pub use parser::EcoreParser;
+use proc_macro2::TokenStream;
 
 use crate::{
     codegen::{classifier::class::ClassGenerator, generate::Generate, generator::Generator},
     utils::topo::topological_sort,
 };
-use ecore_rs::repr::Class;
 
 /// Main entry point for code generation
 pub fn generate(config: Config) -> anyhow::Result<()> {

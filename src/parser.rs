@@ -1,6 +1,6 @@
+use std::{fs, path::Path};
+
 use ecore_rs::ctx::Ctx;
-use std::fs;
-use std::path::Path;
 
 use crate::error::Result;
 

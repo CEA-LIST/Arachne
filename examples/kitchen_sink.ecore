@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="test" nsURI="http://www.example.org/test" nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="TestClass">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myString" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myInt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myBoolean" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myChar" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myLong" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myFloat" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EFloat" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myDouble" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myByte" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EByte" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="myShort" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_0_*" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_1_*" lowerBound="1" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_0_1" lowerBound="0" upperBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_1_1" lowerBound="1" upperBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_n_*" lowerBound="5" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bounds_n_m" lowerBound="5" upperBound="10" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="simple_list" ordered ="true" unique ="false" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="unique_list" ordered ="true" unique ="true" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="bag" ordered ="false" unique ="false" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="set" ordered ="false" unique ="true" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+    </eClassifiers>
+</ecore:EPackage>

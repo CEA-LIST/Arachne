@@ -74,7 +74,7 @@ For detailed Ecore documentation, see: [Ecore API Documentation](https://downloa
 |-----|----|
 |`EDataType`|See [Primitive Data Types](#primitive-data-types)|
 |`EClass`|See [`EClass`](#eclass)|
-|`EEnum`|Rust enum (see [Customizing](#specifying-a-total-or-partial-order-among-the-literals-of-an-eenum)) + any `Register`|
+|`EEnum`|Rust enum (see [Customizing](#customizing-the-code-generator-mapping)) + any `Register`|
 
 #### `EClass`
 
@@ -101,8 +101,15 @@ Operations are not supported. See [Operations](#operations). Features are static
 
 - `ordered`: if `true`, the feature is ordered (i.e., is a list). Implemented as a List.
 - `unique`: every element is unique (i.e., is a set). Implemented as a Set if it is a primitive data type.
-- Case `ordered` and `unique`: need for a `OrderedSet` CRDT.
+- Case `ordered` and `unique`: `Bag` CRDT.
 - `lowerbound` and `upperbound`: see [Bounds](#bounds).
+
+|Ecore|CRDT|
+|-----|----|
+|`ordered = true`, `unique = true`, `upperbound > 1`|`UniqueList`|
+|`ordered = false`, `unique = false`, `upperbound > 1`|`Bag` (Of non-mutable elements!)|
+|`ordered = true`, `unique = false`, `upperbound > 1`|`List`|
+|`ordered = false`, `unique = true`, `upperbound > 1`|`Set` (Of non-mutable elements!)|
 
 #### Reference
 
@@ -129,7 +136,7 @@ A reference from an object A to another object B is materialized by an arc betwe
 
 ### Operations
 
-The code generator intentionally does not support Ecore operations nor interfaces at this stage. This decision is primarily motivated by the semantic constraints of conflict-free replicated data types (CRDTs) and by limitations of the Ecore metamodel.
+The code generator intentionally does not support Ecore operations at this stage. This decision is primarily motivated by the semantic constraints of conflict-free replicated data types (CRDTs) and by limitations of the Ecore metamodel.
 
 - First, the implementation of operations is not specified in Ecore, which means a code generator cannot automatically derive their semantics in a meaningful or correct way. Generating operation signatures without being able to generate their behavior would therefore provide little practical value.
 - Second, Ecore does not distinguish between *pure queries* (side-effect free operations that return a value) and *updates* (operations with side effects). This distinction is essential in the context of CRDTs, since the underlying CRDT runtime only supports pure operations and a fixed, explicit set of update operations. Allowing users to implement operations manually would risk introducing side effects or updates that are incompatible with the CRDT's convergence guarantees.
@@ -140,11 +147,7 @@ An exception is made for queries on values derived from the CRDT state. For exam
 
 ### Package
 
-An `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
+A `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported.
 
 ## License
 

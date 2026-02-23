@@ -1,8 +1,10 @@
-use std::fs;
-use std::path::Path;
-
-use crate::config::Config;
-use crate::error::{AtraktosError, Result};
+use crate::{
+    config::Config,
+    error::{AtraktosError, Result},
+};
+use proc_macro2::TokenStream;
+use quote::quote;
+use std::{fs, path::Path};
 
 /// Writes a complete Rust project for the generated code.
 pub fn write_project(config: &Config, project_name: &str, code: &str) -> Result<()> {
@@ -17,7 +19,7 @@ pub fn write_project(config: &Config, project_name: &str, code: &str) -> Result<
     let generated_rs = render_generated_rs(code);
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
-    fs::write(src_dir.join("main.rs"), main_rs)?;
+    fs::write(src_dir.join("main.rs"), main_rs.to_string())?;
     fs::write(src_dir.join("generated.rs"), generated_rs)?;
 
     Ok(())
@@ -39,10 +41,14 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     ))
 }
 
-fn render_main_rs(project_name: &str) -> String {
-    format!(
-        "mod generated;\n\nfn main() {{\n    println!(\"Generated CRDT project: {project_name}\");\n}}\n"
-    )
+fn render_main_rs(project_name: &str) -> TokenStream {
+    quote! {
+        mod generated;
+
+        fn main() {
+            println!("Generated CRDT project: {}", #project_name);
+        }
+    }
 }
 
 fn render_generated_rs(code: &str) -> String {

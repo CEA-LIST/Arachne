@@ -1,20 +1,18 @@
-use ecore_rs::ctx::Ctx;
-use ecore_rs::repr::Class;
-use heck::ToSnakeCase;
-use heck::ToUpperCamelCase;
+use ecore_rs::{ctx::Ctx, repr::Class};
+use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::Span;
-use quote::format_ident;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::Ident;
 
-use crate::codegen::feature::attribute::AttributeGenerator;
-use crate::codegen::generate::Fragment;
-use crate::codegen::generate::Generate;
-use crate::codegen::generator::PATH_MOD;
-use crate::codegen::import::Import;
-use crate::codegen::import::Macros;
+use crate::codegen::{
+    feature::{attribute::AttributeGenerator, reference::ReferenceGenerator},
+    generate::{Fragment, Generate},
+    generator::PATH_MOD,
+    import::{Import, Macros},
+    warnings::Warning,
+};
 
-const INHERITANCE_SUFFIX: &str = "Feat";
+pub const INHERITANCE_SUFFIX: &str = "Feat";
 
 pub struct ClassGenerator<'a> {
     class: &'a Class,
@@ -24,6 +22,51 @@ pub struct ClassGenerator<'a> {
 impl<'a> ClassGenerator<'a> {
     pub fn new(class: &'a Class, ctx: &'a Ctx) -> Self {
         Self { class, ctx }
+    }
+
+    /// Process all structural features and split them into attributes and references
+    fn process_structural_features(&self) -> anyhow::Result<(Vec<Fragment>, Vec<Fragment>)> {
+        self.class.structural().iter().try_fold(
+            (Vec::new(), Vec::new()),
+            |(mut attrs, mut refs), f| {
+                match f.kind {
+                    ecore_rs::repr::structural::Typ::EAttribute => {
+                        attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
+                    }
+                    ecore_rs::repr::structural::Typ::EReference => {
+                        refs.push(ReferenceGenerator::new(f, self.ctx).generate()?);
+                    }
+                }
+                Ok::<(Vec<Fragment>, Vec<Fragment>), anyhow::Error>((attrs, refs))
+            },
+        )
+    }
+
+    /// Compute inherited field names and types from superclasses
+    fn inherited_fields(&self) -> (Vec<Ident>, Vec<Ident>) {
+        let sup = self
+            .class
+            .sup()
+            .iter()
+            .map(|idx| self.ctx.classes()[**idx].name())
+            .collect::<Vec<_>>();
+
+        let field_names_str = sup
+            .iter()
+            .map(|name| format!("{}{}", name, INHERITANCE_SUFFIX).to_snake_case())
+            .collect::<Vec<_>>();
+
+        let field_names = field_names_str
+            .iter()
+            .map(|name| Ident::new(name, Span::call_site()))
+            .collect::<Vec<_>>();
+
+        let field_types = sup
+            .iter()
+            .map(|name| format_ident!("{}{}Log", name, INHERITANCE_SUFFIX))
+            .collect::<Vec<_>>();
+
+        (field_names, field_types)
     }
 
     fn generate_abstract_class(&self) -> anyhow::Result<Fragment> {
@@ -42,35 +85,18 @@ impl<'a> ClassGenerator<'a> {
             .map(|name| format_ident!("{}Log", name))
             .collect::<Vec<_>>();
 
-        let attributes = self
-            .class
-            .structural()
-            .iter()
-            .filter_map(|f| match f.kind {
-                ecore_rs::repr::structural::Typ::EAttribute => {
-                    Some(AttributeGenerator::new(f, self.ctx).generate())
-                }
-                _ => None,
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let (attribute_tokens, attribute_imports, attribute_warnings) =
-            attributes.into_iter().fold(
-                (Vec::new(), Vec::new(), Vec::new()),
-                |(mut toks, mut imps, mut warns), attr| {
-                    let (tokens, imports, warnings) = attr.into();
-                    toks.push(tokens);
-                    imps.extend(imports);
-                    warns.extend(warnings);
-                    (toks, imps, warns)
-                },
-            );
+        let (attributes, references) = self.process_structural_features()?;
+        let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
+        let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
+        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
 
         let tokens = quote! {
             #path::union!(#name = #(#sub_names(#sub_names, #sub_names_log))|*);
 
             #path::record!(#feat_name {
+                #(#inherited_field_names: #inherited_field_types,)*
                 #(#attribute_tokens,)*
+                #(#reference_tokens,)*
             });
         };
 
@@ -82,9 +108,10 @@ impl<'a> ClassGenerator<'a> {
                     Import::Macros(Macros::Union),
                 ],
                 attribute_imports,
+                reference_imports,
             ]
             .concat(),
-            attribute_warnings,
+            vec![attribute_warnings, reference_warnings].concat(),
         ))
     }
 
@@ -92,65 +119,31 @@ impl<'a> ClassGenerator<'a> {
         let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
         let name = Ident::new(self.class.name(), Span::call_site());
 
-        let (inherited_field_names, inherited_field_types) = {
-            let sup = self
-                .class
-                .sup()
-                .iter()
-                .map(|idx| self.ctx.classes()[**idx].name())
-                .collect::<Vec<_>>();
-            let field_names_str = sup
-                .iter()
-                .map(|name| format!("{}{}", name, INHERITANCE_SUFFIX).to_snake_case())
-                .collect::<Vec<_>>();
-            let field_names = field_names_str
-                .iter()
-                .map(|name| Ident::new(name, Span::call_site()))
-                .collect::<Vec<_>>();
-
-            let field_types = sup
-                .iter()
-                .map(|name| format_ident!("{}{}Log", name, INHERITANCE_SUFFIX))
-                .collect::<Vec<_>>();
-
-            (field_names, field_types)
-        };
-
-        let attributes = self
-            .class
-            .structural()
-            .iter()
-            .filter_map(|f| match f.kind {
-                ecore_rs::repr::structural::Typ::EAttribute => {
-                    Some(AttributeGenerator::new(f, self.ctx).generate())
-                }
-                _ => None,
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let (attribute_fields, attribute_imports, attribute_warnings) =
-            attributes.into_iter().fold(
-                (Vec::new(), Vec::new(), Vec::new()),
-                |(mut toks, mut imps, mut warns), attr| {
-                    let (tokens, imports, warnings) = attr.into();
-                    toks.push(tokens);
-                    imps.extend(imports);
-                    warns.extend(warnings);
-                    (toks, imps, warns)
-                },
-            );
+        let (attributes, references) = self.process_structural_features()?;
+        let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
+        let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
+        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
 
         let tokens = quote! {
             #path::record!(#name {
                 #(#inherited_field_names: #inherited_field_types,)*
-                #(#attribute_fields,)*
+                #(#attribute_tokens,)*
+                #(#reference_tokens,)*
             });
         };
 
         Ok(Fragment::new(
             tokens,
-            [vec![Import::Macros(Macros::Record)], attribute_imports].concat(),
-            attribute_warnings,
+            [
+                vec![
+                    Import::Macros(Macros::Record),
+                    Import::Macros(Macros::Union),
+                ],
+                attribute_imports,
+                reference_imports,
+            ]
+            .concat(),
+            vec![attribute_warnings, reference_warnings].concat(),
         ))
     }
 
@@ -232,4 +225,23 @@ impl Generate for ClassGenerator<'_> {
             self.class.name()
         ))
     }
+}
+
+/// Helper function to fold a vector of fragments into separate collections
+/// of tokens, imports, and warnings.
+fn fold_fragments(
+    fragments: Vec<Fragment>,
+) -> (Vec<proc_macro2::TokenStream>, Vec<Import>, Vec<Warning>) {
+    fragments.into_iter().fold(
+        (Vec::new(), Vec::new(), Vec::new()),
+        |(mut toks, mut imps, mut warns), fragment| {
+            let (tokens, imports, warnings) = fragment.into();
+            if !tokens.is_empty() {
+                toks.push(tokens);
+            }
+            imps.extend(imports);
+            warns.extend(warnings);
+            (toks, imps, warns)
+        },
+    )
 }

@@ -51,7 +51,7 @@
     <eClassifiers xsi:type="ecore:EClass" name="InFlowPort" eSuperTypes="#//DataFlowPort" />
     <eClassifiers xsi:type="ecore:EClass" name="OutFlowPort" eSuperTypes="#//DataFlowPort" />
     <eClassifiers xsi:type="ecore:EClass" name="Blackboard">
-        <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" eType="#//BlackboardEntry" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" containment="true" eType="#//BlackboardEntry" />
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EClass" name="Inverter" eSuperTypes="#//Decorator" />
     <eClassifiers xsi:type="ecore:EEnum" name="Status">

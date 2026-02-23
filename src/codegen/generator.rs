@@ -1,6 +1,7 @@
+use std::collections::HashSet;
+
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::collections::HashSet;
 
 use crate::codegen::{generate::Fragment, import::Import, warnings::Warning};
 

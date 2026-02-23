@@ -9,6 +9,11 @@ pub enum Warning {
         bounds: String,
         applied: String,
     },
+    UnsupportedPropertyCombination {
+        feature: String,
+        properties: Vec<String>,
+        applied: Vec<String>,
+    },
 }
 
 impl Warning {
@@ -17,7 +22,7 @@ impl Warning {
         match self {
             Warning::InterfaceNotSupported(name) => {
                 format!(
-                    "Warning: EClass '{}' is an interface and is not supported in v1. It will be skipped.",
+                    "Warning: `EClass` '{}' is an interface and is not supported in v1. It will be skipped.",
                     name
                 )
             }
@@ -27,8 +32,20 @@ impl Warning {
                 applied,
             } => {
                 format!(
-                    "Warning: feature '{}' has unsupported bounds {}. Applied nearest supported bounds {} instead.",
+                    "Warning: feature '{}' has unsupported bounds `{}`. Applied nearest supported bounds {} instead.",
                     feature, bounds, applied
+                )
+            }
+            Warning::UnsupportedPropertyCombination {
+                feature,
+                properties,
+                applied,
+            } => {
+                format!(
+                    "Warning: typed element '{}' has unsupported property combination: `{}`. Applied best-effort mapping instead: `{}`.",
+                    feature,
+                    properties.join(", "),
+                    applied.join(", ")
                 )
             }
         }

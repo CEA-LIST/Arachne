@@ -11,51 +11,16 @@ use syn::Ident;
 
 use crate::codegen::{
     datatype::{
-        crdt::{Crdt, SimpleCrdt},
+        crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
         to_crdt::ToCrdt,
     },
+    feature::bounds::{BoundKind, normalize_bounds},
     generate::{Fragment, Generate},
     generator::PATH_MOD,
     import::{Import, Log},
     warnings::Warning,
 };
 
-#[derive(Clone, Copy, Debug)]
-enum BoundKind {
-    Optional,
-    Single,
-    Many,
-}
-
-fn normalize_bounds(
-    bounds: ecore_rs::repr::bounds::Bounds,
-    feature: &str,
-) -> (BoundKind, Vec<Warning>) {
-    let applied = match (bounds.lbound, bounds.ubound) {
-        (0, Some(1)) => (BoundKind::Optional, None),
-        (1, Some(1)) => (BoundKind::Single, None),
-        (0, None) => (BoundKind::Many, None),
-        (0, Some(0)) => (BoundKind::Optional, Some("0..1")),
-        (0, Some(_)) => (BoundKind::Many, Some("0..*")),
-        (1, None) => (BoundKind::Many, Some("0..*")),
-        (lbound, Some(ubound)) if lbound > 1 || ubound > 1 => (BoundKind::Many, Some("0..*")),
-        (lbound, Some(ubound)) => {
-            let _ = (lbound, ubound);
-            (BoundKind::Many, Some("0..*"))
-        }
-        (_, None) => (BoundKind::Many, Some("0..*")),
-    };
-
-    let warnings = applied.1.map_or(Vec::new(), |applied| {
-        vec![Warning::UnsupportedBounds {
-            feature: feature.to_string(),
-            bounds: bounds.to_string(),
-            applied: applied.to_string(),
-        }]
-    });
-
-    (applied.0, warnings)
-}
 pub struct AttributeGenerator<'a> {
     attribute: &'a Structural,
     ctx: &'a Ctx,
@@ -72,7 +37,8 @@ impl<'a> Generate for AttributeGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
         let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
 
-        let (bound_kind, warnings) = normalize_bounds(self.attribute.bounds, &self.attribute.name);
+        let (bound_kind, mut warnings) =
+            normalize_bounds(self.attribute.bounds, &self.attribute.name);
 
         let name = Ident::new(&self.attribute.name.to_snake_case(), Span::call_site());
         let class_typ = self
@@ -82,90 +48,106 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .unwrap();
         let typ: Typ = FromStr::from_str(class_typ.name()).unwrap();
 
-        let crdt_type = ToCrdt::to_rust_type(&typ);
-        let crdt_container = ToCrdt::to_crdt_container(&typ);
+        let rust_typ = ToCrdt::to_rust_type(&typ);
+        let crdt = ToCrdt::to_crdt_container(&typ);
 
-        let (log_type, crdt_inner, log_import) = match &crdt_container {
-            Crdt::Simple(SimpleCrdt::Counter(_)) => {
-                let rust_type = crdt_type.expect("Counter should have a rust type");
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
+        let (log_type, crdt_inner, log_import) = match &crdt {
+            Primitive::Counter(_) => {
+                let rust_typ = rust_typ.clone().expect("Counter should have a rust type");
+                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
                 (
                     quote! { #path::VecLog },
-                    quote! { #path::#type_name<#rust_type> },
+                    quote! { #path::#type_name<#rust_typ> },
                     Import::Log(Log::VecLog),
                 )
             }
-            Crdt::Simple(SimpleCrdt::Flag(_)) => {
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
+            Primitive::Flag(_) => {
+                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name },
                     Import::Log(Log::VecLog),
                 )
             }
-            Crdt::Simple(SimpleCrdt::Register(_)) => {
-                let rust_type = crdt_type.expect("Register should have a rust type");
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
+            Primitive::Register(_) => {
+                let rust_typ = rust_typ.clone().expect("Register should have a rust type");
+                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
                 (
                     quote! { #path::VecLog },
-                    quote! { #path::#type_name<#rust_type> },
+                    quote! { #path::#type_name<#rust_typ> },
                     Import::Log(Log::VecLog),
                 )
             }
-            Crdt::Simple(SimpleCrdt::List) => {
+            Primitive::List => {
                 // EString -> List<char>, uses EventGraph as log type
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
+                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
                 (
                     quote! { #path::EventGraph },
                     quote! { #path::#type_name<char> },
                     Import::Log(Log::EventGraph),
                 )
             }
-            Crdt::Simple(SimpleCrdt::Set(_)) => {
-                let rust_type = crdt_type.expect("Set should have a rust type");
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
-                (
-                    quote! { #path::VecLog },
-                    quote! { #path::#type_name<#rust_type> },
-                    Import::Log(Log::VecLog),
-                )
-            }
-            Crdt::Simple(SimpleCrdt::Graph(_)) => {
-                let type_name = syn::Ident::new(crdt_container.type_name(), Span::call_site());
-                (
-                    quote! { #path::VecLog },
-                    quote! { #path::#type_name },
-                    Import::Log(Log::VecLog),
-                )
-            }
-            Crdt::Nested(_) => unimplemented!("Nested CRDTs not yet supported"),
         };
 
-        let (field_type, bound_log_import, bound_imports) = match bound_kind {
-            BoundKind::Single => (
+        let (field_type, imports) = match (
+            bound_kind,
+            self.attribute.unique.unwrap_or(false),
+            self.attribute.ordered.unwrap_or(true),
+        ) {
+            (BoundKind::Single, _, _) => (
                 quote! { #log_type<#crdt_inner> },
-                log_import,
-                vec![Import::Crdt(crdt_container)],
-            ),
-            BoundKind::Optional => (
-                quote! { Option<#log_type<#crdt_inner>> },
-                log_import,
-                vec![Import::Crdt(crdt_container)],
-            ),
-            BoundKind::Many => (
-                quote! { #path::EventGraph<#path::List<#crdt_inner>> },
-                Import::Log(Log::EventGraph),
                 vec![
-                    Import::Crdt(crdt_container),
-                    Import::Crdt(Crdt::Simple(SimpleCrdt::List)),
+                    log_import,
+                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
                 ],
+            ),
+            (BoundKind::Optional, _, _) => (
+                quote! { #path::OptionLog<#log_type<#crdt_inner>> },
+                vec![
+                    log_import,
+                    Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
+                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
+                ],
+            ),
+            (BoundKind::Many, false, true) => (
+                quote! { #path::ListLog<#log_type<#crdt_inner>> },
+                vec![
+                    Import::Log(Log::EventGraph),
+                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
+                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                ],
+            ),
+            (BoundKind::Many, true, true) => {
+                // TODO: Unique list case
+                warnings.push(Warning::UnsupportedPropertyCombination {
+                    feature: self.attribute.name.clone(),
+                    properties: vec!["unique".into(), "ordered".into()],
+                    applied: vec!["ordered".into()],
+                });
+                (
+                    quote! { #path::ListLog<#log_type<#crdt_inner>> },
+                    vec![
+                        Import::Log(Log::EventGraph),
+                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
+                        Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                    ],
+                )
+            }
+            (BoundKind::Many, false, false) => (
+                quote! { #path::AWBagLog<#rust_typ> },
+                vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
+                    Collection::Bag(Bag::AWBag),
+                )))],
+            ),
+            (BoundKind::Many, true, false) => (
+                quote! { #path::VecLog<#path::AWSet<#rust_typ>> },
+                vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
+                    Collection::Set(Set::AWSet),
+                )))],
             ),
         };
 
         let tokens = quote! { #name: #field_type };
-
-        let mut imports = vec![bound_log_import];
-        imports.extend(bound_imports);
 
         Ok(Fragment::new(tokens, imports, warnings))
     }
