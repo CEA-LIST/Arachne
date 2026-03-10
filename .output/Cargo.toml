@@ -1,5 +1,5 @@
 [package]
-name = "kitchen-sink"
+name = "aas"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +7,3 @@ edition = "2024"
 moirai-crdt = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-crdt" }
 moirai-protocol = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-protocol" }
 moirai-macros = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-macros" }
-petgraph = "0.8.3"

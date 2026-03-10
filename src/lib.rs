@@ -12,7 +12,10 @@ pub use parser::EcoreParser;
 use proc_macro2::TokenStream;
 
 use crate::{
-    codegen::{classifier::class::ClassGenerator, generate::Generate, generator::Generator},
+    codegen::{
+        classifier::class::ClassGenerator, cycles::analyze_cycles, generate::Generate,
+        generator::Generator,
+    },
     utils::topo::topological_sort,
 };
 
@@ -56,6 +59,7 @@ pub fn generate(config: Config) -> anyhow::Result<()> {
 /// Generates code from a parsed Ecore context
 pub fn generate_from_parser(parser: &EcoreParser) -> anyhow::Result<Generator> {
     let mut generator = Generator::new();
+    let cycle_analysis = analyze_cycles(&parser.ctx)?;
 
     let pack = parser
         .ctx
@@ -78,7 +82,7 @@ pub fn generate_from_parser(parser: &EcoreParser) -> anyhow::Result<Generator> {
     let sorted_classes = topological_sort(&parser.ctx, &classes);
 
     for class in sorted_classes {
-        let class_gen = ClassGenerator::new(class, &parser.ctx);
+        let class_gen = ClassGenerator::new(class, &parser.ctx, &cycle_analysis);
         let fragment = class_gen.generate()?;
         generator.register(fragment);
     }

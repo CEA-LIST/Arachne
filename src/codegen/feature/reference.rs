@@ -1,11 +1,11 @@
-use ecore_rs::{ctx::Ctx, repr::Structural};
+use ecore_rs::{ctx::Ctx, prelude::idx::Class, repr::Structural};
 use heck::ToSnakeCase;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::Ident;
 
 use crate::codegen::{
-    classifier::class::INHERITANCE_SUFFIX,
+    cycles::{BoxingStrategy, CycleAnalysis},
     datatype::crdt::{Crdt, NestedCrdt},
     feature::bounds::{BoundKind, normalize_bounds},
     generate::{Fragment, Generate},
@@ -15,13 +15,25 @@ use crate::codegen::{
 
 pub struct ReferenceGenerator<'a> {
     reference: &'a Structural,
+    source_class: Class,
     ctx: &'a Ctx,
+    cycle_analysis: &'a CycleAnalysis,
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    pub fn new(reference: &'a Structural, ctx: &'a Ctx) -> Self {
+    pub fn new(
+        reference: &'a Structural,
+        source_class: Class,
+        ctx: &'a Ctx,
+        cycle_analysis: &'a CycleAnalysis,
+    ) -> Self {
         assert_eq!(reference.kind, ecore_rs::repr::structural::Typ::EReference);
-        Self { reference, ctx }
+        Self {
+            reference,
+            source_class,
+            ctx,
+            cycle_analysis,
+        }
     }
 }
 
@@ -41,17 +53,37 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             .get(*self.reference.typ.unwrap())
             .unwrap();
 
-        let name = Ident::new(&self.reference.name.to_snake_case(), Span::call_site());
+        let snake = self.reference.name.to_snake_case();
+        let name = syn::parse_str::<Ident>(&snake)
+            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
         let target_type = format_ident!("{}Log", target_class.name());
+        let boxing_strategy = self
+            .cycle_analysis
+            .boxing_strategy(self.source_class, &self.reference.name);
+        let boxed_target_type = quote! { Box<#target_type> };
 
         let (field_type, imports) = match bound_kind {
-            BoundKind::Single => (quote! { #target_type }, vec![]),
+            BoundKind::Single => {
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    (quote! { #target_type }, vec![])
+                } else {
+                    (boxed_target_type.clone(), vec![])
+                }
+            }
             BoundKind::Optional => (
-                quote! { #path::OptionLog<#target_type> },
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    quote! { #path::OptionLog<#target_type> }
+                } else {
+                    quote! { #path::OptionLog<#boxed_target_type> }
+                },
                 vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
             ),
             BoundKind::Many => (
-                quote! { #path::ListLog<#target_type> },
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    quote! { #path::ListLog<#target_type> }
+                } else {
+                    quote! { #path::ListLog<#boxed_target_type> }
+                },
                 vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
             ),
         };

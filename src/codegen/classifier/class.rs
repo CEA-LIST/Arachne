@@ -5,6 +5,7 @@ use quote::{format_ident, quote};
 use syn::Ident;
 
 use crate::codegen::{
+    cycles::CycleAnalysis,
     feature::{attribute::AttributeGenerator, reference::ReferenceGenerator},
     generate::{Fragment, Generate},
     generator::PATH_MOD,
@@ -17,11 +18,16 @@ pub const INHERITANCE_SUFFIX: &str = "Feat";
 pub struct ClassGenerator<'a> {
     class: &'a Class,
     ctx: &'a Ctx,
+    cycle_analysis: &'a CycleAnalysis,
 }
 
 impl<'a> ClassGenerator<'a> {
-    pub fn new(class: &'a Class, ctx: &'a Ctx) -> Self {
-        Self { class, ctx }
+    pub fn new(class: &'a Class, ctx: &'a Ctx, cycle_analysis: &'a CycleAnalysis) -> Self {
+        Self {
+            class,
+            ctx,
+            cycle_analysis,
+        }
     }
 
     /// Process all structural features and split them into attributes and references
@@ -34,7 +40,15 @@ impl<'a> ClassGenerator<'a> {
                         attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
                     }
                     ecore_rs::repr::structural::Typ::EReference => {
-                        refs.push(ReferenceGenerator::new(f, self.ctx).generate()?);
+                        refs.push(
+                            ReferenceGenerator::new(
+                                f,
+                                self.class.idx,
+                                self.ctx,
+                                self.cycle_analysis,
+                            )
+                            .generate()?,
+                        );
                     }
                 }
                 Ok::<(Vec<Fragment>, Vec<Fragment>), anyhow::Error>((attrs, refs))
@@ -197,11 +211,33 @@ impl<'a> ClassGenerator<'a> {
             .class
             .literals()
             .iter()
-            .map(|lit| Ident::new(&lit.name().to_upper_camel_case(), Span::call_site()))
-            .collect::<Vec<_>>();
-        let tokens = quote! {
-            pub enum #name {
-                #(#variants,)*
+            .map(|lit| {
+                let camel = lit.name().to_upper_camel_case();
+                syn::parse_str::<syn::Ident>(&camel).map_err(|e| {
+                    anyhow::anyhow!(
+                        "Enum '{}': cannot parse variant '{}' (converted to '{}') as an identifier at {e}",
+                        self.class.name(),
+                        lit.name(),
+                        camel,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let tokens = if let Some((first, rest)) = variants.split_first() {
+            quote! {
+                #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+                pub enum #name {
+                    #[default]
+                    #first,
+                    #(#rest,)*
+                }
+            }
+        } else {
+            quote! {
+                #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+                pub enum #name {
+                    #(#variants,)*
+                }
             }
         };
         Ok(Fragment::new(tokens, vec![], Vec::new()))

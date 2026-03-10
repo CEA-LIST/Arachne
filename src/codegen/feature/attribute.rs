@@ -40,17 +40,26 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);
 
-        let name = Ident::new(&self.attribute.name.to_snake_case(), Span::call_site());
+        let snake = self.attribute.name.to_snake_case();
+        let name = syn::parse_str::<Ident>(&snake)
+            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
         let class_typ = self
             .ctx
             .classes()
             .get(*self.attribute.typ.unwrap())
             .unwrap();
-        let typ: Typ = FromStr::from_str(class_typ.name())
-            .expect(format!("Failed to parse type: {}", class_typ.name()).as_str());
 
-        let rust_typ = ToCrdt::to_rust_type(&typ);
-        let crdt = ToCrdt::to_crdt_container(&typ);
+        let (rust_typ, crdt) = if class_typ.is_enum() {
+            let enum_name = Ident::new(class_typ.name(), Span::call_site());
+            (
+                Some(quote! { #enum_name }),
+                Primitive::Register(Default::default()),
+            )
+        } else {
+            let typ: Typ = FromStr::from_str(class_typ.name())
+                .expect(format!("Failed to parse type: {}", class_typ.name()).as_str());
+            (ToCrdt::to_rust_type(&typ), ToCrdt::to_crdt_container(&typ))
+        };
 
         let (log_type, crdt_inner, log_import) = match &crdt {
             Primitive::Counter(_) => {

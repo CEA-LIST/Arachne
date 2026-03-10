@@ -44,14 +44,14 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Referable" abstract="true">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="idShort" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"
         changeable="false" volatile="true" transient="true" derived="true">
       <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
         <details key="get" value="// get the name of the Referable Element&#xA;&#x9;&#x9;String name = null;&#xA;&#x9;&#x9;if (getBase_Class() != null) {&#xA;&#x9;&#x9;&#x9;name = getBase_Class().getName();&#xA;&#x9;&#x9;} else if (this instanceof DataElement) {&#xA;&#x9;&#x9;&#x9;DataElement dataElement = (DataElement) this;&#xA;&#x9;&#x9;&#x9;name = dataElement.getBase_Property().getName();&#xA;&#x9;&#x9;} else if (this instanceof Capability) {&#xA;&#x9;&#x9;&#x9;Capability capability = (Capability) this;&#xA;&#x9;&#x9;&#x9;name = capability.getBase_Property().getName();&#xA;&#x9;&#x9;} else if (this instanceof Event) {&#xA;&#x9;&#x9;&#x9;Event event = (Event) this;&#xA;&#x9;&#x9;&#x9;name = event.getBase_Property().getName();&#xA;&#x9;&#x9;} else if (this instanceof Operation) {&#xA;&#x9;&#x9;&#x9;Operation operation = (Operation) this;&#xA;&#x9;&#x9;&#x9;name = operation.getBase_Operation().getName();&#xA;&#x9;&#x9;}&#xA;&#x9;&#x9;// remove space&#xA;&#x9;&#x9;if (name != null) {&#xA;&#x9;&#x9;&#x9;String idShort = name.replace(&quot; &quot;, &quot;&quot;);&#xA;&#x9;&#x9;&#x9;return idShort;&#xA;&#x9;&#x9;}&#xA;&#x9;&#x9;return null;"/>
       </eAnnotations>
     </eStructuralFeatures>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="category" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="description" ordered="false"
         upperBound="-1" eType="#//LangString" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="base_Class" ordered="false"
@@ -59,7 +59,7 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="LangString">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="lang" lowerBound="1" eType="#//LangEnum"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="LangEnum">
     <eLiterals name="en"/>
@@ -89,15 +89,15 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="AdministrativeInformation">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="version" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="revision" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Identifier">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="idType" ordered="false"
         lowerBound="1" eType="#//IdentifierType"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="id" ordered="false" lowerBound="1"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="HasDataSpecification" abstract="true">
     <eStructuralFeatures xsi:type="ecore:EReference" name="dataSpecification" ordered="false"
@@ -113,7 +113,7 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="type" ordered="false" lowerBound="1"
         eType="#//KeyElements"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="idType" ordered="false"
         lowerBound="1" eType="#//KeyType"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="base_Class" ordered="false"
@@ -259,7 +259,7 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="SubmodelElement" abstract="true" eSuperTypes="#//Referable #//HasKind #//HasSemantics #//HasDataSpecification">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="isDynamic" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Boolean"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="endPoint" ordered="false"
         eType="#//Endpoint" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="nodeId" ordered="false"
@@ -267,10 +267,10 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Endpoint">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="address" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="protocol" ordered="false"
         eType="#//ProtocolKind"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" ordered="false" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="ProtocolKind">
     <eLiterals name="HTTP"/>
@@ -283,9 +283,9 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="NodeId">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="nameSpaceIndex" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Integer"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="identifier" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="idType" ordered="false"
         eType="#//IdType"/>
   </eClassifiers>
@@ -297,6 +297,10 @@
     <eLiterals name="UUID" value="4"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Certificate"/>
+  <eClassifiers xsi:type="ecore:EEnum" name="AssetKind">
+    <eLiterals name="Type"/>
+    <eLiterals name="Instance" value="1"/>
+  </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="AssetInformation">
     <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="AssetInformation/globalAssetId either is a reference &#xA;to an Asset object or a global reference."/>
@@ -312,15 +316,11 @@
     <eStructuralFeatures xsi:type="ecore:EReference" name="defaultThumbnail" ordered="false"
         eType="#//File"/>
   </eClassifiers>
-  <eClassifiers xsi:type="ecore:EEnum" name="AssetKind">
-    <eLiterals name="Type"/>
-    <eLiterals name="Instance" value="1"/>
-  </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="IdentifierKeyValuePair" eSuperTypes="#//HasSemantics">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" ordered="false" lowerBound="1"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="externalSubjectId" ordered="false"
         eType="#//Reference"/>
   </eClassifiers>
@@ -328,7 +328,7 @@
     <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="A File is a data element that represents an address to a file. The value is an URI that can represent an absolute or relative path."/>
     </eAnnotations>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="path" ordered="false" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="path" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="mimeType" ordered="false"
         lowerBound="1" eType="#//MimeType"/>
   </eClassifiers>
@@ -420,9 +420,9 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="AASEndpoint">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="address" ordered="false"
-        lowerBound="1" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="port" ordered="false" lowerBound="1"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Integer"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="security" ordered="false"
         lowerBound="1" eType="#//SecurityKind"/>
   </eClassifiers>
@@ -462,8 +462,8 @@
         eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Property"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="base_DataType" ordered="false"
         eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//DataType"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="ordered" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Boolean"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="allowDuplicates" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Boolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="ordered" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="allowDuplicates" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Property" eSuperTypes="#//DataElement"/>
   <eClassifiers xsi:type="ecore:EClass" name="ReferenceElement" eSuperTypes="#//DataElement">
@@ -479,8 +479,8 @@
         lowerBound="1" eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Element"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Range" eSuperTypes="#//DataElement">
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="min" ordered="false" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Integer"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="max" ordered="false" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//Integer"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="min" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="max" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Capability" eSuperTypes="#//SubmodelElement">
     <eStructuralFeatures xsi:type="ecore:EReference" name="base_Property" ordered="false"
@@ -491,7 +491,7 @@
         upperBound="-1" eType="#//Reference"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="LangStringSet"/>
-  <eClassifiers xsi:type="ecore:EClass" name="DataSpecificationContent" abstract="true"/>
+  <!-- <eClassifiers xsi:type="ecore:EClass" name="DataSpecificationContent" abstract="true"/> -->
   <eClassifiers xsi:type="ecore:EClass" name="DataSpecificationIEC61360">
     <eStructuralFeatures xsi:type="ecore:EReference" name="base_Class" ordered="false"
         eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Class"/>
@@ -499,19 +499,19 @@
         lowerBound="1" upperBound="-1" eType="#//LangString" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="shortName" ordered="false"
         upperBound="-1" eType="#//LangString" containment="true"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="unit" ordered="false" eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="unit" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="unitId" ordered="false"
         eType="#//Reference"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="sourceOfDefinition" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="symbol" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="dataType" ordered="false"
         eType="#//DataSpecificationIEC61360"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="definition" ordered="false"
         upperBound="-1" eType="#//LangString" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="valueFormat" ordered="false"
-        eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="valueList" ordered="false"
         upperBound="-1" eType="#//ValueReferencePairType" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="value" ordered="false"
@@ -534,11 +534,11 @@
     <eLiterals name="Typ" value="3"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="DataTypeIEC61360">
-    <eLiterals name="_">
+    <!-- <eLiterals name="_">
       <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value=""/>
       </eAnnotations>
-    </eLiterals>
+    </eLiterals> -->
     <eLiterals name="DATE" value="1"/>
     <eLiterals name="STRING" value="2"/>
     <eLiterals name="STRING_TRANSLATABLE" value="3"/>

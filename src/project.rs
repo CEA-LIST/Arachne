@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
     error::{AtraktosError, Result},
+    format_code,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -15,11 +16,11 @@ pub fn write_project(config: &Config, project_name: &str, code: &str) -> Result<
     fs::create_dir_all(&src_dir)?;
 
     let cargo_toml = render_cargo_toml(&project_name, &config.moirai_root)?;
-    let main_rs = render_main_rs(&project_name);
+    let main_rs = format_code(render_main_rs(&project_name))?;
     let generated_rs = render_generated_rs(code);
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
-    fs::write(src_dir.join("main.rs"), main_rs.to_string())?;
+    fs::write(src_dir.join("main.rs"), main_rs)?;
     fs::write(src_dir.join("generated.rs"), generated_rs)?;
 
     Ok(())

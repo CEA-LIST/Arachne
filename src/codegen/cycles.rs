@@ -391,13 +391,6 @@ mod tests {
             .expect("ControlNode class not found")
             .idx;
 
-        let subtree_idx = ctx
-            .classes()
-            .iter()
-            .find(|c| c.name() == "SubTree")
-            .expect("SubTree class not found")
-            .idx;
-
         // Verify Decorator.child needs DirectReference boxing
         assert!(
             analysis.needs_boxing(decorator_idx, "child"),
@@ -424,8 +417,6 @@ mod tests {
         // Note: The algorithm may break this cycle at different points depending on
         // the order of traversal. We check that at least 3 boxing requirements exist,
         // meaning all three major cycles are broken somewhere.
-        let has_subtree_boxing = analysis.needs_boxing(subtree_idx, "tree");
-
         // The important invariant: we have at least the two union variant cycles
         // (Decorator and ControlNode), which are guaranteed to be detected
         assert!(

@@ -76,6 +76,8 @@ For detailed Ecore documentation, see: [Ecore API Documentation](https://downloa
 |`EClass`|See [`EClass`](#eclass)|
 |`EEnum`|Rust enum (see [Customizing](#customizing-the-code-generator-mapping)) + any `Register`|
 
+Generated Rust enums implement `Debug`, `Clone`, `PartialEq`, `Eq`, `Hash`, `Default` (first variant).
+
 #### `EClass`
 
 A (concrete) `EClass` is generated as a `record`.
