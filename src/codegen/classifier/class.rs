@@ -85,6 +85,12 @@ impl<'a> ClassGenerator<'a> {
             .map(|name| format_ident!("{}Log", name))
             .collect::<Vec<_>>();
 
+        assert!(
+            !sub_names.is_empty(),
+            "Abstract class {} must have at least one subclass",
+            self.class.name()
+        );
+
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);

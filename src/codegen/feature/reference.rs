@@ -42,11 +42,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             .unwrap();
 
         let name = Ident::new(&self.reference.name.to_snake_case(), Span::call_site());
-        let target_type = if target_class.is_abstract() {
-            format_ident!("{}{}Log", target_class.name(), INHERITANCE_SUFFIX)
-        } else {
-            format_ident!("{}Log", target_class.name())
-        };
+        let target_type = format_ident!("{}Log", target_class.name());
 
         let (field_type, imports) = match bound_kind {
             BoundKind::Single => (quote! { #target_type }, vec![]),

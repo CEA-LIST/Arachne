@@ -1,2 +1,3 @@
 /target
-*.output
+*.output/Cargo.lock
+*.output/target

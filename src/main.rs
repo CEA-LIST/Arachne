@@ -3,6 +3,8 @@ use std::process;
 use atraktos::{Config, generate};
 
 fn main() {
+    env_logger::init();
+
     // Configuration: path to the Ecore metamodel
     let config = Config::new("./examples/bt.ecore")
         .with_output_dir(".output")

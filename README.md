@@ -149,6 +149,13 @@ An exception is made for queries on values derived from the CRDT state. For exam
 
 A `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported.
 
+## To-Do
+
+- [ ] EAnnotations support
+- [ ] Reference manager
+- [ ] Multiple EPackages
+- [ ] Fuzzer impl
+
 ## License
 
 See the LICENSE file for details.

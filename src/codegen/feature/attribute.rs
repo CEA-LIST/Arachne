@@ -46,7 +46,8 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .classes()
             .get(*self.attribute.typ.unwrap())
             .unwrap();
-        let typ: Typ = FromStr::from_str(class_typ.name()).unwrap();
+        let typ: Typ = FromStr::from_str(class_typ.name())
+            .expect(format!("Failed to parse type: {}", class_typ.name()).as_str());
 
         let rust_typ = ToCrdt::to_rust_type(&typ);
         let crdt = ToCrdt::to_crdt_container(&typ);

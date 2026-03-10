@@ -1,4 +1,5 @@
 pub mod classifier;
+pub mod cycles;
 mod datatype;
 mod feature;
 pub mod generate;
