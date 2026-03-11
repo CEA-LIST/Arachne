@@ -6,7 +6,7 @@ use syn::Ident;
 
 use crate::codegen::{
     cycles::CycleAnalysis,
-    feature::{attribute::AttributeGenerator, reference::ReferenceGenerator},
+    feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
     generate::{Fragment, Generate},
     generator::PATH_MOD,
     import::{Import, Macros},
@@ -39,9 +39,9 @@ impl<'a> ClassGenerator<'a> {
                     ecore_rs::repr::structural::Typ::EAttribute => {
                         attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
                     }
-                    ecore_rs::repr::structural::Typ::EReference => {
+                    ecore_rs::repr::structural::Typ::EReference if f.containment => {
                         refs.push(
-                            ReferenceGenerator::new(
+                            ContainmentGenerator::new(
                                 f,
                                 self.class.idx,
                                 self.ctx,
@@ -49,6 +49,9 @@ impl<'a> ClassGenerator<'a> {
                             )
                             .generate()?,
                         );
+                    }
+                    _ => {
+                        // Ignore non-containment references and unsupported feature types
                     }
                 }
                 Ok::<(Vec<Fragment>, Vec<Fragment>), anyhow::Error>((attrs, refs))

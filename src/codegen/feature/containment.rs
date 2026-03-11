@@ -1,6 +1,6 @@
 use ecore_rs::{ctx::Ctx, prelude::idx::Class, repr::Structural};
 use heck::ToSnakeCase;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::Ident;
 
@@ -13,14 +13,14 @@ use crate::codegen::{
     import::Import,
 };
 
-pub struct ReferenceGenerator<'a> {
+pub struct ContainmentGenerator<'a> {
     reference: &'a Structural,
     source_class: Class,
     ctx: &'a Ctx,
     cycle_analysis: &'a CycleAnalysis,
 }
 
-impl<'a> ReferenceGenerator<'a> {
+impl<'a> ContainmentGenerator<'a> {
     pub fn new(
         reference: &'a Structural,
         source_class: Class,
@@ -37,13 +37,8 @@ impl<'a> ReferenceGenerator<'a> {
     }
 }
 
-impl<'a> Generate for ReferenceGenerator<'a> {
+impl<'a> Generate for ContainmentGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        if !self.reference.containment {
-            // Non-containment references will be implemented later with a special mechanism
-            return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
-        }
-
         let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
         let (bound_kind, warnings) = normalize_bounds(self.reference.bounds, &self.reference.name);
 

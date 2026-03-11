@@ -8,7 +8,12 @@ use quote::quote;
 use std::{fs, path::Path};
 
 /// Writes a complete Rust project for the generated code.
-pub fn write_project(config: &Config, project_name: &str, code: &str) -> Result<()> {
+pub fn write_project(
+    config: &Config,
+    project_name: &str,
+    code: &str,
+    model_code: Option<&str>,
+) -> Result<()> {
     let project_name = sanitize_package_name(project_name);
     let root = &config.output_dir;
     let src_dir = root.join("src");
@@ -16,12 +21,17 @@ pub fn write_project(config: &Config, project_name: &str, code: &str) -> Result<
     fs::create_dir_all(&src_dir)?;
 
     let cargo_toml = render_cargo_toml(&project_name, &config.moirai_root)?;
-    let main_rs = format_code(render_main_rs(&project_name))?;
+    let main_rs = format_code(render_main_rs(&project_name, model_code.is_some()))?;
     let generated_rs = render_generated_rs(code);
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
     fs::write(src_dir.join("main.rs"), main_rs)?;
     fs::write(src_dir.join("generated.rs"), generated_rs)?;
+
+    if let Some(model) = model_code {
+        let model_rs = render_generated_rs(model);
+        fs::write(src_dir.join("model.rs"), model_rs)?;
+    }
 
     Ok(())
 }
@@ -35,19 +45,30 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     let moirai_macros = moirai_root.join("moirai-macros");
 
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\npetgraph = \"0.8.3\" \n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
         to_path_string(&moirai_macros)
     ))
 }
 
-fn render_main_rs(project_name: &str) -> TokenStream {
-    quote! {
-        mod generated;
+fn render_main_rs(project_name: &str, has_model: bool) -> TokenStream {
+    if has_model {
+        quote! {
+            mod generated;
+            mod model;
 
-        fn main() {
-            println!("Generated CRDT project: {}", #project_name);
+            fn main() {
+                println!("Generated CRDT project: {}", #project_name);
+            }
+        }
+    } else {
+        quote! {
+            mod generated;
+
+            fn main() {
+                println!("Generated CRDT project: {}", #project_name);
+            }
         }
     }
 }

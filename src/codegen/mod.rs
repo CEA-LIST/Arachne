@@ -6,4 +6,5 @@ pub mod generate;
 pub mod generator;
 mod import;
 pub mod package;
+pub mod reference;
 mod warnings;

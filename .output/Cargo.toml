@@ -7,4 +7,4 @@ edition = "2024"
 moirai-crdt = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-crdt" }
 moirai-protocol = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-protocol" }
 moirai-macros = { path = "/Users/ekkaiasmith/Desktop/moirai/moirai-macros" }
-petgraph = "0.8.3"
+petgraph = "0.8.3" 

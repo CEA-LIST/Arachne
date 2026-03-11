@@ -94,7 +94,7 @@ Operations are not supported. See [Operations](#operations). Features are static
 
 ### Structural features
 
-- `changeable`: if `false`, then the feature is immutable. Could be implemented by generating the Rust struct of an object rather than using a CRDT.
+- `changeable`: if `false`, then the feature is immutable. Could be implemented by generating the Rust struct of an object rather than using a CRDT. In the case of a reference towards a non-changeable reference, it would mean that the element cannot be updates through this reference?
 - `volatile`: if `true`, the value is computed on access and never stored. Not supported.
 - `derived`: if `true`, the value is computed from other features. Not supported.
 - `transient`: if `true`, the value is not serialized. Not supported.
