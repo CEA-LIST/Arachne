@@ -6,9 +6,9 @@ fn main() {
     env_logger::init();
 
     // Configuration: path to the Ecore metamodel
-    let config = Config::new("./examples/aas.ecore")
+    let config = Config::new("./examples/bt.ecore")
         .with_output_dir(".output")
-        .with_project_name("aas")
+        .with_project_name("bt")
         .with_debug(true);
 
     // Generate code based on the provided configuration

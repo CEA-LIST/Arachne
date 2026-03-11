@@ -11,29 +11,16 @@ use moirai_protocol::{
     state::{log::IsLog, po_log::VecLog},
 };
 
-use crate::generated::{BehaviorTree, Blackboard, Root, RootLog, RootValue};
+use crate::generated::{
+    Action, ActionFeat, BehaviorTree, Blackboard, Condition, ConditionFeat, ExecutionNode,
+    ExecutionNodeFeat, IsDoorOpen, OpenDoor, Root, RootLog, RootValue, TreeNode,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryId(pub EventId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DataFlowPortId(pub EventId);
-
-// impl ValueGenerator for DataFlowPortId {
-//     type Config = ();
-
-//     fn generate(rng: &mut impl rand::RngCore, _config: &Self::Config) -> Self {
-//         todo!()
-//     }
-// }
-
-// impl ValueGenerator for EntryId {
-//     type Config = ();
-
-//     fn generate(rng: &mut impl rand::RngCore, _config: &Self::Config) -> Self {
-//         todo!()
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryEdge;
@@ -51,8 +38,8 @@ typed_graph! {
 
 #[derive(Debug, Clone)]
 pub enum Model {
-    Create(Root),
-    Ref(ReferenceManager<LwwPolicy>),
+    Root(Root),
+    Reference(Refs), // Ref(ReferenceManager<LwwPolicy>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -67,8 +54,10 @@ impl IsLog for ModelLog {
 
     fn is_enabled(&self, op: &Self::Op) -> bool {
         match op {
-            Model::Create(o) => self.root_log.is_enabled(o),
-            Model::Ref(o) => self.reference_manager_log.is_enabled(o),
+            Model::Root(o) => self.root_log.is_enabled(o),
+            Model::Reference(o) => self
+                .reference_manager_log
+                .is_enabled(&ReferenceManager::AddArc(o.clone())),
         }
     }
 
@@ -77,7 +66,7 @@ impl IsLog for ModelLog {
     // For example, if a new BlackboardEntry is created, a new EntryId vertex should be created in the reference manager.
     fn effect(&mut self, event: Event<Self::Op>) {
         match &event.op() {
-            Model::Create(Root::Main(BehaviorTree::Blackboard(Blackboard::Entries(
+            Model::Root(Root::Main(BehaviorTree::Blackboard(Blackboard::Entries(
                 List::Insert { .. },
             )))) => {
                 let entry_id = EntryId(event.id().clone());
@@ -87,7 +76,7 @@ impl IsLog for ModelLog {
                 self.reference_manager_log
                     .effect(Event::unfold(event.clone(), new_vertex));
             }
-            Model::Create(Root::Main(BehaviorTree::Blackboard(Blackboard::Entries(
+            Model::Root(Root::Main(BehaviorTree::Blackboard(Blackboard::Entries(
                 List::Delete { pos },
             )))) => {
                 let positions = self
@@ -104,14 +93,23 @@ impl IsLog for ModelLog {
                 self.reference_manager_log
                     .effect(Event::unfold(event.clone(), remove_vertex));
             }
+            Model::Root(Root::Main(BehaviorTree::Child(child))) => {
+                if let TreeNode::ExecutionNode(execution_node) = child.as_ref()
+                    && let Some(new_vertex) =
+                        created_vertex_from_execution_node(event.id(), execution_node)
+                {
+                    self.reference_manager_log
+                        .effect(Event::unfold(event.clone(), new_vertex));
+                }
+            }
             _ => {}
         }
 
         match event.op().clone() {
-            Model::Create(root) => self.root_log.effect(Event::unfold(event, root)),
-            Model::Ref(ref_manager) => self
+            Model::Root(root) => self.root_log.effect(Event::unfold(event, root)),
+            Model::Reference(refs) => self
                 .reference_manager_log
-                .effect(Event::unfold(event, ref_manager)),
+                .effect(Event::unfold(event, ReferenceManager::AddArc(refs))),
         }
     }
 
@@ -128,6 +126,39 @@ impl IsLog for ModelLog {
 
     fn is_default(&self) -> bool {
         self.root_log.is_default()
+    }
+}
+
+fn created_vertex_from_execution_node(
+    event_id: &EventId,
+    execution_node: &ExecutionNode,
+) -> Option<ReferenceManager<LwwPolicy>> {
+    let created_data_flow_port = match execution_node {
+        ExecutionNode::Action(Action::OpenDoor(OpenDoor::ActionFeat(
+            ActionFeat::ExecutionNodeFeat(ExecutionNodeFeat::Inflowports(List::Insert { .. })),
+        )))
+        | ExecutionNode::Action(Action::OpenDoor(OpenDoor::ActionFeat(
+            ActionFeat::ExecutionNodeFeat(ExecutionNodeFeat::Outflowports(List::Insert { .. })),
+        )))
+        | ExecutionNode::Condition(Condition::IsDoorOpen(IsDoorOpen::ConditionFeat(
+            ConditionFeat::ExecutionNodeFeat(ExecutionNodeFeat::Inflowports(List::Insert {
+                ..
+            })),
+        )))
+        | ExecutionNode::Condition(Condition::IsDoorOpen(IsDoorOpen::ConditionFeat(
+            ConditionFeat::ExecutionNodeFeat(ExecutionNodeFeat::Outflowports(List::Insert {
+                ..
+            })),
+        ))) => true,
+        _ => false,
+    };
+
+    if created_data_flow_port {
+        Some(ReferenceManager::<LwwPolicy>::AddVertex {
+            id: Instance::DataFlowPortId(DataFlowPortId(event_id.clone())),
+        })
+    } else {
+        None
     }
 }
 

@@ -131,7 +131,7 @@ impl<'a> ClassGenerator<'a> {
                 reference_imports,
             ]
             .concat(),
-            vec![attribute_warnings, reference_warnings].concat(),
+            [attribute_warnings, reference_warnings].concat(),
         ))
     }
 
@@ -163,7 +163,7 @@ impl<'a> ClassGenerator<'a> {
                 reference_imports,
             ]
             .concat(),
-            vec![attribute_warnings, reference_warnings].concat(),
+            [attribute_warnings, reference_warnings].concat(),
         ))
     }
 

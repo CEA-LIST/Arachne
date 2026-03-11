@@ -57,7 +57,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             )
         } else {
             let typ: Typ = FromStr::from_str(class_typ.name())
-                .expect(format!("Failed to parse type: {}", class_typ.name()).as_str());
+                .unwrap_or_else(|_| panic!("Failed to parse type: {}", class_typ.name()));
             (ToCrdt::to_rust_type(&typ), ToCrdt::to_crdt_container(&typ))
         };
 
