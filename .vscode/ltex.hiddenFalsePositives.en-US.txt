@@ -1,1 +1,0 @@
-{"rule":"ATD_VERBS_TO_COLLOCATION","sentence":"^\\QHowever, references represent relationships between siblings in the hierarchy.\\E$"}

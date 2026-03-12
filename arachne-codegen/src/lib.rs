@@ -7,9 +7,11 @@ mod utils;
 
 pub use config::Config;
 use ecore_rs::repr::Class;
-pub use error::{AtraktosError, Result};
+pub use error::{ArachneError, Result};
+use log::{debug, info};
 pub use parser::EcoreParser;
 use proc_macro2::TokenStream;
+use std::path::PathBuf;
 
 use crate::{
     codegen::{
@@ -19,14 +21,45 @@ use crate::{
     utils::topo::topological_sort,
 };
 
+#[derive(Debug, Clone)]
+pub struct GenerationReport {
+    pub input_path: PathBuf,
+    pub output_dir: PathBuf,
+    pub project_name: String,
+    pub package_name: String,
+    pub class_count: usize,
+    pub model_generated: bool,
+}
+
 /// Main entry point for code generation
 pub fn generate(config: Config) -> anyhow::Result<()> {
+    generate_with_report(config).map(|_| ())
+}
+
+/// Main entry point for code generation with execution metadata.
+pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> {
+    info!("validating configuration");
     // Validate configuration
     config.validate()?;
 
+    info!("parsing ecore metamodel: {:?}", config.input_path);
     // Parse the Ecore metamodel
     let parser = EcoreParser::from_file(&config.input_path)?;
 
+    let pack = parser
+        .ctx
+        .packs()
+        .iter()
+        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .ok_or_else(|| anyhow::anyhow!("No concrete EPackage found in metamodel"))?;
+    let class_count = pack.classes().len();
+    debug!(
+        "found package '{}' with {} classes",
+        pack.name(),
+        class_count
+    );
+
+    info!("generating rust tokens");
     // Generate code
     let (generator, model_tokens) = generate_from_parser(&parser)?;
 
@@ -49,6 +82,7 @@ pub fn generate(config: Config) -> anyhow::Result<()> {
         .or_else(|| Some(parser.ctx.packs()[parser.ctx.top_pack()].name().to_string()))
         .unwrap_or_else(|| "generated_crdt".to_string());
 
+    info!("writing generated project '{}'", project_name);
     // Write a full Rust project
     project::write_project(
         &config,
@@ -61,7 +95,14 @@ pub fn generate(config: Config) -> anyhow::Result<()> {
         println!("Generated project written to: {:?}", config.output_dir);
     }
 
-    Ok(())
+    Ok(GenerationReport {
+        input_path: config.input_path.clone(),
+        output_dir: config.output_dir.clone(),
+        project_name,
+        package_name: pack.name().to_string(),
+        class_count,
+        model_generated: formatted_model.is_some(),
+    })
 }
 
 /// Generates code from a parsed Ecore context.

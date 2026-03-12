@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-/// Configuration for the Atraktos code generator
+/// Configuration for the Arachne code generator
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Path to the input Ecore metamodel file
@@ -59,14 +59,14 @@ impl Config {
     /// Validates the configuration
     pub fn validate(&self) -> crate::error::Result<()> {
         if !self.input_path.exists() {
-            return Err(crate::error::AtraktosError::Config(format!(
+            return Err(crate::error::ArachneError::Config(format!(
                 "Input file does not exist: {:?}",
                 self.input_path
             )));
         }
 
         if !self.moirai_root.exists() {
-            return Err(crate::error::AtraktosError::Config(format!(
+            return Err(crate::error::ArachneError::Config(format!(
                 "Moirai root does not exist: {:?}",
                 self.moirai_root
             )));

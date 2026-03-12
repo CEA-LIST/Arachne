@@ -2,7 +2,7 @@ use thiserror::Error;
 
 /// Errors that can occur during code generation
 #[derive(Debug, Error)]
-pub enum AtraktosError {
+pub enum ArachneError {
     #[error("Failed to read Ecore file: {0}")]
     FileRead(#[from] std::io::Error),
 
@@ -22,11 +22,11 @@ pub enum AtraktosError {
     Config(String),
 }
 
-/// Specialized Result type for Atraktos
-pub type Result<T> = std::result::Result<T, AtraktosError>;
+/// Specialized Result type for Arachne
+pub type Result<T> = std::result::Result<T, ArachneError>;
 
-impl From<ecore_rs::prelude::res::Error> for AtraktosError {
+impl From<ecore_rs::prelude::res::Error> for ArachneError {
     fn from(err: ecore_rs::prelude::res::Error) -> Self {
-        AtraktosError::EcoreParse(err.to_string())
+        ArachneError::EcoreParse(err.to_string())
     }
 }

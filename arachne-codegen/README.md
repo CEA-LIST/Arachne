@@ -1,10 +1,33 @@
-# Atraktos
+# Arachne
 
-**Atraktos** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSML) designed using Ecore metamodels to Conflict-free Replicated Data Types (CRDT) using the Moirai library.
+**Arachne** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSML) designed using Ecore metamodels to Conflict-free Replicated Data Types (CRDT) using the Moirai library.
 
 ## Overview
 
 This code generator bridges the gap between high-level domain models (defined in Ecore) and distributed, eventually consistent data structures (CRDTs). It automatically generates Rust code that leverages the Moirai library to provide conflict-free replication semantics for your domain models.
+
+## CLI Usage
+
+Run the generator by passing the Ecore metamodel path as a positional argument:
+
+```bash
+cargo run -- examples/bt.ecore
+```
+
+Common options:
+
+```bash
+cargo run -- examples/bt.ecore \
+    --output .output \
+    --project-name bt \
+    --moirai-root ../moirai \
+    --debug \
+    -v
+```
+
+Environment variable support:
+
+- `ATRAKTOS_MOIRAI_ROOT`: default value for `--moirai-root`
 
 ## Management of References
 
@@ -20,7 +43,7 @@ The Ecore metamodeling language allows annotating model elements with `EAnnotati
 ### Specifying a Particular Data Type
 
 ```xml
-<eAnnotations source="urn:atraktos:semantics">
+<eAnnotations source="urn:arachne:semantics">
     <details key="datatype" value="lww-register"/>
 </eAnnotations>
 ```
@@ -29,21 +52,21 @@ The Ecore metamodeling language allows annotating model elements with `EAnnotati
 
 ```xml
 <eClassifiers xsi:type="ecore:EEnum" name="name">
-    <eAnnotations source="urn:atraktos:order">
+    <eAnnotations source="urn:arachne:order">
         <details key="order" value="partial-order"/>
     </eAnnotations>
     <eLiterals name="ADD">
-        <eAnnotations source="urn:atraktos:order">
+        <eAnnotations source="urn:arachne:order">
             <details key="rank" value="1"/>
         </eAnnotations>
     </eLiterals>
     <eLiterals name="UPDATE">
-        <eAnnotations source="urn:atraktos:order">
+        <eAnnotations source="urn:arachne:order">
             <details key="rank" value="1"/>
         </eAnnotations>
     </eLiterals>
     <eLiterals name="REMOVE">
-        <eAnnotations source="urn:atraktos:order">
+        <eAnnotations source="urn:arachne:order">
             <details key="rank" value="2"/>
         </eAnnotations>
     </eLiterals>

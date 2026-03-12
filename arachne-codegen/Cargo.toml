@@ -1,0 +1,20 @@
+[package]
+name = "arachne-codegen"
+version = "0.1.0"
+edition = "2024"
+description = "Code generator for Arachne"
+
+[dependencies]
+ecore_rs = { version = "*", path = "../arachne-parser" }
+moirai-protocol = { version = "*", path = "../../moirai/moirai-protocol" }
+moirai-crdt = { version = "*", path = "../../moirai/moirai-crdt" }
+moirai-macros = { version = "*", path = "../../moirai/moirai-macros" }
+proc-macro2 = "1.0.106"
+quote = "1.0.44"
+syn = "2.0.114"
+prettyplease = "0.2.37"
+anyhow = "1.0"
+thiserror = "1.0"
+rustc-hash = "2.1.1"
+heck = "0.5.0"
+log = "0.4.29"
