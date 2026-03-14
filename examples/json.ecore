@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="json" nsURI="http://www.example.org/json" nsPrefix="json">
+    <eClassifiers xsi:type="ecore:EClass" name="JSON" abstract="true" />
+    <eClassifiers xsi:type="ecore:EClass" name="Array" eSuperTypes="#//JSON">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="items" upperBound="-1" eType="#//JSON" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Object" eSuperTypes="#//JSON">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entry" upperBound="-1" eType="#//Entry" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="String" eSuperTypes="#//JSON">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Number" eSuperTypes="#//JSON">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Boolean" eSuperTypes="#//JSON">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Entry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" eType="#//JSON" containment="true" />
+    </eClassifiers>
+</ecore:EPackage>

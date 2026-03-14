@@ -8,8 +8,9 @@ use crate::codegen::{
     cycles::CycleAnalysis,
     feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
     generate::{Fragment, Generate},
-    generator::PATH_MOD,
+    generator::PATH_MOD_PRIVATE,
     import::{Import, Macros},
+    operation::OperationGenerator,
     warnings::Warning,
 };
 
@@ -51,7 +52,7 @@ impl<'a> ClassGenerator<'a> {
                         );
                     }
                     _ => {
-                        // Ignore non-containment references and unsupported feature types
+                        // Non-containment references are handled through the Typed Graph, so we can skip them here.
                     }
                 }
                 Ok::<(Vec<Fragment>, Vec<Fragment>), anyhow::Error>((attrs, refs))
@@ -87,10 +88,32 @@ impl<'a> ClassGenerator<'a> {
     }
 
     fn generate_abstract_class(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
         let name = Ident::new(self.class.name(), Span::call_site());
         let feat_name = format_ident!("{}{}", self.class.name(), INHERITANCE_SUFFIX);
 
+        // Check if the class has a subclass
+        let is_inherited = !self.class.sub().is_empty();
+
+        // If no subclass, raise a warning and skip generation
+        if !is_inherited {
+            let warning = Warning::AbstractWithNoSubclass(self.class.name().to_string());
+            return Ok(Fragment::new(quote! {}, vec![], vec![warning]));
+        }
+
+        let (_operation_tokens, operation_imports, operation_warnings) = fold_fragments(
+            self.class
+                .operations()
+                .iter()
+                .map(|op| OperationGenerator::new(op, self.class, self.ctx).generate())
+                .collect::<anyhow::Result<Vec<_>>>()?,
+        );
+        let (attributes, references) = self.process_structural_features()?;
+        let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
+        let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
+        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
+
+        // Collect subclass names for the union type
         let sub_names = self
             .class
             .sub()
@@ -101,17 +124,6 @@ impl<'a> ClassGenerator<'a> {
             .iter()
             .map(|name| format_ident!("{}Log", name))
             .collect::<Vec<_>>();
-
-        assert!(
-            !sub_names.is_empty(),
-            "Abstract class {} must have at least one subclass",
-            self.class.name()
-        );
-
-        let (attributes, references) = self.process_structural_features()?;
-        let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
-        let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
 
         let tokens = quote! {
             #path::union!(#name = #(#sub_names(#sub_names, #sub_names_log))|*);
@@ -132,16 +144,24 @@ impl<'a> ClassGenerator<'a> {
                 ],
                 attribute_imports,
                 reference_imports,
+                operation_imports,
             ]
             .concat(),
-            [attribute_warnings, reference_warnings].concat(),
+            [attribute_warnings, reference_warnings, operation_warnings].concat(),
         ))
     }
 
     fn generate_concrete_class(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
         let name = Ident::new(self.class.name(), Span::call_site());
 
+        let (_operation_tokens, operation_imports, operation_warnings) = fold_fragments(
+            self.class
+                .operations()
+                .iter()
+                .map(|op| OperationGenerator::new(op, self.class, self.ctx).generate())
+                .collect::<anyhow::Result<Vec<_>>>()?,
+        );
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
@@ -164,16 +184,24 @@ impl<'a> ClassGenerator<'a> {
                 ],
                 attribute_imports,
                 reference_imports,
+                operation_imports,
             ]
             .concat(),
-            [attribute_warnings, reference_warnings].concat(),
+            [attribute_warnings, reference_warnings, operation_warnings].concat(),
         ))
     }
 
     fn generate_interface(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
         let feat_name = format_ident!("{}{}", self.class.name(), INHERITANCE_SUFFIX);
 
+        let (_operation_tokens, operation_imports, operation_warnings) = fold_fragments(
+            self.class
+                .operations()
+                .iter()
+                .map(|op| OperationGenerator::new(op, self.class, self.ctx).generate())
+                .collect::<anyhow::Result<Vec<_>>>()?,
+        );
         let attributes = self
             .class
             .structural()
@@ -201,8 +229,13 @@ impl<'a> ClassGenerator<'a> {
 
         Ok(Fragment::new(
             tokens,
-            [vec![Import::Macros(Macros::Record)], attribute_imports].concat(),
-            attribute_warnings,
+            [
+                vec![Import::Macros(Macros::Record)],
+                attribute_imports,
+                operation_imports,
+            ]
+            .concat(),
+            [attribute_warnings, operation_warnings].concat(),
         ))
     }
 

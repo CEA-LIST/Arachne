@@ -1,4 +1,7 @@
-use ecore_rs::{ctx::Ctx, prelude::idx::Class, repr::Structural};
+use ecore_rs::{
+    ctx::Ctx,
+    repr::{Structural, idx},
+};
 use heck::ToSnakeCase;
 use proc_macro2::Span;
 use quote::{format_ident, quote};
@@ -9,13 +12,13 @@ use crate::codegen::{
     datatype::crdt::{Crdt, NestedCrdt},
     feature::bounds::{BoundKind, normalize_bounds},
     generate::{Fragment, Generate},
-    generator::PATH_MOD,
+    generator::PATH_MOD_PRIVATE,
     import::Import,
 };
 
 pub struct ContainmentGenerator<'a> {
     reference: &'a Structural,
-    source_class: Class,
+    source_class: idx::Class,
     ctx: &'a Ctx,
     cycle_analysis: &'a CycleAnalysis,
 }
@@ -23,7 +26,7 @@ pub struct ContainmentGenerator<'a> {
 impl<'a> ContainmentGenerator<'a> {
     pub fn new(
         reference: &'a Structural,
-        source_class: Class,
+        source_class: idx::Class,
         ctx: &'a Ctx,
         cycle_analysis: &'a CycleAnalysis,
     ) -> Self {
@@ -39,7 +42,7 @@ impl<'a> ContainmentGenerator<'a> {
 
 impl<'a> Generate for ContainmentGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
         let (bound_kind, warnings) = normalize_bounds(self.reference.bounds, &self.reference.name);
 
         let target_class = self

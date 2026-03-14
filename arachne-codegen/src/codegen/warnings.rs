@@ -1,11 +1,13 @@
+use log::warn;
+
 /// Represents unsupported features encountered during code generation
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Warning {
     /// EClass is an interface, not a concrete class
     InterfaceNotSupported(String),
     /// Unsupported bounds were normalized to the nearest supported mapping
-    UnsupportedBounds {
-        feature: String,
+    UnsupportedAttributeBounds {
+        attribute: String,
         bounds: String,
         applied: String,
     },
@@ -14,6 +16,10 @@ pub enum Warning {
         properties: Vec<String>,
         applied: Vec<String>,
     },
+    /// Abstract class has no subclasses
+    AbstractWithNoSubclass(String),
+    /// Unsupported operation encountered during code generation
+    OperationNotSupported(String),
 }
 
 impl Warning {
@@ -22,18 +28,18 @@ impl Warning {
         match self {
             Warning::InterfaceNotSupported(name) => {
                 format!(
-                    "Warning: `EClass` '{}' is an interface and is not supported in v1. It will be skipped.",
+                    "`EClass` `{}` is an interface and is not supported in v1. It will be skipped.",
                     name
                 )
             }
-            Warning::UnsupportedBounds {
-                feature,
+            Warning::UnsupportedAttributeBounds {
+                attribute,
                 bounds,
                 applied,
             } => {
                 format!(
-                    "Warning: feature '{}' has unsupported bounds `{}`. Applied nearest supported bounds {} instead.",
-                    feature, bounds, applied
+                    "Attribute `{}` has unsupported bounds `{}`. Applied nearest supported bounds {} instead.",
+                    attribute, bounds, applied
                 )
             }
             Warning::UnsupportedPropertyCombination {
@@ -42,10 +48,22 @@ impl Warning {
                 applied,
             } => {
                 format!(
-                    "Warning: typed element '{}' has unsupported property combination: `{}`. Applied best-effort mapping instead: `{}`.",
+                    "Typed element `{}` has unsupported property combination: `{}`. Applied best-effort mapping instead: `{}`.",
                     feature,
                     properties.join(", "),
                     applied.join(", ")
+                )
+            }
+            Warning::AbstractWithNoSubclass(name) => {
+                format!(
+                    "Abstract class `{}` has no subclasses. It will be skipped.",
+                    name
+                )
+            }
+            Warning::OperationNotSupported(name) => {
+                format!(
+                    "Operation `{}` is not supported in v1 and will be skipped.",
+                    name
                 )
             }
         }
@@ -53,6 +71,6 @@ impl Warning {
 
     /// Emit the warning to stderr
     pub fn emit(&self) {
-        eprintln!("{}", self.message());
+        warn!("{}", self.message());
     }
 }

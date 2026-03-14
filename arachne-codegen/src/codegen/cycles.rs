@@ -3,8 +3,11 @@
 // This module detects cycles in the containment hierarchy and determines
 // where Box<T> wrappers are needed to break cycles in generated code.
 
-use ecore_rs::{ctx::Ctx, prelude::idx::Class};
 use std::collections::{HashMap, HashSet};
+
+use ecore_rs::{ctx::Ctx, prelude::idx::Class};
+
+use crate::codegen::classifier::class::INHERITANCE_SUFFIX;
 
 type ClassIdx = Class;
 
@@ -133,7 +136,7 @@ fn build_containment_graph(ctx: &Ctx) -> anyhow::Result<Vec<ContainmentEdge>> {
             edges.push(ContainmentEdge {
                 source,
                 target: superclass.idx,
-                field_name: format!("{}Feat", superclass.name()),
+                field_name: format!("{}{}", superclass.name(), INHERITANCE_SUFFIX),
                 is_many: false,
                 is_union_variant: false,
             });

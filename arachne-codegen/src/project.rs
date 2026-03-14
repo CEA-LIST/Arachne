@@ -1,11 +1,13 @@
+use std::{fs, path::Path};
+
+use proc_macro2::TokenStream;
+use quote::quote;
+
 use crate::{
     config::Config,
     error::{ArachneError, Result},
     format_code,
 };
-use proc_macro2::TokenStream;
-use quote::quote;
-use std::{fs, path::Path};
 
 /// Writes a complete Rust project for the generated code.
 pub fn write_project(
@@ -21,16 +23,16 @@ pub fn write_project(
     fs::create_dir_all(&src_dir)?;
 
     let cargo_toml = render_cargo_toml(&project_name, &config.moirai_root)?;
-    let main_rs = format_code(render_main_rs(&project_name, model_code.is_some()))?;
+    let main_rs = format_code(render_main_rs(model_code.is_some()))?;
     let generated_rs = render_generated_rs(code);
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
     fs::write(src_dir.join("main.rs"), main_rs)?;
-    fs::write(src_dir.join("generated.rs"), generated_rs)?;
+    fs::write(src_dir.join("classifiers.rs"), generated_rs)?;
 
     if let Some(model) = model_code {
         let model_rs = render_generated_rs(model);
-        fs::write(src_dir.join("model.rs"), model_rs)?;
+        fs::write(src_dir.join("package.rs"), model_rs)?;
     }
 
     Ok(())
@@ -45,30 +47,28 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     let moirai_macros = moirai_root.join("moirai-macros");
 
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\npetgraph = \"0.8.3\" \n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nxml-builder = \"0.5.4\" \n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
         to_path_string(&moirai_macros)
     ))
 }
 
-fn render_main_rs(project_name: &str, has_model: bool) -> TokenStream {
+// TODO : a package should always be generated with a root class
+// TODO: use a const for classifiers mod name
+fn render_main_rs(has_model: bool) -> TokenStream {
     if has_model {
         quote! {
-            mod generated;
-            mod model;
+            mod package;
+            mod classifiers;
 
-            fn main() {
-                println!("Generated CRDT project: {}", #project_name);
-            }
+            fn main() {}
         }
     } else {
         quote! {
-            mod generated;
+            mod classifiers;
 
-            fn main() {
-                println!("Generated CRDT project: {}", #project_name);
-            }
+            fn main() {}
         }
     }
 }

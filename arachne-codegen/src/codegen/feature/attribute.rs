@@ -16,7 +16,7 @@ use crate::codegen::{
     },
     feature::bounds::{BoundKind, normalize_bounds},
     generate::{Fragment, Generate},
-    generator::PATH_MOD,
+    generator::PATH_MOD_PRIVATE,
     import::{Import, Log},
     warnings::Warning,
 };
@@ -35,7 +35,7 @@ impl<'a> AttributeGenerator<'a> {
 
 impl<'a> Generate for AttributeGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
 
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);

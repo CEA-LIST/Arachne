@@ -77,6 +77,7 @@ dependencies = [
  "colored",
  "ecore_rs",
  "env_logger",
+ "log",
 ]
 
 [[package]]
@@ -90,12 +91,14 @@ dependencies = [
  "moirai-crdt",
  "moirai-macros",
  "moirai-protocol",
+ "owo-colors",
  "prettyplease",
  "proc-macro2",
  "quote",
  "rustc-hash 2.1.1",
  "syn",
  "thiserror",
+ "xml-builder",
 ]
 
 [[package]]
@@ -346,9 +349,11 @@ dependencies = [
 name = "moirai-macros"
 version = "0.1.0"
 dependencies = [
+ "heck",
  "moirai-protocol",
  "paste",
  "rustc-hash 1.1.0",
+ "xml-builder",
 ]
 
 [[package]]
@@ -360,6 +365,7 @@ dependencies = [
  "petgraph",
  "rustc-hash 2.1.1",
  "smallvec",
+ "xml-builder",
 ]
 
 [[package]]
@@ -382,6 +388,12 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "owo-colors"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "paste"
@@ -764,6 +776,12 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "xml-builder"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c023e38161c176b6ed516e2c398acd755cd19983661eff519b811c01646e10f"
 
 [[package]]
 name = "zmij"

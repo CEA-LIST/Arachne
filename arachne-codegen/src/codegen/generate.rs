@@ -2,6 +2,7 @@ use proc_macro2::TokenStream;
 
 use crate::codegen::{import::Import, warnings::Warning};
 
+/// Represents a generated code fragment, including the generated tokens, required imports, and any warnings encountered during generation
 pub struct Fragment {
     tokens: TokenStream,
     imports: Vec<Import>,
@@ -34,6 +35,7 @@ impl Fragment {
     }
 }
 
+/// Trait for generating code fragments from a given input
 pub trait Generate {
     fn generate(&self) -> anyhow::Result<Fragment>;
 }

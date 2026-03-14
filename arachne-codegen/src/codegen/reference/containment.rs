@@ -1,12 +1,14 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 
-use crate::codegen::{
-    classifier::class::INHERITANCE_SUFFIX,
-    cycles::{BoxingStrategy, CycleAnalysis},
-    reference::analysis::{ReferenceAnalysis, find_concrete_descendants},
+use crate::{
+    codegen::{
+        classifier::class::INHERITANCE_SUFFIX,
+        cycles::{BoxingStrategy, CycleAnalysis},
+        reference::analysis::{ReferenceAnalysis, find_concrete_descendants},
+    },
+    utils::hash::HashSet,
 };
-use crate::utils::hash::HashSet;
 
 /// A single step in the containment path from root to a referenceable class.
 #[derive(Debug, Clone)]
@@ -39,7 +41,6 @@ pub struct ContainmentPath {
     /// Steps from the root (exclusive) to the creation/deletion point.
     pub steps: Vec<PathStep>,
     /// For deletion: the field path on the log struct to access the list's position data.
-    /// e.g. `["main", "blackboard", "entries"]` → `self.root_log.main.blackboard.entries.position`
     pub log_field_path: Vec<String>,
 }
 

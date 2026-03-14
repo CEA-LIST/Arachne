@@ -4,7 +4,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::Ident;
 
-use crate::codegen::reference::analysis::ReferenceAnalysis;
+use crate::codegen::reference::{PATH_MOD, analysis::ReferenceAnalysis};
 
 /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {ClassName}Id(pub EventId);`
 /// for each class that participates in a non-containment reference.
@@ -95,14 +95,16 @@ pub fn generate_typed_graph(ctx: &Ctx, analysis: &ReferenceAnalysis) -> TokenStr
     }
 }
 
-/// Generate the top-level `Model` enum.
-pub fn generate_model_enum(root_class_name: &str) -> TokenStream {
+/// Generate the top-level package enum.
+pub fn generate_package_enum(package_name: &str, root_class_name: &str) -> TokenStream {
+    let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
     let root_ident = Ident::new(root_class_name, Span::call_site());
+    let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
 
     quote! {
         #[derive(Debug, Clone)]
-        pub enum Model {
-            Root(#root_ident),
+        pub enum #package_ident {
+            #root_ident(#path::#root_ident),
             Reference(Refs),
         }
     }

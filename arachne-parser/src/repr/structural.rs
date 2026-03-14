@@ -41,12 +41,13 @@ pub struct Structural {
     pub kind: Typ,
     pub typ: Option<idx::Class>,
     pub typ_path: Option<String>,
+    /// Upper and lower bounds of the feature. Default is `0..1` for references and `1..1` for attributes.
     pub bounds: Bounds,
-    /// No idea what this is, corresponds to the attribute `containment`.
+    /// Indicates whether the feature is a containment reference. Default is false.
     pub containment: bool,
-    /// No idea what this is, corresponds to the attribute `iD`.
+    /// Indicates whether the feature is an ID. Default is false.
     pub is_id: bool,
-    /// No idea what this is, corresponds to the attribute `ordered`.
+    /// Indicates whether the feature value is ordered. Default is true.
     pub ordered: Option<bool>,
     /// Indicates whether the feature value may be modified. Default is true.
     pub changeable: Option<bool>,

@@ -5,22 +5,27 @@ pub mod parser;
 mod project;
 mod utils;
 
+use std::path::PathBuf;
+
 pub use config::Config;
-use ecore_rs::repr::Class;
+use ecore_rs::repr::{Class, Pack};
 pub use error::{ArachneError, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 pub use parser::EcoreParser;
 use proc_macro2::TokenStream;
-use std::path::PathBuf;
 
 use crate::{
     codegen::{
-        classifier::class::ClassGenerator, cycles::analyze_cycles, generate::Generate,
-        generator::Generator, reference::ModelGenerator,
+        classifier::class::ClassGenerator,
+        cycles::analyze_cycles,
+        generate::Generate,
+        generator::Generator,
+        reference::{PackageGenerator, analysis::analyze_references},
     },
     utils::topo::topological_sort,
 };
 
+/// Metadata about the code generation process, including input/output paths, project/package names, and statistics about the generated code
 #[derive(Debug, Clone)]
 pub struct GenerationReport {
     pub input_path: PathBuf,
@@ -28,7 +33,6 @@ pub struct GenerationReport {
     pub project_name: String,
     pub package_name: String,
     pub class_count: usize,
-    pub model_generated: bool,
 }
 
 /// Main entry point for code generation
@@ -38,28 +42,39 @@ pub fn generate(config: Config) -> anyhow::Result<()> {
 
 /// Main entry point for code generation with execution metadata.
 pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> {
-    info!("validating configuration");
+    info!("Validating configuration");
     // Validate configuration
     config.validate()?;
 
-    info!("parsing ecore metamodel: {:?}", config.input_path);
+    info!("Parsing ecore metamodel: {:?}", config.input_path);
     // Parse the Ecore metamodel
     let parser = EcoreParser::from_file(&config.input_path)?;
 
-    let pack = parser
+    let packs = parser
         .ctx
         .packs()
         .iter()
-        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
-        .ok_or_else(|| anyhow::anyhow!("No concrete EPackage found in metamodel"))?;
+        .filter(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .collect::<Vec<&Pack>>();
+    if packs.is_empty() {
+        return Err(anyhow::anyhow!("No EPackage found in metamodel"));
+    }
+    if packs.len() > 1 {
+        warn!(
+            "Multiple packages found in metamodel, using first non-root package: `{}`. Other packages will be ignored.",
+            packs[0].name()
+        );
+    }
+    let pack = packs[0];
+
     let class_count = pack.classes().len();
     debug!(
-        "found package '{}' with {} classes",
+        "Found package `{}` with {} classes",
         pack.name(),
         class_count
     );
 
-    info!("generating rust tokens");
+    info!("Generating rust tokens");
     // Generate code
     let (generator, model_tokens) = generate_from_parser(&parser)?;
 
@@ -82,7 +97,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         .or_else(|| Some(parser.ctx.packs()[parser.ctx.top_pack()].name().to_string()))
         .unwrap_or_else(|| "generated_crdt".to_string());
 
-    info!("writing generated project '{}'", project_name);
+    info!("Writing generated project '{}'", project_name);
     // Write a full Rust project
     project::write_project(
         &config,
@@ -91,17 +106,12 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         formatted_model.as_deref(),
     )?;
 
-    if config.debug {
-        println!("Generated project written to: {:?}", config.output_dir);
-    }
-
     Ok(GenerationReport {
         input_path: config.input_path.clone(),
         output_dir: config.output_dir.clone(),
         project_name,
         package_name: pack.name().to_string(),
         class_count,
-        model_generated: formatted_model.is_some(),
     })
 }
 
@@ -121,6 +131,7 @@ pub fn generate_from_parser(
         .unwrap();
 
     let class_indices = pack.classes();
+    let package_classes: Vec<_> = class_indices.iter().copied().collect();
 
     // Get all classes in the package
     let classes: Vec<&Class> = parser
@@ -139,27 +150,39 @@ pub fn generate_from_parser(
         generator.register(fragment);
     }
 
-    // Find root class (first class in sorted order that has no superclass,
-    // or explicitly the class named "Root" if it exists)
+    // Prefer a top-level class that defines non-containment references when possible.
+    // This gives more useful generated package operations in simple models.
+    let reference_analysis = analyze_references(&parser.ctx, &package_classes);
+
+    // Find root class (first class in sorted order that has no superclass)
     let root_class = sorted_classes
         .iter()
-        .find(|c| c.name() == "Root")
+        .find(|c| {
+            c.sup().is_empty()
+                && !c.is_enum()
+                && !c.is_interface()
+                && reference_analysis
+                    .refs
+                    .iter()
+                    .any(|r| r.source_class == c.idx)
+        })
         .or_else(|| {
             sorted_classes
                 .iter()
-                .find(|c| c.sup().is_empty() && !c.is_enum())
+                .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
         })
         .expect("No root class found in the model");
 
     // Generate reference management code (model.rs)
-    let model_gen = ModelGenerator::new(
+    let package_gen = PackageGenerator::new(
         &parser.ctx,
         root_class.idx,
-        class_indices.iter().copied().collect(),
+        package_classes,
+        pack.name(),
         &cycle_analysis,
     );
 
-    let model_tokens = model_gen.generate().map(|fragment| {
+    let model_tokens = package_gen.generate().map(|fragment| {
         let (tokens, _, _) = fragment.into();
         tokens
     });

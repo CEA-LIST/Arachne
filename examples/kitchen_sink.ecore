@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="test" nsURI="http://www.example.org/test" nsPrefix="test">
-    <eClassifiers xsi:type="ecore:EClass" name="TestClass">
+    <eClassifiers xsi:type="ecore:EClass" name="Foo">
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="myString" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="myInt" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" />
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="myBoolean" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" />
@@ -21,5 +23,8 @@
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="unique_list" ordered ="true" unique ="true" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="bag" ordered ="false" unique ="false" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="set" ordered ="false" unique ="true" lowerBound="0" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Bar">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="myFoo" eType="#//Foo" lowerBound="0" upperBound="1" />
     </eClassifiers>
 </ecore:EPackage>

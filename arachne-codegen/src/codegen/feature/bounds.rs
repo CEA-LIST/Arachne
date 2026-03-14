@@ -9,7 +9,7 @@ pub enum BoundKind {
 
 pub fn normalize_bounds(
     bounds: ecore_rs::repr::bounds::Bounds,
-    feature: &str,
+    attribute: &str,
 ) -> (BoundKind, Vec<Warning>) {
     let applied = match (bounds.lbound, bounds.ubound) {
         (0, Some(1)) => (BoundKind::Optional, None),
@@ -27,8 +27,8 @@ pub fn normalize_bounds(
     };
 
     let warnings = applied.1.map_or(Vec::new(), |applied| {
-        vec![Warning::UnsupportedBounds {
-            feature: feature.to_string(),
+        vec![Warning::UnsupportedAttributeBounds {
+            attribute: attribute.to_string(),
             bounds: bounds.to_string(),
             applied: applied.to_string(),
         }]

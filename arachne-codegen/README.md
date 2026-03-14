@@ -6,29 +6,6 @@
 
 This code generator bridges the gap between high-level domain models (defined in Ecore) and distributed, eventually consistent data structures (CRDTs). It automatically generates Rust code that leverages the Moirai library to provide conflict-free replication semantics for your domain models.
 
-## CLI Usage
-
-Run the generator by passing the Ecore metamodel path as a positional argument:
-
-```bash
-cargo run -- examples/bt.ecore
-```
-
-Common options:
-
-```bash
-cargo run -- examples/bt.ecore \
-    --output .output \
-    --project-name bt \
-    --moirai-root ../moirai \
-    --debug \
-    -v
-```
-
-Environment variable support:
-
-- `ATRAKTOS_MOIRAI_ROOT`: default value for `--moirai-root`
-
 ## Management of References
 
 An important challenge in generating code from a metamodel into a composition of CRDTs is the management of references. The approach to CRDT composition and nesting proposed by *Bauwens et al.* is hierarchical: a parent CRDT can propagate its conflict-resolution policy to its children using a causal reset. However, references represent relationships between siblings in the hierarchy. To support them, we adopt the following design:
@@ -111,6 +88,8 @@ For abstract classes, the code generator does not produce an abstract type in th
 
 This approach eliminates runtime inheritance while preserving substitutability and structural reuse, and it is well suited to a closed-world setting where all concrete variants are known at generation time.
 
+Orphan abstract classes, i.e., that are inherited by no concrete classes, are not supported.
+
 ##### Interface
 
 Operations are not supported. See [Operations](#operations). Features are statically flattened into each concrete subclass that implement the interface during generation.
@@ -172,7 +151,7 @@ An exception is made for queries on values derived from the CRDT state. For exam
 
 ### Package
 
-A `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported.
+A `EPackage` is supported as an object holding all the generated collaborative metamodel. Interaction between packages is not currently supported. Only the first package encountered will be generated. The package must have a unique top-level entry class.
 
 ## To-Do
 

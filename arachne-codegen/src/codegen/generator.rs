@@ -5,8 +5,9 @@ use quote::quote;
 
 use crate::codegen::{generate::Fragment, import::Import, warnings::Warning};
 
-pub const PATH_MOD: &str = "__gen";
+pub const PATH_MOD_PRIVATE: &str = "__classifiers";
 
+/// Main generator that collects generated fragments, manages imports, and emits warnings
 pub struct Generator {
     import_set: HashSet<String>,
     imports: Vec<TokenStream>,
@@ -57,7 +58,7 @@ impl Generator {
     }
 
     pub fn build(self) -> TokenStream {
-        let path: syn::Path = syn::parse_str(PATH_MOD).unwrap();
+        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
         let imports = &self.imports;
         let tokens = &self.tokens;
 

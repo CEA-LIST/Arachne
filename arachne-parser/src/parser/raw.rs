@@ -1,3 +1,5 @@
+use log::warn;
+
 prelude! {
     ctx::*,
     regex::Regex,
@@ -97,12 +99,9 @@ impl<'input> Parser<'input> {
         Into: Display,
     {
         if let Some(from) = from {
-            log::warn!(
+            warn!(
                 "XML-level {} redefinition for `{}` from `{}` to `{}`",
-                desc,
-                name,
-                from,
-                into
+                desc, name, from, into
             )
         }
         Ok(())
@@ -310,10 +309,6 @@ impl<'input> Parser<'input> {
     }
 
     pub fn dquote_str(&mut self) -> Res<&'input str> {
-        // log::trace!(
-        //     "[dquote_str] tail: `{}`",
-        //     self.tail().lines().next().unwrap()
-        // );
         self.raw_tag("\"")?;
         let inner = self.until_char('"', false);
         self.raw_tag("\"")?;
@@ -588,7 +583,7 @@ impl<'input> Parser<'input> {
                 }
                 ([], "eSuperTypes") => {
                     if let Some(sup_typs) = sup_typs.as_ref() {
-                        log::warn!(
+                        warn!(
                             "XML-level class attribute redefinition for `eSuperTypes` from `{}` to `{}`",
                             sup_typs,
                             val,
@@ -598,7 +593,7 @@ impl<'input> Parser<'input> {
                 }
                 (["xsi"], "type") => {
                     if let Some(typ) = typ.as_ref() {
-                        log::warn!(
+                        warn!(
                             "XML-level class attribute redefinition for `xsi:type` from `{}` to `{}`",
                             typ,
                             val,
@@ -653,7 +648,6 @@ impl<'input> Parser<'input> {
             self.ws_and_comments();
 
             if self.try_raw_tag("</eClassifiers>") {
-                // log::debug!("parsing class end for `{}`", ctx.current().name());
                 break 'content;
             }
 
@@ -681,7 +675,6 @@ impl<'input> Parser<'input> {
                 let structural = self
                     .class_structural(ctx)
                     .with_context("failed to parse structural features")?;
-                // log::info!("done parsing structural");
                 ctx.add_structural(structural);
             } else {
                 bail!("unexpected class content")
@@ -1001,31 +994,31 @@ impl<'input> Parser<'input> {
             name.ok_or_else(|| error!("illegal structural feature, `name` attribut is missing"))?;
         let typ = repr::structural::Typ::from_xsi_type(typ.as_ref().ok_or_else(|| {
             error!(
-                "missing attribute `xsi:type` in structural feature `{}`",
+                "Missing attribute `xsi:type` in structural feature `{}`",
                 name
             )
         })?)?;
 
         let etype_str = etype
-            .ok_or_else(|| error!("missing attribute `eType` in structural feature `{}`", name))?;
+            .ok_or_else(|| error!("Missing attribute `eType` in structural feature `{}`", name))?;
 
         let bounds = typ.parse_bounds(lbound, ubound).context(|| {
             format!(
-                "failed to parse `lowerBound`/`upperBound` of  structural feature `{}`",
+                "Failed to parse `lowerBound`/`upperBound` of  structural feature `{}`",
                 name,
             )
         })?;
 
         if bounds.ubound == Some(1) {
             if ordered.is_some() {
-                log::warn!(
-                    "structural feature `{}` sets `ordered` while `upperBound=1`; this has no effect and indicates an ill-formed metamodel",
+                warn!(
+                    "Structural feature `{}` sets `ordered` while `upperBound=1`; this has no effect",
                     name,
                 );
             }
             if unique.is_some() {
-                log::warn!(
-                    "structural feature `{}` sets `unique` while `upperBound=1`; this has no effect and indicates an ill-formed metamodel",
+                warn!(
+                    "Structural feature `{}` sets `unique` while `upperBound=1`; this has no effect",
                     name,
                 );
             }
@@ -1037,7 +1030,7 @@ impl<'input> Parser<'input> {
             Err(err) => {
                 // Check if this is an external type reference
                 if etype_str.contains(".ecore#") {
-                    log::warn!(
+                    warn!(
                         "External type reference in structural feature: {}",
                         etype_str
                     );
@@ -1073,7 +1066,7 @@ impl<'input> Parser<'input> {
             structural.set_unique(helpers::bool(unique)?);
         }
         if opposite.is_some() {
-            log::warn!("`eOpposite` attributes are currently not supported, ignoring")
+            warn!("`eOpposite` attributes are currently not supported, ignoring")
         }
 
         // If early_done, parse nested content like eAnnotations
