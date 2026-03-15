@@ -14,6 +14,7 @@ const MACROS_PREFIX: &str = "moirai_macros";
 pub enum Import {
     Log(Log),
     Crdt(Crdt),
+    CrdtOp(CrdtOp),
     Macros(Macros),
     Protocol(Protocol),
     Custom(String),
@@ -27,6 +28,7 @@ impl Import {
             Import::Macros(macros) => macros.path(),
             Import::Protocol(protocol) => protocol.path(),
             Import::Custom(path) => path.clone(),
+            Import::CrdtOp(op) => op.path(),
         }
     }
 
@@ -42,6 +44,7 @@ impl Import {
                     pub use #path_tokens;
                 }
             }
+            Import::CrdtOp(op) => op.to_use_statement(),
         }
     }
 }
@@ -179,6 +182,26 @@ impl ToUseStatement for Protocol {
             Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
             Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
             Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum CrdtOp {
+    Nested(NestedCrdtOp),
+}
+
+#[derive(Clone, Debug)]
+pub enum NestedCrdtOp {
+    ListOp,
+}
+
+impl ToUseStatement for CrdtOp {
+    fn path(&self) -> String {
+        match self {
+            CrdtOp::Nested(nested_op) => match nested_op {
+                NestedCrdtOp::ListOp => format!("{}::list::nested_list::List", CRDT_PREFIX),
+            },
         }
     }
 }

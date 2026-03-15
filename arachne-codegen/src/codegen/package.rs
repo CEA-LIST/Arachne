@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use ecore_rs::{ctx::Ctx, repr::idx};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream};
@@ -12,7 +10,7 @@ use crate::{
         cycles::CycleAnalysis,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
-        import::{Import, Log, Protocol},
+        import::{CrdtOp, Import, Log, NestedCrdtOp, Protocol},
         reference::{
             analysis::ReferenceAnalysis,
             containment::{ContainmentPath, PathStep, find_creation_paths},
@@ -71,12 +69,14 @@ impl<'a> Generate for PackageGenerator<'a> {
 impl<'a> PackageGenerator<'a> {
     fn imports(&self) -> Vec<Import> {
         vec![
+            Import::CrdtOp(CrdtOp::Nested(NestedCrdtOp::ListOp)),
             Import::Protocol(Protocol::Read),
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
             Import::Protocol(Protocol::LwwPolicy),
             Import::Protocol(Protocol::Event),
+            Import::Protocol(Protocol::EventId),
             Import::Log(Log::VecLog),
             Import::Protocol(Protocol::PureCRDT),
             Import::Protocol(Protocol::QueryOperation),
@@ -105,12 +105,14 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_package_log(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
         let package_log_struct = self.generate_package_log_struct();
+        let reference_sync_support = self.generate_reference_sync_support(creation_paths);
 
         let is_log_impl = self.generate_is_log_impl(creation_paths);
         let eval_nested_impl = self.generate_eval_nested_impl();
 
         quote! {
             #package_log_struct
+            #reference_sync_support
 
             #is_log_impl
 
@@ -148,7 +150,7 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
-    fn generate_is_log_impl(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
+    fn generate_is_log_impl(&self, _creation_paths: &[ContainmentPath]) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
@@ -159,39 +161,6 @@ impl<'a> PackageGenerator<'a> {
         let class_name = format_ident!("{}", root_class_name.to_upper_camel_case());
         let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
         let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-
-        let root_idx = self
-            .ctx
-            .classes()
-            .iter()
-            .find(|c| c.name() == root_class_name)
-            .map(|c| c.idx);
-        let root_is_referenceable = root_idx
-            .map(|idx| self.ref_analysis.referenceable_classes.contains(&idx))
-            .unwrap_or(false);
-        let root_id_struct = format_ident!("{}Id", root_class_name);
-        let root_instance_variant = format_ident!("{}Id", root_class_name);
-
-        let root_bootstrap_arm = if root_is_referenceable {
-            quote! {
-                #package_ident::#class_name(_) if self.#class_log_name.is_default() => {
-                    let id = #root_id_struct(event.id().clone());
-                    let new_vertex = #path::ReferenceManager::<#path::LwwPolicy>::AddVertex {
-                        id: #path::Instance::#root_instance_variant(id),
-                    };
-                    self.reference_manager_log
-                        .effect(#path::Event::unfold(event.clone(), new_vertex));
-                }
-            }
-        } else {
-            quote! {}
-        };
-
-        // Generate vertex creation match arms
-        let creation_arms = self.generate_creation_arms(creation_paths);
-
-        // Generate vertex deletion match arms (only for direct list paths without Box)
-        let deletion_arms = self.generate_deletion_arms(creation_paths);
 
         quote! {
             impl #path::IsLog for #package_log_name {
@@ -208,12 +177,7 @@ impl<'a> PackageGenerator<'a> {
                 }
 
                 fn effect(&mut self, event: #path::Event<Self::Op>) {
-                    match &event.op() {
-                        #root_bootstrap_arm
-                        #creation_arms
-                        #deletion_arms
-                        _ => {}
-                    }
+                    self.sync_reference_vertices(&event);
 
                     match event.op().clone() {
                         #package_ident::#class_name(root) => self.#class_log_name.effect(#path::Event::unfold(event, root)),
@@ -241,169 +205,236 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
-    /// Generate match arms for vertex creation (List::Insert).
-    ///
-    /// Paths that share the same outer match pattern (up to a Box boundary) and the
-    /// same vertex class are grouped into a single match arm with OR-combined inner
-    /// patterns. This avoids duplicate outer arms that Rust would flag as unreachable.
-    fn generate_creation_arms(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
+    fn generate_reference_sync_support(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
         let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let support_path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
         let class_name = format_ident!("{}", root_class_name.to_upper_camel_case());
         let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-
-        let mut non_boxed_arms: Vec<TokenStream> = Vec::new();
-
-        // Group boxed paths by (serialized outer steps, vertex class name).
-        // Value: (outer_steps, vertex_name, inner_patterns)
-        let mut boxed_groups: BTreeMap<String, (Vec<PathStep>, String, Vec<TokenStream>)> =
-            BTreeMap::new();
-
-        for path in creation_paths {
-            let box_index = path
-                .steps
-                .iter()
-                .position(|step| matches!(step, PathStep::Field { is_boxed: true, .. }));
-
-            if let Some(box_idx) = box_index {
-                let outer_steps = path.steps[..=box_idx].to_vec();
-                let inner_steps = &path.steps[box_idx + 1..];
-                let vertex_name = self.ctx.classes()[*path.vertex_class].name().to_string();
-                let key = format!("{}_{}", Self::outer_steps_key(&outer_steps), vertex_name);
-
-                let inner_pattern = self.build_nested_pattern(inner_steps);
-
-                boxed_groups
-                    .entry(key)
-                    .or_insert_with(|| (outer_steps, vertex_name, Vec::new()))
-                    .2
-                    .push(inner_pattern);
-            } else {
-                let vertex_class = &self.ctx.classes()[*path.vertex_class];
-                let id_struct = format_ident!("{}Id", vertex_class.name());
-                let instance_variant = format_ident!("{}Id", vertex_class.name());
-                let pattern = self.build_nested_pattern(&path.steps);
-
-                non_boxed_arms.push(quote! {
-                    #package_ident::#class_name(#pattern) => {
-                        let id = #id_struct(event.id().clone());
-                        let new_vertex = ReferenceManager::<LwwPolicy>::AddVertex {
-                            id: Instance::#instance_variant(id),
-                        };
-                        self.reference_manager_log
-                            .effect(Event::unfold(event.clone(), new_vertex));
-                    }
-                });
-            }
-        }
-
-        // Generate grouped boxed arms
-        let mut boxed_arms: Vec<TokenStream> = Vec::new();
-        for (outer_steps, vertex_name, inner_patterns) in boxed_groups.values() {
-            let outer_pattern = self.build_nested_pattern_with_capture(outer_steps, "inner_val");
-            let inner_var = format_ident!("inner_val");
-
-            let id_struct = format_ident!("{}Id", vertex_name);
-            let instance_variant = format_ident!("{}Id", vertex_name);
-
-            boxed_arms.push(quote! {
-                #package_ident::#class_name(#outer_pattern) => {
-                    if let #(#inner_patterns)|* = #inner_var.as_ref() {
-                        let id = #id_struct(event.id().clone());
-                        let new_vertex = ReferenceManager::<LwwPolicy>::AddVertex {
-                            id: Instance::#instance_variant(id),
-                        };
-                        self.reference_manager_log
-                            .effect(Event::unfold(event.clone(), new_vertex));
-                    }
-                }
-            });
-        }
-
-        let all_arms = boxed_arms.into_iter().chain(non_boxed_arms);
-        quote! { #(#all_arms)* }
-    }
-
-    /// Generate a string key from path steps for grouping.
-    fn outer_steps_key(steps: &[PathStep]) -> String {
-        steps
-            .iter()
-            .map(|s| match s {
-                PathStep::Field {
-                    class_name,
-                    variant_name,
-                    ..
-                } => format!("F:{}/{}", class_name, variant_name),
-                PathStep::Variant {
-                    union_name,
-                    variant_name,
-                } => format!("V:{}/{}", union_name, variant_name),
-                PathStep::ListInsert => "LI".to_string(),
-                PathStep::ListDelete => "LD".to_string(),
-            })
-            .collect::<Vec<_>>()
-            .join("/")
-    }
-
-    /// Generate match arms for vertex deletion (List::Delete).
-    /// Only generates for simple paths (no Box in the path).
-    fn generate_deletion_arms(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
-        let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-
+        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let descriptor_name =
+            format_ident!("{}VertexSyncDescriptor", package_name.to_upper_camel_case());
         let class_log_name = format_ident!("{}_log", root_class_name.to_snake_case());
-        let package_name_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let root_class_ident = format_ident!("{}", root_class_name.to_upper_camel_case());
 
-        let arms: Vec<TokenStream> = creation_paths
+        let root_is_referenceable = self
+            .ref_analysis
+            .referenceable_classes
+            .contains(&self.root_class_idx);
+        let root_bootstrap = if root_is_referenceable {
+            let root_id_struct = format_ident!("{}Id", root_class_name);
+            let root_instance_variant = format_ident!("{}Id", root_class_name);
+            quote! {
+                if #support_path::IsLog::is_default(&self.#class_log_name)
+                    && matches!(event.op(), #package_ident::#class_name(_))
+                {
+                    let id = #support_path::#root_id_struct(event.id().clone());
+                    let new_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex {
+                        id: #support_path::Instance::#root_instance_variant(id),
+                    };
+                    #support_path::IsLog::effect(
+                        &mut self.reference_manager_log,
+                        #support_path::Event::unfold(event.clone(), new_vertex)
+                    );
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        let descriptor_entries: Vec<TokenStream> = creation_paths
             .iter()
-            .filter(|path| {
-                // Only handle deletion for paths without Box
-                !path
-                    .steps
-                    .iter()
-                    .any(|step| matches!(step, PathStep::Field { is_boxed: true, .. }))
-            })
-            .map(|path| {
-                let vertex_class = &self.ctx.classes()[*path.vertex_class];
-                let id_struct = format_ident!("{}Id", vertex_class.name());
-                let instance_variant = format_ident!("{}Id", vertex_class.name());
-
-                // Build the deletion pattern (same as creation but with ListDelete)
-                let delete_steps: Vec<PathStep> = path
-                    .steps
-                    .iter()
-                    .map(|s| match s {
-                        PathStep::ListInsert => PathStep::ListDelete,
-                        other => other.clone(),
-                    })
-                    .collect();
-
-                let pattern = self.build_nested_pattern(&delete_steps);
-
-                // Build the log field path for position lookup
-                let log_path = self.build_log_field_path(&path.log_field_path);
+            .enumerate()
+            .map(|(index, _path)| {
+                let matches_create_fn = format_ident!("matches_create_{}", index);
+                let should_create_fn = format_ident!("should_create_{}", index);
+                let make_instance_fn = format_ident!("make_instance_{}", index);
+                let lookup_deleted_id_fn = format_ident!("lookup_deleted_id_{}", index);
 
                 quote! {
-                    #package_name_ident::#root_class_ident(#pattern) => {
-                        let positions = self
-                            .#class_log_name
-                            #log_path
-                            .position
-                            .execute_query(Read::new());
-                        let event_id = positions[*pos].clone();
-                        let remove_vertex = ReferenceManager::<LwwPolicy>::RemoveVertex {
-                            id: Instance::#instance_variant(#id_struct(event_id)),
-                        };
-                        self.reference_manager_log
-                            .effect(Event::unfold(event.clone(), remove_vertex));
+                    #descriptor_name {
+                        matches_create: Self::#matches_create_fn,
+                        should_create: Self::#should_create_fn,
+                        make_instance: Self::#make_instance_fn,
+                        lookup_deleted_id: Self::#lookup_deleted_id_fn,
                     }
                 }
             })
             .collect();
 
-        quote! { #(#arms)* }
+        let helper_fns: Vec<TokenStream> = creation_paths
+            .iter()
+            .enumerate()
+            .flat_map(|(index, path)| self.generate_descriptor_helpers(index, path))
+            .collect();
+
+        quote! {
+            #[derive(Clone, Copy)]
+            struct #descriptor_name {
+                matches_create: fn(&#package_ident) -> bool,
+                should_create: fn(&#package_log_name, &#package_ident) -> bool,
+                make_instance: fn(#support_path::EventId) -> #support_path::Instance,
+                lookup_deleted_id: fn(&#package_log_name, &#package_ident) -> Option<#support_path::EventId>,
+            }
+
+            impl #package_log_name {
+                fn vertex_sync_descriptors() -> &'static [#descriptor_name] {
+                    &[#(#descriptor_entries),*]
+                }
+
+                fn sync_reference_vertices(&mut self, event: &#support_path::Event<#package_ident>) {
+                    #root_bootstrap
+
+                    for descriptor in Self::vertex_sync_descriptors() {
+                        if (descriptor.matches_create)(event.op())
+                            && (descriptor.should_create)(self, event.op())
+                        {
+                            let new_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex {
+                                id: (descriptor.make_instance)(event.id().clone()),
+                            };
+                            #support_path::IsLog::effect(&mut self.reference_manager_log, #support_path::Event::unfold(event.clone(), new_vertex));
+                        }
+
+                        if let Some(event_id) = (descriptor.lookup_deleted_id)(self, event.op()) {
+                            let remove_vertex =
+                                #support_path::ReferenceManager::<#support_path::LwwPolicy>::RemoveVertex {
+                                    id: (descriptor.make_instance)(event_id),
+                                };
+                            #support_path::IsLog::effect(&mut self.reference_manager_log, #support_path::Event::unfold(event.clone(), remove_vertex));
+                        }
+                    }
+                }
+
+                #(#helper_fns)*
+            }
+        }
+    }
+
+    fn generate_descriptor_helpers(
+        &self,
+        index: usize,
+        containment_path: &ContainmentPath,
+    ) -> Vec<TokenStream> {
+        let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let root_class_ident = format_ident!("{}", root_class_name.to_upper_camel_case());
+        let class_log_name = format_ident!("{}_log", root_class_name.to_snake_case());
+        let support_path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+
+        let matches_create_fn = format_ident!("matches_create_{}", index);
+        let should_create_fn = format_ident!("should_create_{}", index);
+        let make_instance_fn = format_ident!("make_instance_{}", index);
+        let lookup_deleted_id_fn = format_ident!("lookup_deleted_id_{}", index);
+
+        let vertex_class = &self.ctx.classes()[*containment_path.vertex_class];
+        let id_struct = format_ident!("{}Id", vertex_class.name());
+        let instance_variant = format_ident!("{}Id", vertex_class.name());
+
+        let create_matcher = if let Some(box_idx) = containment_path
+            .steps
+            .iter()
+            .position(|step| matches!(step, PathStep::Field { is_boxed: true, .. }))
+        {
+            let outer_steps = containment_path.steps[..=box_idx].to_vec();
+            let inner_steps = &containment_path.steps[box_idx + 1..];
+            let outer_pattern = self.build_nested_pattern_with_capture(&outer_steps, "inner_val");
+            let inner_pattern = self.build_nested_pattern(inner_steps);
+            let inner_var = format_ident!("inner_val");
+            let captured_value = match outer_steps.last() {
+                Some(PathStep::Field { is_boxed: true, .. }) => quote! { #inner_var.as_ref() },
+                _ => quote! { #inner_var },
+            };
+
+            quote! {
+                fn #matches_create_fn(op: &#package_ident) -> bool {
+                    match op {
+                        #package_ident::#root_class_ident(#outer_pattern) => {
+                            matches!(#captured_value, #inner_pattern)
+                        }
+                        _ => false,
+                    }
+                }
+            }
+        } else {
+            let pattern = self.build_nested_pattern(&containment_path.steps);
+            quote! {
+                fn #matches_create_fn(op: &#package_ident) -> bool {
+                    matches!(op, #package_ident::#root_class_ident(#pattern))
+                }
+            }
+        };
+
+        let make_instance = quote! {
+            fn #make_instance_fn(event_id: #support_path::EventId) -> #support_path::Instance {
+                #support_path::Instance::#instance_variant(#support_path::#id_struct(event_id))
+            }
+        };
+
+        let log_path = self.build_log_field_path(&containment_path.log_field_path);
+        let should_create = if matches!(containment_path.steps.last(), Some(PathStep::ListInsert)) {
+            quote! {
+                fn #should_create_fn(&self, _op: &#package_ident) -> bool {
+                    true
+                }
+            }
+        } else {
+            quote! {
+                fn #should_create_fn(&self, _op: &#package_ident) -> bool {
+                    self
+                        .#class_log_name()
+                        #log_path
+                        .__id()
+                        .is_none()
+                }
+            }
+        };
+
+        let is_list_path = matches!(containment_path.steps.last(), Some(PathStep::ListInsert));
+
+        let lookup_deleted_id = if !is_list_path
+            || containment_path
+                .steps
+                .iter()
+                .any(|step| matches!(step, PathStep::Field { is_boxed: true, .. }))
+        {
+            quote! {
+                fn #lookup_deleted_id_fn(&self, _op: &#package_ident) -> Option<#support_path::EventId> {
+                    None
+                }
+            }
+        } else {
+            let delete_steps: Vec<PathStep> = containment_path
+                .steps
+                .iter()
+                .map(|step| match step {
+                    PathStep::ListInsert => PathStep::ListDelete,
+                    other => other.clone(),
+                })
+                .collect();
+            let pattern = self.build_nested_pattern(&delete_steps);
+            quote! {
+                fn #lookup_deleted_id_fn(&self, op: &#package_ident) -> Option<#support_path::EventId> {
+                    match op {
+                        #package_ident::#root_class_ident(#pattern) => {
+                            let positions = #support_path::EvalNested::execute_query(
+                                self
+                                    .#class_log_name()
+                                    #log_path
+                                    .positions(),
+                                #support_path::Read::new(),
+                            );
+                            Some(positions[*pos].clone())
+                        }
+                        _ => None,
+                    }
+                }
+            }
+        };
+
+        vec![create_matcher, should_create, make_instance, lookup_deleted_id]
     }
 
     /// Build a fully nested match pattern from path steps.
@@ -474,8 +505,8 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         match step {
-            PathStep::ListInsert => quote! { List::Insert { .. } },
-            PathStep::ListDelete => quote! { List::Delete { pos } },
+            PathStep::ListInsert => quote! { #path::List::Insert { .. } },
+            PathStep::ListDelete => quote! { #path::List::Delete { pos } },
             PathStep::Field {
                 class_name,
                 variant_name,
@@ -518,8 +549,8 @@ impl<'a> PackageGenerator<'a> {
                 let variant = Ident::new(variant_name, Span::call_site());
                 quote! { #path::#union_n::#variant(#inner) }
             }
-            PathStep::ListInsert => quote! { List::Insert { .. } },
-            PathStep::ListDelete => quote! { List::Delete { pos } },
+            PathStep::ListInsert => quote! { #path::List::Insert { .. } },
+            PathStep::ListDelete => quote! { #path::List::Delete { pos } },
         }
     }
 
@@ -530,7 +561,7 @@ impl<'a> PackageGenerator<'a> {
             .map(|f| Ident::new(f, Span::call_site()))
             .collect();
 
-        quote! { #(.#fields)* }
+        quote! { #(.#fields())* }
     }
 
     fn generate_eval_nested_impl(&self) -> TokenStream {

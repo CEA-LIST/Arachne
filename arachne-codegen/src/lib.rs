@@ -8,7 +8,7 @@ mod utils;
 use std::path::PathBuf;
 
 pub use config::Config;
-use ecore_rs::repr::{Class, Pack, idx};
+use ecore_rs::repr::{Class, Pack, idx, structural};
 pub use error::{ArachneError, Result};
 use heck::ToSnakeCase;
 use log::{debug, info};
@@ -67,7 +67,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         class_count
     );
 
-    info!("Generating rust tokens");
+    info!("Generating Rust tokens");
     let (classifiers, references, package) = generate_from_parser(&parser, pack)?;
 
     // Emit any warnings collected during generation
@@ -132,10 +132,34 @@ pub fn generate_from_parser<'a>(
     let sorted_classes = topological_sort(&parser.ctx, &classes);
     let reference_analysis = analyze_references(&parser.ctx, &package_classes);
 
-    // Find root class (first class in sorted order that has no superclass)
+    // Prefer a concrete top-level containment root over a pure inheritance root.
+    let contained_classes: std::collections::HashSet<idx::Class> = sorted_classes
+        .iter()
+        .flat_map(|class| {
+            class.structural().iter().filter_map(|feature| {
+                (feature.kind == structural::Typ::EReference
+                    && feature.containment
+                    && feature
+                        .typ
+                        .is_some_and(|target| package_classes.contains(&target)))
+                .then_some(feature.typ.unwrap())
+            })
+        })
+        .collect();
+
     let root_class = sorted_classes
         .iter()
-        .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
+        .find(|c| {
+            !c.is_enum()
+                && !c.is_interface()
+                && c.is_concrete()
+                && !contained_classes.contains(&c.idx)
+        })
+        .or_else(|| {
+            sorted_classes
+                .iter()
+                .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
+        })
         .ok_or_else(|| ArachneError::RootClassNotFound(pack.name().to_string()))?;
 
     debug!(

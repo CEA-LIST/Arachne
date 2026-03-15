@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// A single step in the containment path from root to a referenceable class.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathStep {
     /// A record field access: `ClassName::VariantName(inner)`.
     Field {
@@ -118,7 +118,7 @@ fn find_paths_recursive(
         let is_boxed = env
             .cycle_analysis
             .boxing_strategy(current_class, &feature.name)
-            != BoxingStrategy::NoBox;
+            == BoxingStrategy::DirectReference;
 
         // Don't recurse through a second boxed containment reference.
         // Operations behind a second Box cannot be matched with simple
@@ -150,6 +150,15 @@ fn find_paths_recursive(
                 &mut state.result,
             );
         } else {
+            check_single_target(
+                env.ctx,
+                target_idx,
+                env.referenceable_set,
+                &state.current_steps,
+                &state.current_log_path,
+                &mut state.result,
+            );
+
             // Single containment: recurse into the target class
             let new_passed = passed_through_box || is_boxed;
             if target_class.is_abstract() {
@@ -217,7 +226,8 @@ fn find_feat_paths_recursive(
         // Use the feat class name (e.g., "ExecutionNodeFeat") for the field step
         let feat_class_name = format!("{}{}", class.name(), INHERITANCE_SUFFIX);
         let is_boxed =
-            env.cycle_analysis.boxing_strategy(class_idx, &feature.name) != BoxingStrategy::NoBox;
+            env.cycle_analysis.boxing_strategy(class_idx, &feature.name)
+                == BoxingStrategy::DirectReference;
 
         // Don't recurse through a second boxed containment reference.
         if is_boxed && passed_through_box {
@@ -241,6 +251,15 @@ fn find_feat_paths_recursive(
                 &mut state.result,
             );
         } else {
+            check_single_target(
+                env.ctx,
+                target_idx,
+                env.referenceable_set,
+                &state.current_steps,
+                &state.current_log_path,
+                &mut state.result,
+            );
+
             let new_passed = passed_through_box || is_boxed;
             if target_class.is_abstract() {
                 explore_abstract_class(env, target_idx, state, new_passed);
@@ -326,6 +345,63 @@ fn check_list_target(
             }
         }
     }
+}
+
+/// Check if a singly-contained target class (or any of its concrete descendants)
+/// is referenceable, and if so, record creation paths.
+fn check_single_target(
+    ctx: &Ctx,
+    target_idx: idx::Class,
+    referenceable_set: &HashSet<idx::Class>,
+    current_steps: &[PathStep],
+    current_log_path: &[String],
+    result: &mut Vec<ContainmentPath>,
+) {
+    if referenceable_set.contains(&target_idx) {
+        push_unique_path(
+            result,
+            target_idx,
+            current_steps.to_vec(),
+            current_log_path.to_vec(),
+        );
+    }
+
+    let target_class = &ctx.classes()[*target_idx];
+    let classes_to_check = if target_class.is_abstract() {
+        find_concrete_descendants(ctx, target_idx)
+    } else {
+        vec![target_idx]
+    };
+
+    for concrete_idx in &classes_to_check {
+        for &ref_class in referenceable_set {
+            if ref_class != target_idx && is_subtype_of(ctx, *concrete_idx, ref_class) {
+                push_unique_path(
+                    result,
+                    ref_class,
+                    current_steps.to_vec(),
+                    current_log_path.to_vec(),
+                );
+            }
+        }
+    }
+}
+
+fn push_unique_path(
+    result: &mut Vec<ContainmentPath>,
+    vertex_class: idx::Class,
+    steps: Vec<PathStep>,
+    log_field_path: Vec<String>,
+) {
+    if result.iter().any(|p| p.vertex_class == vertex_class && p.steps == steps) {
+        return;
+    }
+
+    result.push(ContainmentPath {
+        vertex_class,
+        steps,
+        log_field_path,
+    });
 }
 
 /// Explore an abstract class by following all its concrete subclass variants.
