@@ -5,23 +5,26 @@ use quote::quote;
 
 use crate::codegen::{generate::Fragment, import::Import, warnings::Warning};
 
-pub const PATH_MOD_PRIVATE: &str = "__classifiers";
+pub const PRIVATE_MOD_PREFIX: &str = "__";
 
 /// Main generator that collects generated fragments, manages imports, and emits warnings
-pub struct Generator {
+/// One generator per file
+pub struct Generator<'a> {
     import_set: HashSet<String>,
     imports: Vec<TokenStream>,
     tokens: Vec<TokenStream>,
     warnings: Vec<Warning>,
+    path_mod: &'a str,
 }
 
-impl Generator {
-    pub fn new() -> Self {
+impl<'a> Generator<'a> {
+    pub fn new(path_mod: &'a str) -> Self {
         Self {
             import_set: HashSet::new(),
             tokens: Vec::new(),
             imports: Vec::new(),
             warnings: Vec::new(),
+            path_mod,
         }
     }
 
@@ -58,7 +61,8 @@ impl Generator {
     }
 
     pub fn build(self) -> TokenStream {
-        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, &self.path_mod)).unwrap();
         let imports = &self.imports;
         let tokens = &self.tokens;
 
@@ -69,11 +73,5 @@ impl Generator {
 
             #(#tokens)*
         }
-    }
-}
-
-impl Default for Generator {
-    fn default() -> Self {
-        Self::new()
     }
 }

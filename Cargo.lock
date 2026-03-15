@@ -349,11 +349,9 @@ dependencies = [
 name = "moirai-macros"
 version = "0.1.0"
 dependencies = [
- "heck",
  "moirai-protocol",
  "paste",
  "rustc-hash 1.1.0",
- "xml-builder",
 ]
 
 [[package]]

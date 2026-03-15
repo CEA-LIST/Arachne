@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use ecore_rs::{ctx::Ctx, prelude::idx::Class};
 
-use crate::codegen::classifier::class::INHERITANCE_SUFFIX;
+use crate::codegen::classifier::INHERITANCE_SUFFIX;
 
 type ClassIdx = Class;
 

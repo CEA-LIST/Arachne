@@ -156,7 +156,7 @@ A `EPackage` is supported as an object holding all the generated collaborative m
 ## To-Do
 
 - [ ] EAnnotations support
-- [ ] Reference manager
+- [x] Reference manager
 - [ ] Multiple EPackages
 - [ ] Fuzzer impl
 

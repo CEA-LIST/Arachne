@@ -20,6 +20,12 @@ pub enum ArachneError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Failed to find a root class in `{0}` package")]
+    RootClassNotFound(String),
+
+    #[error("No user-defined package found in the Ecore model")]
+    NoValidPackageFound,
 }
 
 /// Specialized Result type for Arachne

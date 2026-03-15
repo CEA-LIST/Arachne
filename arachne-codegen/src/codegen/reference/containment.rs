@@ -3,7 +3,7 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use crate::{
     codegen::{
-        classifier::class::INHERITANCE_SUFFIX,
+        classifier::INHERITANCE_SUFFIX,
         cycles::{BoxingStrategy, CycleAnalysis},
         reference::analysis::{ReferenceAnalysis, find_concrete_descendants},
     },

@@ -9,16 +9,19 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::Ident;
 
-use crate::codegen::{
-    datatype::{
-        crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
-        to_crdt::ToCrdt,
+use crate::{
+    CLASSIFIERS_PATH_MOD,
+    codegen::{
+        datatype::{
+            crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
+            to_crdt::ToCrdt,
+        },
+        feature::bounds::{BoundKind, normalize_bounds},
+        generate::{Fragment, Generate},
+        generator::PRIVATE_MOD_PREFIX,
+        import::{Import, Log},
+        warnings::Warning,
     },
-    feature::bounds::{BoundKind, normalize_bounds},
-    generate::{Fragment, Generate},
-    generator::PATH_MOD_PRIVATE,
-    import::{Import, Log},
-    warnings::Warning,
 };
 
 pub struct AttributeGenerator<'a> {
@@ -35,7 +38,8 @@ impl<'a> AttributeGenerator<'a> {
 
 impl<'a> Generate for AttributeGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
 
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);

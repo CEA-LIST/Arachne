@@ -7,13 +7,16 @@ use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::Ident;
 
-use crate::codegen::{
-    cycles::{BoxingStrategy, CycleAnalysis},
-    datatype::crdt::{Crdt, NestedCrdt},
-    feature::bounds::{BoundKind, normalize_bounds},
-    generate::{Fragment, Generate},
-    generator::PATH_MOD_PRIVATE,
-    import::Import,
+use crate::{
+    CLASSIFIERS_PATH_MOD,
+    codegen::{
+        cycles::{BoxingStrategy, CycleAnalysis},
+        datatype::crdt::{Crdt, NestedCrdt},
+        feature::bounds::{BoundKind, normalize_bounds},
+        generate::{Fragment, Generate},
+        generator::PRIVATE_MOD_PREFIX,
+        import::Import,
+    },
 };
 
 pub struct ContainmentGenerator<'a> {
@@ -42,7 +45,8 @@ impl<'a> ContainmentGenerator<'a> {
 
 impl<'a> Generate for ContainmentGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path = syn::parse_str(PATH_MOD_PRIVATE).unwrap();
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
         let (bound_kind, warnings) = normalize_bounds(self.reference.bounds, &self.reference.name);
 
         let target_class = self

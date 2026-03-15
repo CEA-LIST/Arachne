@@ -6,6 +6,6 @@ pub mod generate;
 pub mod generator;
 mod import;
 mod operation;
-mod package;
+pub mod package;
 pub mod reference;
 mod warnings;

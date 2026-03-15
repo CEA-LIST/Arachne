@@ -8,22 +8,27 @@ mod utils;
 use std::path::PathBuf;
 
 pub use config::Config;
-use ecore_rs::repr::{Class, Pack};
+use ecore_rs::repr::{Class, Pack, idx};
 pub use error::{ArachneError, Result};
-use log::{debug, info, warn};
+use heck::ToSnakeCase;
+use log::{debug, info};
 pub use parser::EcoreParser;
-use proc_macro2::TokenStream;
 
 use crate::{
     codegen::{
-        classifier::class::ClassGenerator,
+        classifier::ClassGenerator,
         cycles::analyze_cycles,
         generate::Generate,
         generator::Generator,
-        reference::{PackageGenerator, analysis::analyze_references},
+        package::PackageGenerator,
+        reference::{ReferenceGenerator, analysis::analyze_references},
     },
     utils::topo::topological_sort,
 };
+
+const CLASSIFIERS_PATH_MOD: &str = "classifiers";
+const REFERENCES_PATH_MOD: &str = "references";
+const PACKAGE_PATH_MOD: &str = "package";
 
 /// Metadata about the code generation process, including input/output paths, project/package names, and statistics about the generated code
 #[derive(Debug, Clone)]
@@ -43,29 +48,17 @@ pub fn generate(config: Config) -> anyhow::Result<()> {
 /// Main entry point for code generation with execution metadata.
 pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> {
     info!("Validating configuration");
-    // Validate configuration
     config.validate()?;
 
     info!("Parsing ecore metamodel: {:?}", config.input_path);
-    // Parse the Ecore metamodel
     let parser = EcoreParser::from_file(&config.input_path)?;
 
-    let packs = parser
+    let pack = parser
         .ctx
         .packs()
         .iter()
-        .filter(|p| p.name() != "[root]" && p.name() != "[builtin]")
-        .collect::<Vec<&Pack>>();
-    if packs.is_empty() {
-        return Err(anyhow::anyhow!("No EPackage found in metamodel"));
-    }
-    if packs.len() > 1 {
-        warn!(
-            "Multiple packages found in metamodel, using first non-root package: `{}`. Other packages will be ignored.",
-            packs[0].name()
-        );
-    }
-    let pack = packs[0];
+        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .ok_or(ArachneError::NoValidPackageFound)?;
 
     let class_count = pack.classes().len();
     debug!(
@@ -75,26 +68,23 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     );
 
     info!("Generating rust tokens");
-    // Generate code
-    let (generator, model_tokens) = generate_from_parser(&parser)?;
+    let (classifiers, references, package) = generate_from_parser(&parser, pack)?;
 
     // Emit any warnings collected during generation
-    generator.emit_warnings();
+    classifiers.emit_warnings();
+    references.emit_warnings();
+    package.emit_warnings();
 
     // Build the final TokenStream
-    let generated = generator.build();
-
-    // Format the generated code
-    let formatted = format_code(generated)?;
-
-    // Format the model code (if any)
-    let formatted_model = model_tokens.map(format_code).transpose()?;
+    let classifiers_code = classifiers.build();
+    let references_code = references.build();
+    let package_code = package.build();
 
     // Choose a project name
     let project_name = config
         .project_name
         .clone()
-        .or_else(|| Some(parser.ctx.packs()[parser.ctx.top_pack()].name().to_string()))
+        .or_else(|| Some(pack.name().to_snake_case()))
         .unwrap_or_else(|| "generated_crdt".to_string());
 
     info!("Writing generated project '{}'", project_name);
@@ -102,8 +92,9 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     project::write_project(
         &config,
         &project_name,
-        &formatted,
-        formatted_model.as_deref(),
+        classifiers_code,
+        references_code,
+        package_code,
     )?;
 
     Ok(GenerationReport {
@@ -116,82 +107,62 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 }
 
 /// Generates code from a parsed Ecore context.
-/// Returns the CRDT generator and optionally the model TokenStream (if non-containment refs exist).
-pub fn generate_from_parser(
-    parser: &EcoreParser,
-) -> anyhow::Result<(Generator, Option<TokenStream>)> {
-    let mut generator = Generator::new();
+/// Returns the generated classifiers CRDT objects and the generated reference management code
+pub fn generate_from_parser<'a>(
+    parser: &'a EcoreParser,
+    pack: &'a Pack,
+) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>)> {
+    let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
+    let mut references = Generator::new(REFERENCES_PATH_MOD);
+    let mut package = Generator::new(PACKAGE_PATH_MOD);
+
     let cycle_analysis = analyze_cycles(&parser.ctx)?;
 
-    let pack = parser
-        .ctx
-        .packs()
-        .iter()
-        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
-        .unwrap();
-
-    let class_indices = pack.classes();
-    let package_classes: Vec<_> = class_indices.iter().copied().collect();
+    let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
 
     // Get all classes in the package
     let classes: Vec<&Class> = parser
         .ctx
         .classes()
         .iter()
-        .filter(|c| class_indices.contains(&c.idx))
+        .filter(|c| package_classes.contains(&c.idx))
         .collect();
 
     // Sort classes topologically by inheritance hierarchy
     let sorted_classes = topological_sort(&parser.ctx, &classes);
-
-    for class in &sorted_classes {
-        let class_gen = ClassGenerator::new(class, &parser.ctx, &cycle_analysis);
-        let fragment = class_gen.generate()?;
-        generator.register(fragment);
-    }
-
-    // Prefer a top-level class that defines non-containment references when possible.
-    // This gives more useful generated package operations in simple models.
     let reference_analysis = analyze_references(&parser.ctx, &package_classes);
 
     // Find root class (first class in sorted order that has no superclass)
     let root_class = sorted_classes
         .iter()
-        .find(|c| {
-            c.sup().is_empty()
-                && !c.is_enum()
-                && !c.is_interface()
-                && reference_analysis
-                    .refs
-                    .iter()
-                    .any(|r| r.source_class == c.idx)
-        })
-        .or_else(|| {
-            sorted_classes
-                .iter()
-                .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
-        })
-        .expect("No root class found in the model");
+        .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
+        .ok_or_else(|| ArachneError::RootClassNotFound(pack.name().to_string()))?;
 
-    // Generate reference management code (model.rs)
-    let package_gen = PackageGenerator::new(
-        &parser.ctx,
-        root_class.idx,
-        package_classes,
-        pack.name(),
-        &cycle_analysis,
+    debug!(
+        "Identified root class `{}` for package `{}`",
+        root_class.name(),
+        pack.name()
     );
 
-    let model_tokens = package_gen.generate().map(|fragment| {
-        let (tokens, _, _) = fragment.into();
-        tokens
-    });
+    for class in &sorted_classes {
+        let class_gen = ClassGenerator::new(class, &parser.ctx, &cycle_analysis);
+        let fragment = class_gen.generate()?;
+        classifiers.register(fragment);
+    }
 
-    Ok((generator, model_tokens))
-}
+    let refs = ReferenceGenerator::new(&parser.ctx, package_classes);
+    let fragment = refs.generate()?;
+    references.register(fragment);
 
-/// Formats generated code using prettyplease
-pub fn format_code(tokens: TokenStream) -> Result<String> {
-    let syntax_tree = syn::parse2(tokens)?;
-    Ok(prettyplease::unparse(&syntax_tree))
+    let package_gen = PackageGenerator::new(
+        &parser.ctx,
+        pack.idx,
+        root_class.idx,
+        &reference_analysis,
+        &cycle_analysis,
+    );
+    let fragment = package_gen.generate()?;
+    package.register(fragment);
+
+    Ok((classifiers, references, package))
 }
