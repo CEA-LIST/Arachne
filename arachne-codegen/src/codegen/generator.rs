@@ -67,6 +67,8 @@ impl<'a> Generator<'a> {
         let tokens = &self.tokens;
 
         quote! {
+            // Auto-generated code by 🅰🆁🅰🅲🅷🅽🅴 - do not edit directly
+
             mod #path {
                 #(#imports)*
             }

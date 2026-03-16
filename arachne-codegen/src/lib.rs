@@ -16,7 +16,6 @@ pub use parser::EcoreParser;
 
 use crate::{
     codegen::{
-        annotation::transparent_field,
         classifier::ClassGenerator,
         cycles::analyze_cycles,
         generate::Generate,
@@ -69,7 +68,8 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     );
 
     info!("Generating Rust tokens");
-    let (classifiers, references, package) = generate_from_parser(&parser, pack)?;
+    let (classifiers, references, package, generated_class_count) =
+        generate_from_parser(&parser, pack)?;
 
     // Emit any warnings collected during generation
     classifiers.emit_warnings();
@@ -103,7 +103,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         output_dir: config.output_dir.clone(),
         project_name,
         package_name: pack.name().to_string(),
-        class_count,
+        class_count: generated_class_count,
     })
 }
 
@@ -112,7 +112,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
-) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>)> {
+) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>, usize)> {
     let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
     let mut references = Generator::new(REFERENCES_PATH_MOD);
     let mut package = Generator::new(PACKAGE_PATH_MOD);
@@ -120,69 +120,78 @@ pub fn generate_from_parser<'a>(
     let cycle_analysis = analyze_cycles(&parser.ctx)?;
 
     let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    let package_class_set: std::collections::HashSet<idx::Class> =
+        package_classes.iter().copied().collect();
+
+    let contained_classes: std::collections::HashSet<idx::Class> = package_classes
+        .iter()
+        .flat_map(|class_idx| {
+            parser.ctx.classes()[**class_idx]
+                .structural()
+                .iter()
+                .filter_map(|feature| {
+                    (feature.kind == structural::Typ::EReference
+                        && feature.containment
+                        && feature
+                            .typ
+                            .is_some_and(|target| package_class_set.contains(&target)))
+                    .then_some(feature.typ.unwrap())
+                })
+        })
+        .collect();
+
+    let top_level_roots: Vec<idx::Class> = package_classes
+        .iter()
+        .copied()
+        .filter(|class_idx| {
+            let class = &parser.ctx.classes()[**class_idx];
+            !class.is_enum()
+                && !class.is_interface()
+                && class.is_concrete()
+                && !contained_classes.contains(class_idx)
+        })
+        .collect();
+
+    if top_level_roots.is_empty() {
+        return Err(ArachneError::RootClassNotFound(pack.name().to_string()).into());
+    }
+
+    let mut reachable_classes: std::collections::HashSet<idx::Class> =
+        std::collections::HashSet::new();
+    for root_idx in &top_level_roots {
+        reachable_classes.extend(collect_reachable_classes(
+            &parser.ctx,
+            *root_idx,
+            &package_class_set,
+        ));
+    }
 
     // Get all classes in the package
     let classes: Vec<&Class> = parser
         .ctx
         .classes()
         .iter()
-        .filter(|c| package_classes.contains(&c.idx))
+        .filter(|c| reachable_classes.contains(&c.idx))
         .collect();
 
     // Sort classes topologically by inheritance hierarchy
     let sorted_classes = topological_sort(&parser.ctx, &classes);
-    let reference_analysis = analyze_references(&parser.ctx, &package_classes);
-
-    // Derive the package root from top-level concrete containment roots.
-    let contained_classes: std::collections::HashSet<idx::Class> = sorted_classes
-        .iter()
-        .flat_map(|class| {
-            class.structural().iter().filter_map(|feature| {
-                (feature.kind == structural::Typ::EReference
-                    && feature.containment
-                    && feature
-                        .typ
-                        .is_some_and(|target| package_classes.contains(&target)))
-                .then_some(feature.typ.unwrap())
-            })
-        })
-        .collect();
-
-    let top_level_concrete_roots: Vec<&Class> = sorted_classes
+    let reachable_package_classes: Vec<idx::Class> = package_classes
         .iter()
         .copied()
-        .filter(|c| {
-            !c.is_enum()
-                && !c.is_interface()
-                && c.is_concrete()
-                && !contained_classes.contains(&c.idx)
-        })
+        .filter(|idx| reachable_classes.contains(idx))
         .collect();
-
-    let transparent_union_candidates = top_level_concrete_roots.len() > 1
-        && top_level_concrete_roots
-            .iter()
-            .all(|class| transparent_field(class).is_some());
-
-    let root_class = if top_level_concrete_roots.len() == 1 {
-        Some(top_level_concrete_roots[0])
-    } else if transparent_union_candidates {
-        find_common_ancestor(&parser.ctx, &top_level_concrete_roots)
-            .or_else(|| top_level_concrete_roots.first().copied())
-    } else if !top_level_concrete_roots.is_empty() {
-        top_level_concrete_roots.first().copied()
-    } else {
-        sorted_classes
-            .iter()
-            .copied()
-            .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
-    }
-    .ok_or_else(|| ArachneError::RootClassNotFound(pack.name().to_string()))?;
+    let reference_analysis = analyze_references(&parser.ctx, &reachable_package_classes);
 
     debug!(
-        "Identified root class `{}` for package `{}`",
-        root_class.name(),
-        pack.name()
+        "Identified {} top-level root classes for package `{}`: `{}`",
+        top_level_roots.len(),
+        pack.name(),
+        top_level_roots
+            .iter()
+            .map(|idx| parser.ctx.classes()[**idx].name())
+            .collect::<Vec<_>>()
+            .join("`, `")
     );
 
     for class in &sorted_classes {
@@ -191,50 +200,62 @@ pub fn generate_from_parser<'a>(
         classifiers.register(fragment);
     }
 
-    let refs = ReferenceGenerator::new(&parser.ctx, package_classes);
+    let refs = ReferenceGenerator::new(&parser.ctx, reachable_package_classes.clone());
     let fragment = refs.generate()?;
     references.register(fragment);
 
     let package_gen = PackageGenerator::new(
         &parser.ctx,
         pack.idx,
-        root_class.idx,
+        top_level_roots,
         &reference_analysis,
         &cycle_analysis,
     );
     let fragment = package_gen.generate()?;
     package.register(fragment);
 
-    Ok((classifiers, references, package))
+    Ok((
+        classifiers,
+        references,
+        package,
+        reachable_package_classes.len(),
+    ))
 }
 
-fn find_common_ancestor<'a>(
-    ctx: &'a ecore_rs::ctx::Ctx,
-    classes: &[&'a Class],
-) -> Option<&'a Class> {
-    let first = *classes.first()?;
-    let mut candidates = ancestor_chain(ctx, first.idx);
-    candidates.reverse();
+fn collect_reachable_classes(
+    ctx: &ecore_rs::ctx::Ctx,
+    root_class: idx::Class,
+    package_classes: &std::collections::HashSet<idx::Class>,
+) -> std::collections::HashSet<idx::Class> {
+    let mut reachable = std::collections::HashSet::new();
+    let mut stack = vec![root_class];
 
-    candidates
-        .into_iter()
-        .find(|candidate_idx| {
-            classes.iter().all(|class| {
-                let ancestors = ancestor_chain(ctx, class.idx);
-                ancestors.contains(candidate_idx)
-            })
-        })
-        .map(|idx| &ctx.classes()[*idx])
-}
+    while let Some(class_idx) = stack.pop() {
+        if !package_classes.contains(&class_idx) || !reachable.insert(class_idx) {
+            continue;
+        }
 
-fn ancestor_chain(ctx: &ecore_rs::ctx::Ctx, class_idx: idx::Class) -> Vec<idx::Class> {
-    let mut chain = vec![class_idx];
-    let mut current = class_idx;
+        let class = &ctx.classes()[*class_idx];
 
-    while let Some(parent) = ctx.classes()[*current].sup().first().copied() {
-        chain.push(parent);
-        current = parent;
+        for parent in class.sup() {
+            stack.push(*parent);
+        }
+
+        if class.is_abstract() || class.is_interface() {
+            for sub in class.sub() {
+                stack.push(*sub);
+            }
+        }
+
+        for feature in class.structural() {
+            if feature.kind == structural::Typ::EReference
+                && feature.containment
+                && let Some(target) = feature.typ
+            {
+                stack.push(target);
+            }
+        }
     }
 
-    chain
+    reachable
 }
