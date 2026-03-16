@@ -186,9 +186,9 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             ),
             BoundKind::Many => (
                 if boxing_strategy == BoxingStrategy::NoBox {
-                    quote! { #path::ListLog<#target_type> }
+                    quote! { #path::NestedListLog<#target_type> }
                 } else {
-                    quote! { #path::ListLog<#boxed_target_type> }
+                    quote! { #path::NestedListLog<#boxed_target_type> }
                 },
                 vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
             ),

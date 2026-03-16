@@ -123,34 +123,48 @@ pub fn generate_from_parser<'a>(
     let package_class_set: std::collections::HashSet<idx::Class> =
         package_classes.iter().copied().collect();
 
-    let contained_classes: std::collections::HashSet<idx::Class> = package_classes
+    let concrete_package_classes: Vec<idx::Class> = package_classes
         .iter()
-        .flat_map(|class_idx| {
-            parser.ctx.classes()[**class_idx]
-                .structural()
-                .iter()
-                .filter_map(|feature| {
-                    (feature.kind == structural::Typ::EReference
-                        && feature.containment
-                        && feature
-                            .typ
-                            .is_some_and(|target| package_class_set.contains(&target)))
-                    .then_some(feature.typ.unwrap())
-                })
-        })
+        .copied()
+        .filter(|class_idx| parser.ctx.classes()[**class_idx].is_concrete())
         .collect();
 
-    let top_level_roots: Vec<idx::Class> = package_classes
+    let concrete_containment_incoming =
+        compute_concrete_containment_incoming(&parser.ctx, &package_classes, &package_class_set);
+
+    let mut top_level_roots: Vec<idx::Class> = concrete_package_classes
         .iter()
         .copied()
         .filter(|class_idx| {
             let class = &parser.ctx.classes()[**class_idx];
             !class.is_enum()
                 && !class.is_interface()
-                && class.is_concrete()
-                && !contained_classes.contains(class_idx)
+                && !concrete_containment_incoming.contains(class_idx)
         })
         .collect();
+
+    if top_level_roots.is_empty() {
+        debug!(
+            "No top-level roots found based on concrete classes. Falling back to abstract/interface classes with concrete descendants and no external containers."
+        );
+        top_level_roots = package_classes
+            .iter()
+            .copied()
+            .filter(|class_idx| {
+                let class = &parser.ctx.classes()[**class_idx];
+                !class.is_enum()
+                    && !class.is_interface()
+                    && !class.is_concrete()
+                    && has_concrete_descendant(&parser.ctx, *class_idx, &package_class_set)
+                    && abstract_family_has_no_external_container(
+                        &parser.ctx,
+                        *class_idx,
+                        &package_classes,
+                        &package_class_set,
+                    )
+            })
+            .collect();
+    }
 
     if top_level_roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()).into());
@@ -258,4 +272,138 @@ fn collect_reachable_classes(
     }
 
     reachable
+}
+
+fn has_concrete_descendant(
+    ctx: &ecore_rs::ctx::Ctx,
+    class_idx: idx::Class,
+    package_classes: &std::collections::HashSet<idx::Class>,
+) -> bool {
+    let mut stack: Vec<idx::Class> = ctx.classes()[*class_idx].sub().iter().copied().collect();
+
+    while let Some(candidate) = stack.pop() {
+        if !package_classes.contains(&candidate) {
+            continue;
+        }
+
+        let class = &ctx.classes()[*candidate];
+        if class.is_concrete() {
+            return true;
+        }
+
+        stack.extend(class.sub().iter().copied());
+    }
+
+    false
+}
+
+fn concrete_descendants_in_package(
+    ctx: &ecore_rs::ctx::Ctx,
+    class_idx: idx::Class,
+    package_classes: &std::collections::HashSet<idx::Class>,
+) -> std::collections::HashSet<idx::Class> {
+    let mut result = std::collections::HashSet::new();
+    let mut stack = vec![class_idx];
+
+    while let Some(candidate) = stack.pop() {
+        if !package_classes.contains(&candidate) {
+            continue;
+        }
+
+        let class = &ctx.classes()[*candidate];
+        if class.is_concrete() {
+            result.insert(candidate);
+        }
+
+        stack.extend(class.sub().iter().copied());
+    }
+
+    result
+}
+
+fn compute_concrete_containment_incoming(
+    ctx: &ecore_rs::ctx::Ctx,
+    package_classes: &[idx::Class],
+    package_class_set: &std::collections::HashSet<idx::Class>,
+) -> std::collections::HashSet<idx::Class> {
+    let mut incoming = std::collections::HashSet::new();
+
+    for &source_class_idx in package_classes {
+        let source_concretes =
+            concrete_descendants_in_package(ctx, source_class_idx, package_class_set);
+        if source_concretes.is_empty() {
+            continue;
+        }
+
+        for feature in ctx.classes()[*source_class_idx].structural() {
+            if feature.kind != structural::Typ::EReference || !feature.containment {
+                continue;
+            }
+
+            let Some(target_class_idx) = feature.typ else {
+                continue;
+            };
+            if !package_class_set.contains(&target_class_idx) {
+                continue;
+            }
+
+            let target_concretes =
+                concrete_descendants_in_package(ctx, target_class_idx, package_class_set);
+            for target in target_concretes {
+                if source_concretes.iter().any(|source| *source != target) {
+                    incoming.insert(target);
+                }
+            }
+        }
+    }
+
+    incoming
+}
+
+fn abstract_family_has_no_external_container(
+    ctx: &ecore_rs::ctx::Ctx,
+    class_idx: idx::Class,
+    package_classes: &[idx::Class],
+    package_class_set: &std::collections::HashSet<idx::Class>,
+) -> bool {
+    let family = concrete_descendants_in_package(ctx, class_idx, package_class_set);
+    if family.is_empty() {
+        return false;
+    }
+    let family_context = collect_reachable_classes(ctx, class_idx, package_class_set);
+
+    for &source_class_idx in package_classes {
+        let source_concretes =
+            concrete_descendants_in_package(ctx, source_class_idx, package_class_set);
+        if source_concretes.is_empty() {
+            continue;
+        }
+
+        for feature in ctx.classes()[*source_class_idx].structural() {
+            if feature.kind != structural::Typ::EReference || !feature.containment {
+                continue;
+            }
+
+            let Some(target_class_idx) = feature.typ else {
+                continue;
+            };
+            if !package_class_set.contains(&target_class_idx) {
+                continue;
+            }
+
+            let target_concretes =
+                concrete_descendants_in_package(ctx, target_class_idx, package_class_set);
+            if target_concretes
+                .iter()
+                .any(|target| family.contains(target))
+                && source_concretes
+                    .iter()
+                    .any(|source| !family_context.contains(source))
+            {
+                return false;
+            }
+        }
+    }
+
+    true
 }

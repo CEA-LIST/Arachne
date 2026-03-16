@@ -252,7 +252,7 @@ impl<'a> ClassGenerator<'a> {
                     ),
                     crate::codegen::feature::bounds::BoundKind::Many => (
                         quote! { #path::List<<#log_ty as #path::IsLog>::Op> },
-                        quote! { #path::ListLog<#log_ty> },
+                        quote! { #path::NestedListLog<#log_ty> },
                         vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
                     ),
                 };
@@ -389,12 +389,11 @@ impl<'a> ClassGenerator<'a> {
                             };
                         (
                             quote! { #path::NestedListValue<#inner_payload> },
-                            quote! { #path::ListLog<#inner_log> },
+                            quote! { #path::NestedListLog<#inner_log> },
                             vec![
                                 Import::Crdt(Crdt::Nested(NestedCrdt::List)),
                                 Import::Custom(
-                                    "moirai_crdt::list::nested_list::List as NestedListValue"
-                                        .to_string(),
+                                    "moirai_crdt::list::nested_list::NestedList".to_string(),
                                 ),
                             ],
                         )

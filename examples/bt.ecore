@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="behaviortree" nsURI="http://www.example.org/behaviortree" nsPrefix="behaviortree">
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="behaviortree" nsURI="http://www.example.org/behaviortree" nsPrefix="behaviortree">
     <eClassifiers xsi:type="ecore:EClass" name="Root">
         <eStructuralFeatures xsi:type="ecore:EReference" name="behaviortrees" upperBound="-1" eType="#//BehaviorTree" containment="true" />
         <eStructuralFeatures xsi:type="ecore:EReference" name="main" lowerBound="1" eType="#//BehaviorTree" containment="true" />
@@ -35,11 +38,11 @@
     <eClassifiers xsi:type="ecore:EClass" name="OutFlowPort" eSuperTypes="#//DataFlowPort" />
     <eClassifiers xsi:type="ecore:EClass" name="Blackboard">
         <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" containment="true" eType="#//BlackboardEntry">
-            <eAnnotations source="urn:arachne:semantics">
+            <!-- <eAnnotations source="urn:arachne:semantics">
                 <details key="datatype" value="uw-map"/>
                 <details key="key-feature" value="key"/>
                 <details key="value-feature" value="value"/>
-            </eAnnotations>
+            </eAnnotations> -->
         </eStructuralFeatures>
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EClass" name="Inverter" eSuperTypes="#//Decorator" />

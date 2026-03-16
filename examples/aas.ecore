@@ -3,9 +3,9 @@
   xmlns:xmi="http://www.omg.org/XMI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="aas" nsURI="http://www.eclipse.org/papyrus/AAS" nsPrefix="AAS">
-  <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+  <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
     <details key="originalName" value="AAS"/>
-  </eAnnotations>
+  </eAnnotations> -->
   <eClassifiers xsi:type="ecore:EEnum" name="IdentifierType">
     <!-- <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="IRDI: International Registration Data Identifier&#xA;IRI: Internationalized Resource Identifier"/>
@@ -85,9 +85,9 @@
     <!-- <eStructuralFeatures xsi:type="ecore:EReference" name="base_Class" ordered="false" eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Class"/> -->
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="KeyElements">
-    <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
+    <!-- <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
       <details key="baseType" value="ReferableElements"/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eLiterals name="GlobalReference"/>
     <eLiterals name="FragmentReference" value="1"/>
     <eLiterals name="AccessPermissionRule" value="2"/>
@@ -115,9 +115,9 @@
     <eLiterals name="Submodel" value="24"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="ReferableElements">
-    <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
+    <!-- <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
       <details key="baseType" value="IdentifiableElement"/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eLiterals name="AccessPermissionRule"/>
     <eLiterals name="AnnotatedRelationshipElement" value="1"/>
     <eLiterals name="BasicEvent" value="2"/>
@@ -146,9 +146,9 @@
     <eLiterals name="Submodel" value="3"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="KeyType">
-    <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
+    <!-- <eAnnotations source="http:///org/eclipse/emf/ecore/util/ExtendedMetaData">
       <details key="baseType" value="IdentifierType"/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eLiterals name="Custom"/>
     <eLiterals name="IRDI" value="1"/>
     <eLiterals name="IRI" value="2"/>
@@ -190,9 +190,9 @@
     <eLiterals name="Instance" value="1"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="HasSemantics" abstract="true">
-    <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+    <!-- <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="semanticid is present in Basyx but not used&#xA;semanticid should be typed by an URI or a refereable"/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eStructuralFeatures xsi:type="ecore:EReference" name="semanticId" ordered="false" lowerBound="1" eType="#//Reference"/>
     <!-- <eStructuralFeatures xsi:type="ecore:EReference" name="base_HasSemantics_Class" ordered="false" eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Class">
       <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
@@ -237,9 +237,9 @@
     <eLiterals name="Instance" value="1"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="AssetInformation">
-    <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+    <!-- <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="AssetInformation/globalAssetId either is a reference &#xA;to an Asset object or a global reference."/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="assetKind" ordered="false" lowerBound="1" eType="#//AssetKind"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="globalAssetId" ordered="false" eType="#//Reference"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="specificAssetId" ordered="false" upperBound="-1" eType="#//IdentifierKeyValuePair"/>
@@ -252,9 +252,9 @@
     <eStructuralFeatures xsi:type="ecore:EReference" name="externalSubjectId" ordered="false" eType="#//Reference"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="File" eSuperTypes="#//DataElement">
-    <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+    <!-- <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="A File is a data element that represents an address to a file. The value is an URI that can represent an absolute or relative path."/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="path" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="mimeType" ordered="false" lowerBound="1" eType="#//MimeType"/>
   </eClassifiers>
@@ -263,81 +263,81 @@
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="MimeType">
     <eLiterals name="applicationjson">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-json"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationxls" value="1">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-xls"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationpdf" value="2">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-pdf"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationzip" value="3">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-zip"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationxml" value="4">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-xml"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationiges" value="5">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-iges"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="applicationstep" value="6">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="application-step"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="imagepng" value="7">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="image-png"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="imagebmp" value="8">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="image-bmp"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="imagejpeg" value="9">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="image-jpeg"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="imagegif" value="10">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="image-gif"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="textxml" value="11">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="text-xml"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="textplain" value="12">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="text-plain"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="texthtml" value="13">
-      <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
+      <!-- <eAnnotations source="http://www.eclipse.org/uml2/2.0.0/UML">
         <details key="originalName" value="text-html"/>
-      </eAnnotations>
+      </eAnnotations> -->
     </eLiterals>
     <eLiterals name="other" value="14"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Asset" eSuperTypes="#//Identifiable #//HasDataSpecification">
-    <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+    <!-- <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
       <details key="documentation" value="There is no asset in Basyx"/>
-    </eAnnotations>
+    </eAnnotations> -->
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="kind" ordered="false" lowerBound="1" eType="#//AssetKind"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="endpoint" ordered="false" upperBound="-1" eType="#//Endpoint" containment="true"/>
   </eClassifiers>
@@ -380,7 +380,7 @@
     <!-- <eStructuralFeatures xsi:type="ecore:EReference" name="base_Property" ordered="false" eType="ecore:EClass ../../org.eclipse.uml2.uml/model/UML.ecore#//Property"/> -->
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="BasicEvent" eSuperTypes="#//Event">
-    <eStructuralFeatures xsi:type="ecore:EReference" name="observed" ordered="false" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="observed" ordered="false" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Range" eSuperTypes="#//DataElement">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="min" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
@@ -406,12 +406,12 @@
     <eStructuralFeatures xsi:type="ecore:EReference" name="definition" ordered="false" upperBound="-1" eType="#//LangString" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="valueFormat" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="valueList" ordered="false" upperBound="-1" eType="#//ValueReferencePairType" containment="true"/>
-    <eStructuralFeatures xsi:type="ecore:EReference" name="value" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="valueId" ordered="false" eType="#//Reference"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="levelType" ordered="false" upperBound="-1" eType="#//LevelType"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="ValueReferencePairType">
-    <eStructuralFeatures xsi:type="ecore:EReference" name="value" ordered="false" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" ordered="false" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="valueId" ordered="false" lowerBound="1" eType="#//Reference"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EEnum" name="LevelType">

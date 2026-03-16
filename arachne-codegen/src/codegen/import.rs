@@ -115,7 +115,7 @@ impl ToUseStatement for Crdt {
                 NestedCrdt::Map(map) => match map {
                     Map::UWMap => format!("{}::map::uw_map::UWMapLog", CRDT_PREFIX),
                 },
-                NestedCrdt::List => format!("{}::list::nested_list::ListLog", CRDT_PREFIX),
+                NestedCrdt::List => format!("{}::list::nested_list::NestedListLog", CRDT_PREFIX),
                 NestedCrdt::Graph => format!("{}::graph::uw_multigraph::UWMultigraph", CRDT_PREFIX),
                 NestedCrdt::Optional => format!("{}::option::OptionLog", CRDT_PREFIX),
             },
@@ -201,7 +201,7 @@ impl ToUseStatement for CrdtOp {
     fn path(&self) -> String {
         match self {
             CrdtOp::Nested(nested_op) => match nested_op {
-                NestedCrdtOp::ListOp => format!("{}::list::nested_list::List", CRDT_PREFIX),
+                NestedCrdtOp::ListOp => format!("{}::list::nested_list::NestedList", CRDT_PREFIX),
                 NestedCrdtOp::MapOp => format!("{}::map::uw_map::UWMap", CRDT_PREFIX),
             },
         }

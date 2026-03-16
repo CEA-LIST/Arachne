@@ -78,6 +78,32 @@ impl<'a> PackageGenerator<'a> {
     fn root_field_ident(&self, root: RootMeta) -> Ident {
         format_ident!("{}_log", self.root_class_name(root).to_snake_case())
     }
+
+    fn referenceable_root_vertex_classes(&self, root: RootMeta) -> Vec<idx::Class> {
+        fn collect_referenceable_ancestors(
+            ctx: &Ctx,
+            class_idx: idx::Class,
+            referenceable: &[idx::Class],
+            acc: &mut Vec<idx::Class>,
+        ) {
+            if referenceable.contains(&class_idx) && !acc.contains(&class_idx) {
+                acc.push(class_idx);
+            }
+
+            for super_idx in ctx.classes()[*class_idx].sup() {
+                collect_referenceable_ancestors(ctx, *super_idx, referenceable, acc);
+            }
+        }
+
+        let mut classes = Vec::new();
+        collect_referenceable_ancestors(
+            self.ctx,
+            root.class_idx,
+            &self.ref_analysis.referenceable_classes,
+            &mut classes,
+        );
+        classes
+    }
 }
 
 impl<'a> Generate for PackageGenerator<'a> {
@@ -150,7 +176,7 @@ impl<'a> PackageGenerator<'a> {
             quote! { #variant(#path::#variant) }
         });
         let reference_variant = if self.has_references() {
-            quote! { , Reference(#path::Refs) }
+            quote! { , AddReference(#path::Refs), RemoveReference(#path::Refs) }
         } else {
             quote! {}
         };
@@ -297,9 +323,12 @@ impl<'a> PackageGenerator<'a> {
 
         let reference_is_enabled = if self.has_references() {
             quote! {
-                #package_ident::Reference(o) => self
+                #package_ident::AddReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone()))
+                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone())),
+                #package_ident::RemoveReference(o) => self
+                    .reference_manager_log
+                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone())),
             }
         } else {
             quote! {}
@@ -311,9 +340,12 @@ impl<'a> PackageGenerator<'a> {
         };
         let reference_effect = if self.has_references() {
             quote! {
-                #package_ident::Reference(refs) => self
+                #package_ident::AddReference(refs) => self
                     .reference_manager_log
-                    .effect(#path::Event::unfold(event, #path::ReferenceManager::AddArc(refs)))
+                    .effect(#path::Event::unfold(event, #path::ReferenceManager::AddArc(refs))),
+                #package_ident::RemoveReference(refs) => self
+                    .reference_manager_log
+                    .effect(#path::Event::unfold(event, #path::ReferenceManager::RemoveArc(refs))),
             }
         } else {
             quote! {}
@@ -328,6 +360,8 @@ impl<'a> PackageGenerator<'a> {
         } else {
             quote! {}
         };
+
+        // TODO: change is_default "true && .."
 
         quote! {
             impl #path::IsLog for #package_log_name {
@@ -384,18 +418,20 @@ impl<'a> PackageGenerator<'a> {
             format_ident!("{}VertexSyncDescriptor", package_name.to_upper_camel_case());
 
         let root_bootstraps = creation_specs.iter().map(|(root, _)| {
-            let root_class_name = self.root_class_name(*root);
             let class_name = self.root_variant_ident(*root);
             let class_log_name = self.root_field_ident(*root);
-            let root_is_referenceable = self.ref_analysis.referenceable_classes.contains(&root.class_idx);
-            if root_is_referenceable {
-                let root_id_struct = format_ident!("{}Id", root_class_name);
-                let root_instance_variant = format_ident!("{}Id", root_class_name);
-                quote! {
-                    if #support_path::IsLog::is_default(&self.#class_log_name)
-                        && matches!(event.op(), #package_ident::#class_name(_))
-                    {
-                        let id = #support_path::#root_id_struct(event.id().clone());
+            let root_key = self.root_class_name(*root).to_snake_case();
+            let vertex_additions = self
+                .referenceable_root_vertex_classes(*root)
+                .into_iter()
+                .map(|class_idx| {
+                    let class_name = self.ctx.classes()[*class_idx].name();
+                    let root_id_struct = format_ident!("{}Id", class_name);
+                    let root_instance_variant = format_ident!("{}Id", class_name);
+                    quote! {
+                        let id = #support_path::#root_id_struct(
+                            #support_path::ObjectKey::Path(::std::string::String::from(#root_key))
+                        );
                         let new_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex {
                             id: #support_path::Instance::#root_instance_variant(id),
                         };
@@ -404,9 +440,19 @@ impl<'a> PackageGenerator<'a> {
                             #support_path::Event::unfold(event.clone(), new_vertex)
                         );
                     }
-                }
-            } else {
+                })
+                .collect::<Vec<_>>();
+
+            if vertex_additions.is_empty() {
                 quote! {}
+            } else {
+                quote! {
+                    if #support_path::IsLog::is_default(&self.#class_log_name)
+                        && matches!(event.op(), #package_ident::#class_name(_))
+                    {
+                        #(#vertex_additions)*
+                    }
+                }
             }
         });
 
@@ -499,6 +545,12 @@ impl<'a> PackageGenerator<'a> {
         let vertex_class = &self.ctx.classes()[*containment_path.vertex_class];
         let id_struct = format_ident!("{}Id", vertex_class.name());
         let instance_variant = format_ident!("{}Id", vertex_class.name());
+        let is_list_path = matches!(containment_path.steps.last(), Some(PathStep::ListInsert));
+        let canonical_path = {
+            let mut segments = vec![self.root_class_name(root).to_snake_case()];
+            segments.extend(containment_path.log_field_path.iter().cloned());
+            segments.join(".")
+        };
 
         let create_matcher = if let Some(box_idx) = containment_path
             .steps
@@ -534,9 +586,23 @@ impl<'a> PackageGenerator<'a> {
             }
         };
 
-        let make_instance = quote! {
-            fn #make_instance_fn(event_id: #support_path::EventId) -> #support_path::Instance {
-                #support_path::Instance::#instance_variant(#support_path::#id_struct(event_id))
+        let make_instance = if is_list_path {
+            quote! {
+                fn #make_instance_fn(event_id: #support_path::EventId) -> #support_path::Instance {
+                    #support_path::Instance::#instance_variant(
+                        #support_path::#id_struct(#support_path::ObjectKey::Event(event_id))
+                    )
+                }
+            }
+        } else {
+            quote! {
+                fn #make_instance_fn(_event_id: #support_path::EventId) -> #support_path::Instance {
+                    #support_path::Instance::#instance_variant(
+                        #support_path::#id_struct(
+                            #support_path::ObjectKey::Path(::std::string::String::from(#canonical_path))
+                        )
+                    )
+                }
             }
         };
 
@@ -559,7 +625,6 @@ impl<'a> PackageGenerator<'a> {
             }
         };
 
-        let is_list_path = matches!(containment_path.steps.last(), Some(PathStep::ListInsert));
         let lookup_deleted_id = if !is_list_path
             || containment_path
                 .steps
@@ -663,8 +728,8 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         match step {
-            PathStep::ListInsert => quote! { #path::List::Insert { .. } },
-            PathStep::ListDelete => quote! { #path::List::Delete { pos } },
+            PathStep::ListInsert => quote! { #path::NestedList::Insert { .. } },
+            PathStep::ListDelete => quote! { #path::NestedList::Delete { pos } },
             PathStep::Field {
                 class_name,
                 variant_name,
@@ -706,8 +771,8 @@ impl<'a> PackageGenerator<'a> {
                 let variant = Ident::new(variant_name, Span::call_site());
                 quote! { #path::#union_n::#variant(#inner) }
             }
-            PathStep::ListInsert => quote! { #path::List::Insert { .. } },
-            PathStep::ListDelete => quote! { #path::List::Delete { pos } },
+            PathStep::ListInsert => quote! { #path::NestedList::Insert { .. } },
+            PathStep::ListDelete => quote! { #path::NestedList::Delete { pos } },
         }
     }
 

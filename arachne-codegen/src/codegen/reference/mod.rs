@@ -38,11 +38,13 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 
+        let object_key = self.generate_object_key();
         let id_structs = self.generate_id_structs(&analysis);
         let edge_structs = self.generate_edge_structs(&analysis);
         let typed_graph = self.generate_typed_graph(&analysis);
 
         let tokens = quote! {
+            #object_key
             #id_structs
             #edge_structs
             #typed_graph
@@ -58,6 +60,18 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 }
 
 impl<'a> ReferenceGenerator<'a> {
+    fn generate_object_key(&self) -> TokenStream {
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD)).unwrap();
+        quote! {
+            #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+            pub enum ObjectKey {
+                Event(#path::EventId),
+                Path(std::string::String),
+            }
+        }
+    }
+
     fn reference_type_names(&self, analysis: &ReferenceAnalysis) -> Vec<(Ident, Ident)> {
         let mut counts: HashMap<String, usize> = HashMap::default();
 
@@ -87,11 +101,9 @@ impl<'a> ReferenceGenerator<'a> {
             .collect()
     }
 
-    /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {ClassName}Id(pub EventId);`
+    /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {ClassName}Id(pub ObjectKey);`
     /// for each class that participates in a non-containment reference.
     pub fn generate_id_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD)).unwrap();
         let structs: Vec<TokenStream> = analysis
             .referenceable_classes
             .iter()
@@ -100,7 +112,7 @@ impl<'a> ReferenceGenerator<'a> {
                 let id_name = format_ident!("{}Id", class.name());
                 quote! {
                     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-                    pub struct #id_name(pub #path::EventId);
+                    pub struct #id_name(pub ObjectKey);
                 }
             })
             .collect();
