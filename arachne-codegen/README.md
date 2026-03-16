@@ -17,38 +17,99 @@ An important challenge in generating code from a metamodel into a composition of
 
 The Ecore metamodeling language allows annotating model elements with `EAnnotation`s. A language engineer can use them to give hints to the code generator on the kind of replicated data type it wants to be used for specific model elements.
 
-### Specifying a Particular Data Type
+### Supported Annotation Sources
+
+- `urn:arachne:semantics`
+  Used on structural features to override the generated CRDT mapping.
+- `urn:arachne:representation`
+  Used on concrete `EClass`es to project wrapper classes into transparent union variants.
+
+### `urn:arachne:semantics`
+
+#### `datatype`
+
+`datatype` can be attached to an `EAttribute` or, in some cases, to a containment `EReference`.
+
+Supported values:
+
+- `resettable-counter`
+- `ew-flag`
+- `dw-flag`
+- `mv-register`
+- `lww-register`
+- `fair-register`
+- `po-register` or `partial-order-register`
+- `to-register` or `total-order-register`
+- `list`
+- `aw-set`
+- `rw-set`
+- `uw-map`
+
+Example on an attribute:
 
 ```xml
-<eAnnotations source="urn:arachne:semantics">
-    <details key="datatype" value="lww-register"/>
+<eStructuralFeatures xsi:type="ecore:EAttribute" name="status" lowerBound="1"
+    eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+    <eAnnotations source="urn:arachne:semantics">
+        <details key="datatype" value="lww-register"/>
+    </eAnnotations>
+</eStructuralFeatures>
+```
+
+#### `uw-map` on a containment reference
+
+`uw-map` is used on a multi-valued containment `EReference` whose target class acts as a map entry carrier. The target class must expose:
+
+- one single-valued `EAttribute` used as the key,
+- one single-valued feature used as the value,
+- the value feature must not be a non-containment reference.
+
+The key and value features default to `key` and `value`, but can be customized.
+
+```xml
+<eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1"
+    eType="#//Entry" containment="true">
+    <eAnnotations source="urn:arachne:semantics">
+        <details key="datatype" value="uw-map"/>
+        <details key="key-feature" value="key"/>
+        <details key="value-feature" value="value"/>
+    </eAnnotations>
+</eStructuralFeatures>
+```
+
+### `urn:arachne:representation`
+
+#### Transparent wrapper projection
+
+Concrete subclasses of an abstract class can be projected directly into the generated union payload instead of producing a wrapper `record!`.
+
+Use:
+
+```xml
+<eAnnotations source="urn:arachne:representation">
+    <details key="kind" value="transparent"/>
+    <details key="field" value="value"/>
 </eAnnotations>
 ```
 
-### Specifying a Total or Partial Order Among the Literals of a `EEnum`
+The `field` must name the structural feature whose generated CRDT/log pair should become the union variant payload.
+
+This is especially useful for algebraic datatypes such as JSON.
+
+Example:
 
 ```xml
-<eClassifiers xsi:type="ecore:EEnum" name="name">
-    <eAnnotations source="urn:arachne:order">
-        <details key="order" value="partial-order"/>
+<eClassifiers xsi:type="ecore:EClass" name="String" eSuperTypes="#//Json">
+    <eAnnotations source="urn:arachne:representation">
+        <details key="kind" value="transparent"/>
+        <details key="field" value="value"/>
     </eAnnotations>
-    <eLiterals name="ADD">
-        <eAnnotations source="urn:arachne:order">
-            <details key="rank" value="1"/>
-        </eAnnotations>
-    </eLiterals>
-    <eLiterals name="UPDATE">
-        <eAnnotations source="urn:arachne:order">
-            <details key="rank" value="1"/>
-        </eAnnotations>
-    </eLiterals>
-    <eLiterals name="REMOVE">
-        <eAnnotations source="urn:arachne:order">
-            <details key="rank" value="2"/>
-        </eAnnotations>
-    </eLiterals>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1"
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
 </eClassifiers>
 ```
+
+When all concrete top-level variants of an abstract root are transparent, the package root is generated from the abstract union rather than from one concrete variant.
 
 ## Mapping Reference
 
@@ -74,9 +135,9 @@ For detailed Ecore documentation, see: [Ecore API Documentation](https://downloa
 |-----|----|
 |`EDataType`|See [Primitive Data Types](#primitive-data-types)|
 |`EClass`|See [`EClass`](#eclass)|
-|`EEnum`|Rust enum (see [Customizing](#customizing-the-code-generator-mapping)) + any `Register`|
+|`EEnum`|Rust enum + any `Register`|
 
-Generated Rust enums implement `Debug`, `Clone`, `PartialEq`, `Eq`, `Hash`, `Default` (first variant).
+Generated Rust enums implement `Debug`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default` (first variant).
 
 #### `EClass`
 
@@ -87,6 +148,8 @@ A (concrete) `EClass` is generated as a `record`.
 For abstract classes, the code generator does not produce an abstract type in the target language. Instead, it replaces abstract classes with a closed `union` type that represents all their concrete subclasses. This union type preserves subtyping by allowing any concrete subclass to be used wherever the abstract type is expected. Features defined in the abstract class are not inherited at runtime but are statically flattened into each concrete subclass during generation, so that each generated class explicitly contains all required properties.
 
 This approach eliminates runtime inheritance while preserving substitutability and structural reuse, and it is well suited to a closed-world setting where all concrete variants are known at generation time.
+
+When concrete subclasses are annotated with `urn:arachne:representation` / `kind=transparent`, the union variant payload is generated directly from the selected field and the wrapper subclass record is omitted.
 
 Orphan abstract classes, i.e., that are inherited by no concrete classes, are not supported.
 
@@ -155,7 +218,8 @@ A `EPackage` is supported as an object holding all the generated collaborative m
 
 ## To-Do
 
-- [ ] EAnnotations support
+- [x] EAnnotations support for datatype overrides
+- [x] Transparent representation annotations
 - [x] Reference manager
 - [ ] Multiple EPackages
 - [ ] Fuzzer impl

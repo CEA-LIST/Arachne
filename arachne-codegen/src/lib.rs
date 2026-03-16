@@ -16,6 +16,7 @@ pub use parser::EcoreParser;
 
 use crate::{
     codegen::{
+        annotation::transparent_field,
         classifier::ClassGenerator,
         cycles::analyze_cycles,
         generate::Generate,
@@ -132,7 +133,7 @@ pub fn generate_from_parser<'a>(
     let sorted_classes = topological_sort(&parser.ctx, &classes);
     let reference_analysis = analyze_references(&parser.ctx, &package_classes);
 
-    // Prefer a concrete top-level containment root over a pure inheritance root.
+    // Derive the package root from top-level concrete containment roots.
     let contained_classes: std::collections::HashSet<idx::Class> = sorted_classes
         .iter()
         .flat_map(|class| {
@@ -147,20 +148,36 @@ pub fn generate_from_parser<'a>(
         })
         .collect();
 
-    let root_class = sorted_classes
+    let top_level_concrete_roots: Vec<&Class> = sorted_classes
         .iter()
-        .find(|c| {
+        .copied()
+        .filter(|c| {
             !c.is_enum()
                 && !c.is_interface()
                 && c.is_concrete()
                 && !contained_classes.contains(&c.idx)
         })
-        .or_else(|| {
-            sorted_classes
-                .iter()
-                .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
-        })
-        .ok_or_else(|| ArachneError::RootClassNotFound(pack.name().to_string()))?;
+        .collect();
+
+    let transparent_union_candidates = top_level_concrete_roots.len() > 1
+        && top_level_concrete_roots
+            .iter()
+            .all(|class| transparent_field(class).is_some());
+
+    let root_class = if top_level_concrete_roots.len() == 1 {
+        Some(top_level_concrete_roots[0])
+    } else if transparent_union_candidates {
+        find_common_ancestor(&parser.ctx, &top_level_concrete_roots)
+            .or_else(|| top_level_concrete_roots.first().copied())
+    } else if !top_level_concrete_roots.is_empty() {
+        top_level_concrete_roots.first().copied()
+    } else {
+        sorted_classes
+            .iter()
+            .copied()
+            .find(|c| c.sup().is_empty() && !c.is_enum() && !c.is_interface())
+    }
+    .ok_or_else(|| ArachneError::RootClassNotFound(pack.name().to_string()))?;
 
     debug!(
         "Identified root class `{}` for package `{}`",
@@ -189,4 +206,35 @@ pub fn generate_from_parser<'a>(
     package.register(fragment);
 
     Ok((classifiers, references, package))
+}
+
+fn find_common_ancestor<'a>(
+    ctx: &'a ecore_rs::ctx::Ctx,
+    classes: &[&'a Class],
+) -> Option<&'a Class> {
+    let first = *classes.first()?;
+    let mut candidates = ancestor_chain(ctx, first.idx);
+    candidates.reverse();
+
+    candidates
+        .into_iter()
+        .find(|candidate_idx| {
+            classes.iter().all(|class| {
+                let ancestors = ancestor_chain(ctx, class.idx);
+                ancestors.contains(candidate_idx)
+            })
+        })
+        .map(|idx| &ctx.classes()[*idx])
+}
+
+fn ancestor_chain(ctx: &ecore_rs::ctx::Ctx, class_idx: idx::Class) -> Vec<idx::Class> {
+    let mut chain = vec![class_idx];
+    let mut current = class_idx;
+
+    while let Some(parent) = ctx.classes()[*current].sup().first().copied() {
+        chain.push(parent);
+        current = parent;
+    }
+
+    chain
 }

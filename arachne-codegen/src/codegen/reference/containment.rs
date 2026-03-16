@@ -225,9 +225,8 @@ fn find_feat_paths_recursive(
 
         // Use the feat class name (e.g., "ExecutionNodeFeat") for the field step
         let feat_class_name = format!("{}{}", class.name(), INHERITANCE_SUFFIX);
-        let is_boxed =
-            env.cycle_analysis.boxing_strategy(class_idx, &feature.name)
-                == BoxingStrategy::DirectReference;
+        let is_boxed = env.cycle_analysis.boxing_strategy(class_idx, &feature.name)
+            == BoxingStrategy::DirectReference;
 
         // Don't recurse through a second boxed containment reference.
         if is_boxed && passed_through_box {
@@ -393,7 +392,10 @@ fn push_unique_path(
     steps: Vec<PathStep>,
     log_field_path: Vec<String>,
 ) {
-    if result.iter().any(|p| p.vertex_class == vertex_class && p.steps == steps) {
+    if result
+        .iter()
+        .any(|p| p.vertex_class == vertex_class && p.steps == steps)
+    {
         return;
     }
 

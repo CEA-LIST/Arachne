@@ -34,8 +34,8 @@ impl ToCrdt for EcoreType {
             EcoreType::EFloat => Some(quote! { f32 }),
             EcoreType::EDouble => Some(quote! { f64 }),
             EcoreType::EChar => Some(quote! {char }),
-            EcoreType::EString => Some(quote! { String}),
-            EcoreType::EBoolean => None,
+            EcoreType::EString => Some(quote! { std::string::String }),
+            EcoreType::EBoolean => Some(quote! { bool }),
             EcoreType::Object => unimplemented!(),
         }
     }

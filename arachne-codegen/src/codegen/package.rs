@@ -67,22 +67,33 @@ impl<'a> Generate for PackageGenerator<'a> {
 }
 
 impl<'a> PackageGenerator<'a> {
+    fn has_references(&self) -> bool {
+        self.ref_analysis.has_references()
+    }
+
     fn imports(&self) -> Vec<Import> {
-        vec![
+        let mut imports = vec![
             Import::CrdtOp(CrdtOp::Nested(NestedCrdtOp::ListOp)),
             Import::Protocol(Protocol::Read),
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
-            Import::Protocol(Protocol::LwwPolicy),
             Import::Protocol(Protocol::Event),
-            Import::Protocol(Protocol::EventId),
-            Import::Log(Log::VecLog),
-            Import::Protocol(Protocol::PureCRDT),
             Import::Protocol(Protocol::QueryOperation),
             Import::Custom(String::from("crate::classifiers::*")),
-            Import::Custom(String::from("crate::references::*")),
-        ]
+        ];
+
+        if self.has_references() {
+            imports.extend([
+                Import::Protocol(Protocol::LwwPolicy),
+                Import::Protocol(Protocol::EventId),
+                Import::Log(Log::VecLog),
+                Import::Protocol(Protocol::PureCRDT),
+                Import::Custom(String::from("crate::references::*")),
+            ]);
+        }
+
+        imports
     }
 
     /// Generate the top-level package enum.
@@ -91,14 +102,19 @@ impl<'a> PackageGenerator<'a> {
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let root_ident = Ident::new(root_class_name, Span::call_site());
+        let root_ident = Ident::new(&root_class_name.to_upper_camel_case(), Span::call_site());
         let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let reference_variant = if self.has_references() {
+            quote! { , Reference(#path::Refs) }
+        } else {
+            quote! {}
+        };
 
         quote! {
             #[derive(Debug, Clone)]
             pub enum #package_ident {
-                #root_ident(#path::#root_ident),
-                Reference(#path::Refs),
+                #root_ident(#path::#root_ident)
+                #reference_variant
             }
         }
     }
@@ -130,12 +146,28 @@ impl<'a> PackageGenerator<'a> {
         let class_log = format_ident!("{}Log", root_class_name);
         let class_log_name = format_ident!("{}_log", root_class_name.to_snake_case());
         let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let reference_field = if self.has_references() {
+            quote! {
+                reference_manager_log: #path::VecLog<#path::ReferenceManager<#path::LwwPolicy>>,
+            }
+        } else {
+            quote! {}
+        };
+        let reference_getter = if self.has_references() {
+            quote! {
+                pub fn reference_manager_log(&self) -> &#path::VecLog<#path::ReferenceManager<#path::LwwPolicy>> {
+                    &self.reference_manager_log
+                }
+            }
+        } else {
+            quote! {}
+        };
 
         quote! {
             #[derive(Debug, Clone, Default)]
             pub struct #package_log_name {
                 #class_log_name: #path::#class_log,
-                reference_manager_log: #path::VecLog<#path::ReferenceManager<#path::LwwPolicy>>,
+                #reference_field
             }
 
             impl #package_log_name {
@@ -143,9 +175,7 @@ impl<'a> PackageGenerator<'a> {
                     &self.#class_log_name
                 }
 
-                pub fn reference_manager_log(&self) -> &#path::VecLog<#path::ReferenceManager<#path::LwwPolicy>> {
-                    &self.reference_manager_log
-                }
+                #reference_getter
             }
         }
     }
@@ -161,41 +191,79 @@ impl<'a> PackageGenerator<'a> {
         let class_name = format_ident!("{}", root_class_name.to_upper_camel_case());
         let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
         let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let value_ty = if self.has_references() {
+            quote! {
+                (#path::#root_value, <#path::ReferenceManager<#path::LwwPolicy> as #path::PureCRDT>::Value)
+            }
+        } else {
+            quote! { #path::#root_value }
+        };
+        let reference_is_enabled = if self.has_references() {
+            quote! {
+                #package_ident::Reference(o) => self
+                    .reference_manager_log
+                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone())),
+            }
+        } else {
+            quote! {}
+        };
+        let pre_effect = if self.has_references() {
+            quote! { self.sync_reference_vertices(&event); }
+        } else {
+            quote! {}
+        };
+        let reference_effect = if self.has_references() {
+            quote! {
+                #package_ident::Reference(refs) => self
+                    .reference_manager_log
+                    .effect(#path::Event::unfold(event, #path::ReferenceManager::AddArc(refs))),
+            }
+        } else {
+            quote! {}
+        };
+        let stabilize_refs = if self.has_references() {
+            quote! { self.reference_manager_log.stabilize(version); }
+        } else {
+            quote! {}
+        };
+        let redundant_refs = if self.has_references() {
+            quote! {
+                self.reference_manager_log
+                    .redundant_by_parent(version, conservative);
+            }
+        } else {
+            quote! {}
+        };
 
         quote! {
             impl #path::IsLog for #package_log_name {
-                type Value = (#path::#root_value, <#path::ReferenceManager<#path::LwwPolicy> as #path::PureCRDT>::Value);
+                type Value = #value_ty;
                 type Op = #package_ident;
 
                 fn is_enabled(&self, op: &Self::Op) -> bool {
                     match op {
                         #package_ident::#class_name(o) => self.#class_log_name.is_enabled(o),
-                        #package_ident::Reference(o) => self
-                            .reference_manager_log
-                            .is_enabled(&#path::ReferenceManager::AddArc(o.clone())),
+                        #reference_is_enabled
                     }
                 }
 
                 fn effect(&mut self, event: #path::Event<Self::Op>) {
-                    self.sync_reference_vertices(&event);
+                    #pre_effect
 
                     match event.op().clone() {
                         #package_ident::#class_name(root) => self.#class_log_name.effect(#path::Event::unfold(event, root)),
-                        #package_ident::Reference(refs) => self
-                            .reference_manager_log
-                            .effect(#path::Event::unfold(event, #path::ReferenceManager::AddArc(refs))),
+                        #reference_effect
                     }
                 }
 
                 fn stabilize(&mut self, version: &#path::Version) {
                     self.#class_log_name.stabilize(version);
-                    self.reference_manager_log.stabilize(version);
+                    #stabilize_refs
                 }
 
                 fn redundant_by_parent(&mut self, version: &#path::Version, conservative: bool) {
                     self.#class_log_name.redundant_by_parent(version, conservative);
-                    self.reference_manager_log
-                        .redundant_by_parent(version, conservative);
+                    #redundant_refs
                 }
 
                 fn is_default(&self) -> bool {
@@ -206,6 +274,10 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_reference_sync_support(&self, creation_paths: &[ContainmentPath]) -> TokenStream {
+        if !self.has_references() {
+            return quote! {};
+        }
+
         let root_class_name = self.ctx.classes()[*self.root_class_idx].name();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
         let support_path: syn::Path =
@@ -434,7 +506,12 @@ impl<'a> PackageGenerator<'a> {
             }
         };
 
-        vec![create_matcher, should_create, make_instance, lookup_deleted_id]
+        vec![
+            create_matcher,
+            should_create,
+            make_instance,
+            lookup_deleted_id,
+        ]
     }
 
     /// Build a fully nested match pattern from path steps.
@@ -573,6 +650,15 @@ impl<'a> PackageGenerator<'a> {
 
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let query_body = if self.has_references() {
+            quote! {
+                let #class_name = self.#class_log_name.execute_query(#path::Read::new());
+                let refs = self.reference_manager_log.execute_query(#path::Read::new());
+                (#class_name, refs)
+            }
+        } else {
+            quote! { self.#class_log_name.execute_query(#path::Read::new()) }
+        };
 
         quote! {
             impl #path::EvalNested<#path::Read<<Self as #path::IsLog>::Value>> for #package_log_name {
@@ -580,9 +666,7 @@ impl<'a> PackageGenerator<'a> {
                     &self,
                     _q: #path::Read<<Self as #path::IsLog>::Value>,
                 ) -> <#path::Read<<Self as #path::IsLog>::Value> as #path::QueryOperation>::Response {
-                    let #class_name = self.#class_log_name.execute_query(#path::Read::new());
-                    let refs = self.reference_manager_log.execute_query(#path::Read::new());
-                    (#class_name, refs)
+                    #query_body
                 }
             }
         }

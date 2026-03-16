@@ -206,6 +206,7 @@ impl Path {
 pub struct ELit {
     name: String,
     value: Option<String>,
+    annotations: Annots,
 }
 
 pub type ELits = Vec<ELit>;
@@ -215,12 +216,14 @@ impl ELit {
         Self {
             name: name.into(),
             value: value.map(|s| s.into()),
+            annotations: Annots::with_capacity(2),
         }
     }
     pub fn new_name(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             value: None,
+            annotations: Annots::with_capacity(2),
         }
     }
 
@@ -229,6 +232,12 @@ impl ELit {
     }
     pub fn value(&self) -> Option<&str> {
         self.value.as_deref()
+    }
+    pub fn annotations(&self) -> &Annots {
+        &self.annotations
+    }
+    pub fn add_annotation(&mut self, annot: Annot) {
+        self.annotations.push(annot)
     }
 }
 

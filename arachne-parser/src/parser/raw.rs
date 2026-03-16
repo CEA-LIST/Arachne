@@ -758,7 +758,7 @@ impl<'input> Parser<'input> {
         }
 
         if let Some(name) = name {
-            let lit = repr::ELit::new(name, value);
+            let mut lit = repr::ELit::new(name, value);
 
             // If early_done, parse nested content like eAnnotations
             if early_done {
@@ -771,11 +771,10 @@ impl<'input> Parser<'input> {
 
                     if self.try_tag("<eAnnotations") {
                         self.ws();
-                        let _annot = self
+                        let annot = self
                             .annotation()
                             .with_context("failed to parse literal annotation")?;
-                        // Note: Currently ignoring annotations on literals
-                        // Could be extended to store them in the future
+                        lit.add_annotation(annot);
                         continue 'content;
                     } else {
                         bail!("unexpected literal content")
@@ -1080,11 +1079,10 @@ impl<'input> Parser<'input> {
 
                 if self.try_tag("<eAnnotations") {
                     self.ws();
-                    let _annot = self
+                    let annot = self
                         .annotation()
                         .with_context("failed to parse structural feature annotation")?;
-                    // Note: Currently ignoring annotations on structural features
-                    // Could be extended to store them in the future
+                    structural.add_annotation(annot);
                     continue 'content;
                 } else {
                     bail!("unexpected structural feature content")

@@ -113,7 +113,7 @@ impl ToUseStatement for Crdt {
             },
             Crdt::Nested(crdt) => match crdt {
                 NestedCrdt::Map(map) => match map {
-                    Map::UWMap => format!("{}::map::uw_map::UWMap", CRDT_PREFIX),
+                    Map::UWMap => format!("{}::map::uw_map::UWMapLog", CRDT_PREFIX),
                 },
                 NestedCrdt::List => format!("{}::list::nested_list::ListLog", CRDT_PREFIX),
                 NestedCrdt::Graph => format!("{}::graph::uw_multigraph::UWMultigraph", CRDT_PREFIX),
@@ -194,6 +194,7 @@ pub enum CrdtOp {
 #[derive(Clone, Debug)]
 pub enum NestedCrdtOp {
     ListOp,
+    MapOp,
 }
 
 impl ToUseStatement for CrdtOp {
@@ -201,6 +202,7 @@ impl ToUseStatement for CrdtOp {
         match self {
             CrdtOp::Nested(nested_op) => match nested_op {
                 NestedCrdtOp::ListOp => format!("{}::list::nested_list::List", CRDT_PREFIX),
+                NestedCrdtOp::MapOp => format!("{}::map::uw_map::UWMap", CRDT_PREFIX),
             },
         }
     }

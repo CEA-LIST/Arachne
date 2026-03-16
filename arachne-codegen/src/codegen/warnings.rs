@@ -20,6 +20,11 @@ pub enum Warning {
     AbstractWithNoSubclass(String),
     /// Unsupported operation encountered during code generation
     OperationNotSupported(String),
+    UnsupportedAnnotation {
+        feature: String,
+        annotation: String,
+        reason: String,
+    },
 }
 
 impl Warning {
@@ -64,6 +69,16 @@ impl Warning {
                 format!(
                     "Operation `{}` is not supported in v1 and will be skipped.",
                     name
+                )
+            }
+            Warning::UnsupportedAnnotation {
+                feature,
+                annotation,
+                reason,
+            } => {
+                format!(
+                    "Feature `{}` has unsupported annotation `{}`: {}.",
+                    feature, annotation, reason
                 )
             }
         }

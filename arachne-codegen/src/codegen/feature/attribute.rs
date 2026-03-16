@@ -12,6 +12,7 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
+        annotation::{DatatypeOverride, datatype_override},
         datatype::{
             crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
             to_crdt::ToCrdt,
@@ -53,7 +54,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .get(*self.attribute.typ.unwrap())
             .unwrap();
 
-        let (rust_typ, crdt) = if class_typ.is_enum() {
+        let (rust_typ, mut crdt) = if class_typ.is_enum() {
             let enum_name = Ident::new(class_typ.name(), Span::call_site());
             (
                 Some(quote! { #enum_name }),
@@ -64,6 +65,15 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 .unwrap_or_else(|_| panic!("Failed to parse type: {}", class_typ.name()));
             (ToCrdt::to_rust_type(&typ), ToCrdt::to_crdt_container(&typ))
         };
+
+        if let Some(override_typ) = datatype_override(self.attribute) {
+            match override_typ {
+                DatatypeOverride::Primitive(primitive) => {
+                    crdt = primitive;
+                }
+                DatatypeOverride::Set(_) => {}
+            }
+        }
 
         let (log_type, crdt_inner, log_import) = match &crdt {
             Primitive::Counter(_) => {
@@ -153,12 +163,19 @@ impl<'a> Generate for AttributeGenerator<'a> {
                     Collection::Bag(Bag::AWBag),
                 )))],
             ),
-            (BoundKind::Many, true, false) => (
-                quote! { #path::VecLog<#path::AWSet<#rust_typ>> },
-                vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
-                    Collection::Set(Set::AWSet),
-                )))],
-            ),
+            (BoundKind::Many, true, false) => {
+                let set_typ = match datatype_override(self.attribute) {
+                    Some(DatatypeOverride::Set(set)) => set,
+                    _ => Set::AWSet,
+                };
+                let set_name = syn::Ident::new(set_typ.name(), Span::call_site());
+                (
+                    quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
+                    vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
+                        Collection::Set(set_typ),
+                    )))],
+                )
+            }
         };
 
         let tokens = quote! { #name: #field_type };

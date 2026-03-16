@@ -1,4 +1,5 @@
 prelude!(repr::bounds::Bounds);
+use crate::repr::{Annot, Annots};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Typ {
@@ -59,6 +60,7 @@ pub struct Structural {
     pub derived: Option<bool>,
     /// Indicates whether the feature value is unique. Default is true.
     pub unique: Option<bool>,
+    pub annotations: Annots,
 }
 impl Structural {
     pub fn new(name: impl Into<String>, kind: Typ, typ: idx::Class, bounds: Bounds) -> Self {
@@ -76,6 +78,7 @@ impl Structural {
             transient: None,
             derived: None,
             unique: None,
+            annotations: Annots::with_capacity(2),
         }
     }
 
@@ -99,6 +102,7 @@ impl Structural {
             transient: None,
             derived: None,
             unique: None,
+            annotations: Annots::with_capacity(2),
         }
     }
 
@@ -165,5 +169,11 @@ impl Structural {
         if let Some(flag) = flag {
             self.set_unique(flag)
         }
+    }
+    pub fn annotations(&self) -> &Annots {
+        &self.annotations
+    }
+    pub fn add_annotation(&mut self, annot: Annot) {
+        self.annotations.push(annot)
     }
 }
