@@ -58,6 +58,8 @@ pub struct Structural {
     pub transient: Option<bool>,
     /// Indicates whether the feature value is derived from other features. Default is false.
     pub derived: Option<bool>,
+    /// Indicates whether the feature value can be unset. Default is false.
+    pub unsettable: Option<bool>,
     /// Indicates whether the feature value is unique. Default is true.
     pub unique: Option<bool>,
     pub annotations: Annots,
@@ -77,6 +79,7 @@ impl Structural {
             volatile: None,
             transient: None,
             derived: None,
+            unsettable: None,
             unique: None,
             annotations: Annots::with_capacity(2),
         }
@@ -101,6 +104,7 @@ impl Structural {
             volatile: None,
             transient: None,
             derived: None,
+            unsettable: None,
             unique: None,
             annotations: Annots::with_capacity(2),
         }
@@ -168,6 +172,14 @@ impl Structural {
     pub fn try_set_unique(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_unique(flag)
+        }
+    }
+    pub fn set_unsettable(&mut self, flag: bool) {
+        self.unsettable = Some(flag);
+    }
+    pub fn try_set_unsettable(&mut self, flag: Option<bool>) {
+        if let Some(flag) = flag {
+            self.set_unsettable(flag)
         }
     }
     pub fn annotations(&self) -> &Annots {

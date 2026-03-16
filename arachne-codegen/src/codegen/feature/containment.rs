@@ -20,6 +20,7 @@ use crate::{
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         import::{Import, Log},
+        warnings::Warning,
     },
 };
 
@@ -51,7 +52,47 @@ impl<'a> Generate for ContainmentGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
-        let (bound_kind, warnings) = normalize_bounds(self.reference.bounds, &self.reference.name);
+        let (bound_kind, mut warnings) =
+            normalize_bounds(self.reference.bounds, &self.reference.name);
+
+        if let Some(changeable) = self.reference.changeable
+            && !changeable
+        {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.reference.name.clone(),
+                property: "changeable".into(),
+                value: "false".into(),
+            })
+        }
+
+        if let Some(transient) = self.reference.transient {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.reference.name.clone(),
+                property: "transient".into(),
+                value: transient.to_string().into(),
+            })
+        }
+        if let Some(volatile) = self.reference.volatile {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.reference.name.clone(),
+                property: "volatile".into(),
+                value: volatile.to_string().into(),
+            })
+        }
+        if let Some(derived) = self.reference.derived {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.reference.name.clone(),
+                property: "derived".into(),
+                value: derived.to_string().into(),
+            })
+        }
+        if let Some(derived) = self.reference.unsettable {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.reference.name.clone(),
+                property: "derived".into(),
+                value: derived.to_string().into(),
+            })
+        }
 
         let target_class = self
             .ctx

@@ -910,9 +910,11 @@ impl<'input> Parser<'input> {
             mut volatile,
             mut transient,
             mut derived,
+            mut unsettable,
             mut unique,
         ) = (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None,
         );
 
         let mut early_done = false;
@@ -975,6 +977,10 @@ impl<'input> Parser<'input> {
                 ([], "unique") => {
                     self.handle_redef("class", "unique", unique.as_ref(), val)?;
                     unique = Some(val);
+                }
+                ([], "unsettable") => {
+                    self.handle_redef("class", "unsettable", unsettable.as_ref(), val)?;
+                    unsettable = Some(val);
                 }
                 _ => bail!(@unexpected("structural feature attribute") key),
             }

@@ -11,6 +11,11 @@ pub enum Warning {
         bounds: String,
         applied: String,
     },
+    UnsupportedFeatureProperty {
+        feature: String,
+        property: String,
+        value: String,
+    },
     UnsupportedPropertyCombination {
         feature: String,
         properties: Vec<String>,
@@ -79,6 +84,16 @@ impl Warning {
                 format!(
                     "Feature `{}` has unsupported annotation `{}`: {}.",
                     feature, annotation, reason
+                )
+            }
+            Warning::UnsupportedFeatureProperty {
+                feature,
+                property,
+                value,
+            } => {
+                format!(
+                    "Feature `{}` has unsupported property `{}` with value `{}`.",
+                    feature, property, value
                 )
             }
         }

@@ -45,6 +45,45 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);
 
+        if let Some(changeable) = self.attribute.changeable
+            && !changeable
+        {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.attribute.name.clone(),
+                property: "changeable".into(),
+                value: "false".into(),
+            })
+        }
+
+        if let Some(transient) = self.attribute.transient {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.attribute.name.clone(),
+                property: "transient".into(),
+                value: transient.to_string().into(),
+            })
+        }
+        if let Some(volatile) = self.attribute.volatile {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.attribute.name.clone(),
+                property: "volatile".into(),
+                value: volatile.to_string().into(),
+            })
+        }
+        if let Some(derived) = self.attribute.derived {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.attribute.name.clone(),
+                property: "derived".into(),
+                value: derived.to_string().into(),
+            })
+        }
+        if let Some(derived) = self.attribute.unsettable {
+            warnings.push(Warning::UnsupportedFeatureProperty {
+                feature: self.attribute.name.clone(),
+                property: "derived".into(),
+                value: derived.to_string().into(),
+            })
+        }
+
         let snake = self.attribute.name.to_snake_case();
         let name = syn::parse_str::<Ident>(&snake)
             .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
