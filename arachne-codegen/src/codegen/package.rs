@@ -1,4 +1,7 @@
-use ecore_rs::{ctx::Ctx, repr::idx};
+use ecore_rs::{
+    ctx::Ctx,
+    repr::{idx, structural},
+};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
@@ -7,14 +10,11 @@ use syn::Ident;
 use crate::{
     PACKAGE_PATH_MOD,
     codegen::{
-        cycles::CycleAnalysis,
+        classifier::INHERITANCE_SUFFIX,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         import::{CrdtOp, Import, Log, NestedCrdtOp, Protocol},
-        reference::{
-            analysis::ReferenceAnalysis,
-            containment::{ContainmentPath, PathStep, find_creation_paths},
-        },
+        reference::analysis::ReferenceAnalysis,
     },
 };
 
@@ -27,8 +27,8 @@ pub struct PackageGenerator<'a> {
     ctx: &'a Ctx,
     pack_idx: idx::Pack,
     root_class_indices: Vec<idx::Class>,
+    reachable_class_indices: Vec<idx::Class>,
     ref_analysis: &'a ReferenceAnalysis,
-    cycle_analysis: &'a CycleAnalysis,
 }
 
 impl<'a> PackageGenerator<'a> {
@@ -36,15 +36,15 @@ impl<'a> PackageGenerator<'a> {
         ctx: &'a Ctx,
         pack_idx: idx::Pack,
         root_class_indices: Vec<idx::Class>,
+        reachable_class_indices: Vec<idx::Class>,
         ref_analysis: &'a ReferenceAnalysis,
-        cycle_analysis: &'a CycleAnalysis,
     ) -> Self {
         Self {
             ctx,
             pack_idx,
             root_class_indices,
+            reachable_class_indices,
             ref_analysis,
-            cycle_analysis,
         }
     }
 
@@ -79,64 +79,6 @@ impl<'a> PackageGenerator<'a> {
         format_ident!("{}_log", self.root_class_name(root).to_snake_case())
     }
 
-    fn referenceable_root_vertex_classes(&self, root: RootMeta) -> Vec<idx::Class> {
-        fn collect_referenceable_ancestors(
-            ctx: &Ctx,
-            class_idx: idx::Class,
-            referenceable: &[idx::Class],
-            acc: &mut Vec<idx::Class>,
-        ) {
-            if referenceable.contains(&class_idx) && !acc.contains(&class_idx) {
-                acc.push(class_idx);
-            }
-
-            for super_idx in ctx.classes()[*class_idx].sup() {
-                collect_referenceable_ancestors(ctx, *super_idx, referenceable, acc);
-            }
-        }
-
-        let mut classes = Vec::new();
-        collect_referenceable_ancestors(
-            self.ctx,
-            root.class_idx,
-            &self.ref_analysis.referenceable_classes,
-            &mut classes,
-        );
-        classes
-    }
-}
-
-impl<'a> Generate for PackageGenerator<'a> {
-    fn generate(&self) -> anyhow::Result<Fragment> {
-        let creation_specs = self
-            .roots()
-            .into_iter()
-            .map(|root| {
-                (
-                    root,
-                    find_creation_paths(
-                        self.ctx,
-                        root.class_idx,
-                        self.ref_analysis,
-                        self.cycle_analysis,
-                    ),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        let package_enum = self.generate_package_enum();
-        let package_log = self.generate_package_log(&creation_specs);
-
-        let tokens = quote! {
-            #package_enum
-            #package_log
-        };
-
-        Ok(Fragment::new(tokens, self.imports(), vec![]))
-    }
-}
-
-impl<'a> PackageGenerator<'a> {
     fn has_references(&self) -> bool {
         self.ref_analysis.has_references()
     }
@@ -144,19 +86,22 @@ impl<'a> PackageGenerator<'a> {
     fn imports(&self) -> Vec<Import> {
         let mut imports = vec![
             Import::CrdtOp(CrdtOp::Nested(NestedCrdtOp::ListOp)),
+            Import::CrdtOp(CrdtOp::Nested(NestedCrdtOp::MapOp)),
             Import::Protocol(Protocol::Read),
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
             Import::Protocol(Protocol::Event),
             Import::Protocol(Protocol::QueryOperation),
+            Import::Protocol(Protocol::EventId),
             Import::Custom(String::from("crate::classifiers::*")),
+            Import::Custom(String::from("moirai_crdt::option::Optional")),
+            Import::Custom(String::from("std::fmt::Display")),
         ];
 
         if self.has_references() {
             imports.extend([
                 Import::Protocol(Protocol::LwwPolicy),
-                Import::Protocol(Protocol::EventId),
                 Import::Log(Log::VecLog),
                 Import::Protocol(Protocol::PureCRDT),
                 Import::Custom(String::from("crate::references::*")),
@@ -175,7 +120,7 @@ impl<'a> PackageGenerator<'a> {
             let variant = self.root_variant_ident(root);
             quote! { #variant(#path::#variant) }
         });
-        let reference_variant = if self.has_references() {
+        let reference_variants = if self.has_references() {
             quote! { , AddReference(#path::Refs), RemoveReference(#path::Refs) }
         } else {
             quote! {}
@@ -185,27 +130,8 @@ impl<'a> PackageGenerator<'a> {
             #[derive(Debug, Clone)]
             pub enum #package_ident {
                 #(#root_variants),*
-                #reference_variant
+                #reference_variants
             }
-        }
-    }
-
-    fn generate_package_log(
-        &self,
-        creation_specs: &[(RootMeta, Vec<ContainmentPath>)],
-    ) -> TokenStream {
-        let package_value = self.generate_package_value_struct();
-        let package_log_struct = self.generate_package_log_struct();
-        let reference_sync_support = self.generate_reference_sync_support(creation_specs);
-        let is_log_impl = self.generate_is_log_impl();
-        let eval_nested_impl = self.generate_eval_nested_impl();
-
-        quote! {
-            #package_value
-            #package_log_struct
-            #reference_sync_support
-            #is_log_impl
-            #eval_nested_impl
         }
     }
 
@@ -290,6 +216,75 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
+    fn generate_reference_sync_support(&self) -> TokenStream {
+        if !self.has_references() {
+            return quote! {};
+        }
+
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let support_path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let root_dispatch = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let field = self.root_field_ident(root);
+            let root_key = self.root_class_name(root).to_snake_case();
+            quote! {
+                #package_ident::#variant(op) => {
+                    let root_id = #support_path::ObjectId::root(#root_key);
+                    VertexSyncLog::collect_vertex_effects(
+                        &self.#field,
+                        op,
+                        event.id(),
+                        &root_id,
+                        &refs,
+                        &mut effects,
+                    );
+                }
+            }
+        });
+        let support_defs = self.generate_vertex_support_defs();
+        let to_instances_impls = self.generate_to_instances_impls();
+        let vertex_impls = self.generate_vertex_effect_impls();
+
+        quote! {
+            #support_defs
+            #to_instances_impls
+            #vertex_impls
+
+            impl #package_log_name {
+                fn sync_reference_vertices(&mut self, event: &#support_path::Event<#package_ident>) {
+                    let refs = #support_path::EvalNested::execute_query(
+                        &self.reference_manager_log,
+                        #support_path::Read::new(),
+                    );
+                    let mut effects = std::vec::Vec::new();
+
+                    match event.op() {
+                        #(#root_dispatch,)*
+                        #package_ident::AddReference(_) | #package_ident::RemoveReference(_) => {}
+                    }
+
+                    for effect in effects {
+                        let graph_op = match effect {
+                            VertexGraphEffect::Add(id) => {
+                                #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex { id }
+                            }
+                            VertexGraphEffect::Remove(id) => {
+                                #support_path::ReferenceManager::<#support_path::LwwPolicy>::RemoveVertex { id }
+                            }
+                        };
+                        #support_path::IsLog::effect(
+                            &mut self.reference_manager_log,
+                            #support_path::Event::unfold(event.clone(), graph_op),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn generate_is_log_impl(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
@@ -361,8 +356,6 @@ impl<'a> PackageGenerator<'a> {
             quote! {}
         };
 
-        // TODO: change is_default "true && .."
-
         quote! {
             impl #path::IsLog for #package_log_name {
                 type Value = #package_value_name;
@@ -401,388 +394,440 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
-    fn generate_reference_sync_support(
-        &self,
-        creation_specs: &[(RootMeta, Vec<ContainmentPath>)],
-    ) -> TokenStream {
-        if !self.has_references() {
-            return quote! {};
+    fn referenceable_class_chain(&self, class_idx: idx::Class) -> Vec<idx::Class> {
+        fn collect(
+            ctx: &Ctx,
+            class_idx: idx::Class,
+            referenceable: &[idx::Class],
+            acc: &mut Vec<idx::Class>,
+        ) {
+            if referenceable.contains(&class_idx) && !acc.contains(&class_idx) {
+                acc.push(class_idx);
+            }
+            for super_idx in ctx.classes()[*class_idx].sup() {
+                collect(ctx, *super_idx, referenceable, acc);
+            }
         }
 
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let mut out = Vec::new();
+        collect(
+            self.ctx,
+            class_idx,
+            &self.ref_analysis.referenceable_classes,
+            &mut out,
+        );
+        out
+    }
+
+    fn generate_vertex_support_defs(&self) -> TokenStream {
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let refs_value = quote! {
+            <#path::ReferenceManager<#path::LwwPolicy> as #path::PureCRDT>::Value
+        };
+        let instance_matches = self
+            .ref_analysis
+            .referenceable_classes
+            .iter()
+            .map(|class_idx| {
+                let class_name = self.ctx.classes()[**class_idx].name();
+                let variant = format_ident!("{}Id", class_name);
+                quote! { #path::Instance::#variant(id) => &id.0 }
+            });
+
+        quote! {
+            #[derive(Debug, Clone)]
+            enum VertexGraphEffect {
+                Add(#path::Instance),
+                Remove(#path::Instance),
+            }
+
+            trait ToInstances {
+                fn to_instances(&self, object_id: #path::ObjectId) -> std::vec::Vec<#path::Instance>;
+            }
+
+            trait VertexSyncLog {
+                type Op;
+
+                fn collect_vertex_effects(
+                    &self,
+                    op: &Self::Op,
+                    event_id: &#path::EventId,
+                    object_id: &#path::ObjectId,
+                    refs: &#refs_value,
+                    out: &mut std::vec::Vec<VertexGraphEffect>,
+                );
+            }
+
+            fn instance_object_id(instance: &#path::Instance) -> &#path::ObjectId {
+                match instance {
+                    #(#instance_matches,)*
+                }
+            }
+
+            fn has_object_prefix(object_id: &#path::ObjectId, prefix: &#path::ObjectId) -> bool {
+                object_id.root == prefix.root
+                    && object_id.path.len() >= prefix.path.len()
+                    && object_id.path.iter().zip(prefix.path.iter()).all(|(left, right)| left == right)
+            }
+
+            fn remove_instances_for_prefix(
+                refs: &#refs_value,
+                prefix: &#path::ObjectId,
+                out: &mut std::vec::Vec<VertexGraphEffect>,
+            ) {
+                for instance in refs.node_weights() {
+                    if has_object_prefix(instance_object_id(instance), prefix) {
+                        out.push(VertexGraphEffect::Remove(instance.clone()));
+                    }
+                }
+            }
+
+            impl<T> ToInstances for std::boxed::Box<T>
+            where
+                T: ToInstances,
+            {
+                fn to_instances(&self, object_id: #path::ObjectId) -> std::vec::Vec<#path::Instance> {
+                    self.as_ref().to_instances(object_id)
+                }
+            }
+
+            impl<L> VertexSyncLog for std::boxed::Box<L>
+            where
+                L: VertexSyncLog,
+            {
+                type Op = std::boxed::Box<L::Op>;
+
+                fn collect_vertex_effects(
+                    &self,
+                    op: &Self::Op,
+                    event_id: &#path::EventId,
+                    object_id: &#path::ObjectId,
+                    refs: &#refs_value,
+                    out: &mut std::vec::Vec<VertexGraphEffect>,
+                ) {
+                    self.as_ref().collect_vertex_effects(op.as_ref(), event_id, object_id, refs, out);
+                }
+            }
+
+            impl<L> VertexSyncLog for moirai_crdt::list::nested_list::NestedListLog<L>
+            where
+                L: #path::IsLog + VertexSyncLog<Op = <L as #path::IsLog>::Op> + Default,
+            {
+                type Op = #path::NestedList<<L as #path::IsLog>::Op>;
+
+                fn collect_vertex_effects(
+                    &self,
+                    op: &Self::Op,
+                    event_id: &#path::EventId,
+                    object_id: &#path::ObjectId,
+                    refs: &#refs_value,
+                    out: &mut std::vec::Vec<VertexGraphEffect>,
+                ) {
+                    match op {
+                        #path::NestedList::Insert { value, .. } => {
+                            let child_id = object_id.clone().list_element(event_id.clone());
+                            VertexSyncLog::collect_vertex_effects(&L::default(), value, event_id, &child_id, refs, out);
+                        }
+                        #path::NestedList::Update { pos, value } => {
+                            let positions = #path::EvalNested::execute_query(self.positions(), #path::Read::new());
+                            let target_id = positions[*pos].clone();
+                            let child_id = object_id.clone().list_element(target_id.clone());
+                            if let Some(child) = self.children().get(&target_id) {
+                                VertexSyncLog::collect_vertex_effects(child, value, event_id, &child_id, refs, out);
+                            }
+                        }
+                        #path::NestedList::Delete { pos } => {
+                            let positions = #path::EvalNested::execute_query(self.positions(), #path::Read::new());
+                            let target_id = positions[*pos].clone();
+                            let child_id = object_id.clone().list_element(target_id);
+                            remove_instances_for_prefix(refs, &child_id, out);
+                        }
+                    }
+                }
+            }
+
+            impl<K, L> VertexSyncLog for moirai_crdt::map::uw_map::UWMapLog<K, L>
+            where
+                K: Clone + std::fmt::Debug + std::hash::Hash + Eq + ToString,
+                L: #path::IsLog + VertexSyncLog<Op = <L as #path::IsLog>::Op> + Default,
+            {
+                type Op = #path::UWMap<K, <L as #path::IsLog>::Op>;
+
+                fn collect_vertex_effects(
+                    &self,
+                    op: &Self::Op,
+                    event_id: &#path::EventId,
+                    object_id: &#path::ObjectId,
+                    refs: &#refs_value,
+                    out: &mut std::vec::Vec<VertexGraphEffect>,
+                ) {
+                    match op {
+                        #path::UWMap::Update(key, value) => {
+                            let child_id = object_id.clone().map_entry(key.to_string());
+                            if let Some(child) = self.children().get(key) {
+                                VertexSyncLog::collect_vertex_effects(child, value, event_id, &child_id, refs, out);
+                            } else {
+                                VertexSyncLog::collect_vertex_effects(&L::default(), value, event_id, &child_id, refs, out);
+                            }
+                        }
+                        #path::UWMap::Remove(key) => {
+                            let child_id = object_id.clone().map_entry(key.to_string());
+                            remove_instances_for_prefix(refs, &child_id, out);
+                        }
+                        #path::UWMap::Clear => {
+                            remove_instances_for_prefix(refs, object_id, out);
+                        }
+                    }
+                }
+            }
+
+            impl<L> VertexSyncLog for moirai_crdt::option::OptionLog<L>
+            where
+                L: #path::IsLog + VertexSyncLog<Op = <L as #path::IsLog>::Op> + Default,
+            {
+                type Op = #path::Optional<<L as #path::IsLog>::Op>;
+
+                fn collect_vertex_effects(
+                    &self,
+                    op: &Self::Op,
+                    event_id: &#path::EventId,
+                    object_id: &#path::ObjectId,
+                    refs: &#refs_value,
+                    out: &mut std::vec::Vec<VertexGraphEffect>,
+                ) {
+                    match op {
+                        #path::Optional::Set(value) => {
+                            if let Some(child) = self.child() {
+                                VertexSyncLog::collect_vertex_effects(child, value, event_id, object_id, refs, out);
+                            } else {
+                                VertexSyncLog::collect_vertex_effects(&L::default(), value, event_id, object_id, refs, out);
+                            }
+                        }
+                        #path::Optional::Unset => {
+                            remove_instances_for_prefix(refs, object_id, out);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn generate_to_instances_impls(&self) -> TokenStream {
         let support_path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let descriptor_name =
-            format_ident!("{}VertexSyncDescriptor", package_name.to_upper_camel_case());
-
-        let root_bootstraps = creation_specs.iter().map(|(root, _)| {
-            let class_name = self.root_variant_ident(*root);
-            let class_log_name = self.root_field_ident(*root);
-            let root_key = self.root_class_name(*root).to_snake_case();
-            let vertex_additions = self
-                .referenceable_root_vertex_classes(*root)
-                .into_iter()
-                .map(|class_idx| {
-                    let class_name = self.ctx.classes()[*class_idx].name();
-                    let root_id_struct = format_ident!("{}Id", class_name);
-                    let root_instance_variant = format_ident!("{}Id", class_name);
-                    quote! {
-                        let id = #support_path::#root_id_struct(
-                            #support_path::ObjectKey::Path(::std::string::String::from(#root_key))
-                        );
-                        let new_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex {
-                            id: #support_path::Instance::#root_instance_variant(id),
-                        };
-                        #support_path::IsLog::effect(
-                            &mut self.reference_manager_log,
-                            #support_path::Event::unfold(event.clone(), new_vertex)
-                        );
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            if vertex_additions.is_empty() {
-                quote! {}
-            } else {
+        let impls = self.reachable_class_indices.iter().map(|class_idx| {
+            let class = &self.ctx.classes()[**class_idx];
+            if class.is_abstract() {
+                let union_name = format_ident!("{}", class.name().to_upper_camel_case());
+                let arms = class.sub().iter().map(|sub_idx| {
+                    let sub = &self.ctx.classes()[**sub_idx];
+                    let variant = format_ident!("{}", sub.name().to_upper_camel_case());
+                    quote! { #support_path::#union_name::#variant(inner) => ToInstances::to_instances(inner, object_id) }
+                });
                 quote! {
-                    if #support_path::IsLog::is_default(&self.#class_log_name)
-                        && matches!(event.op(), #package_ident::#class_name(_))
-                    {
-                        #(#vertex_additions)*
+                    impl ToInstances for #support_path::#union_name {
+                        fn to_instances(&self, object_id: #support_path::ObjectId) -> std::vec::Vec<#support_path::Instance> {
+                            match self {
+                                #(#arms,)*
+                            }
+                        }
+                    }
+                }
+            } else {
+                let op_name = format_ident!("{}", class.name().to_upper_camel_case());
+                let instances = self.referenceable_class_chain(*class_idx).into_iter().map(|ref_idx| {
+                    let ref_name = self.ctx.classes()[*ref_idx].name();
+                    let id_ty = format_ident!("{}Id", ref_name);
+                    let variant = format_ident!("{}Id", ref_name);
+                    quote! {
+                        #support_path::Instance::#variant(#support_path::#id_ty(object_id.clone()))
+                    }
+                });
+                quote! {
+                    impl ToInstances for #support_path::#op_name {
+                        fn to_instances(&self, object_id: #support_path::ObjectId) -> std::vec::Vec<#support_path::Instance> {
+                            std::vec![#(#instances),*]
+                        }
                     }
                 }
             }
         });
 
-        let mut descriptor_entries = Vec::new();
-        let mut helper_fns = Vec::new();
-        for (root_ord, (root, paths)) in creation_specs.iter().enumerate() {
-            for (path_ord, path) in paths.iter().enumerate() {
-                let matches_create_fn = format_ident!("matches_create_{}_{}", root_ord, path_ord);
-                let should_create_fn = format_ident!("should_create_{}_{}", root_ord, path_ord);
-                let make_instance_fn = format_ident!("make_instance_{}_{}", root_ord, path_ord);
-                let lookup_deleted_id_fn =
-                    format_ident!("lookup_deleted_id_{}_{}", root_ord, path_ord);
+        quote! { #(#impls)* }
+    }
 
-                descriptor_entries.push(quote! {
-                    #descriptor_name {
-                        matches_create: Self::#matches_create_fn,
-                        should_create: Self::#should_create_fn,
-                        make_instance: Self::#make_instance_fn,
-                        lookup_deleted_id: Self::#lookup_deleted_id_fn,
+    fn generate_vertex_effect_impls(&self) -> TokenStream {
+        let support_path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let impls = self.reachable_class_indices.iter().map(|class_idx| {
+            let class = &self.ctx.classes()[**class_idx];
+            if class.is_abstract() {
+                let union_name = format_ident!("{}", class.name().to_upper_camel_case());
+                let log_name = format_ident!("{}Log", class.name().to_upper_camel_case());
+                let child_enum = format_ident!("{}Child", class.name().to_upper_camel_case());
+                let container_enum = format_ident!("{}Container", class.name().to_upper_camel_case());
+                let feat_name =
+                    format_ident!("{}{}", class.name().to_upper_camel_case(), INHERITANCE_SUFFIX);
+                let feat_log_name = format_ident!(
+                    "{}{}Log",
+                    class.name().to_upper_camel_case(),
+                    INHERITANCE_SUFFIX
+                );
+                let feat_inherited_arms = class.sup().iter().map(|super_idx| {
+                    let super_class = &self.ctx.classes()[**super_idx];
+                    let field_name_str =
+                        format!("{}{}", super_class.name(), INHERITANCE_SUFFIX).to_snake_case();
+                    let field_name = format_ident!("{}", field_name_str);
+                    let variant = format_ident!("{}", field_name_str.to_upper_camel_case());
+                    quote! {
+                        #support_path::#feat_name::#variant(inner_op) => {
+                            let child_id = object_id.clone().field(#field_name_str);
+                            VertexSyncLog::collect_vertex_effects(self.#field_name(), inner_op, event_id, &child_id, refs, out);
+                        }
+                    }
+                });
+                let feat_containment_arms = class.structural().iter().filter(|feature| {
+                    feature.kind == structural::Typ::EReference && feature.containment
+                }).map(|feature| {
+                    let field_name_str = feature.name.to_snake_case();
+                    let field_name = format_ident!("{}", field_name_str);
+                    let variant = format_ident!("{}", field_name_str.to_upper_camel_case());
+                    quote! {
+                        #support_path::#feat_name::#variant(inner_op) => {
+                            let child_id = object_id.clone().field(#field_name_str);
+                            VertexSyncLog::collect_vertex_effects(self.#field_name(), inner_op, event_id, &child_id, refs, out);
+                        }
+                    }
+                });
+                let arms = class.sub().iter().map(|sub_idx| {
+                    let sub = &self.ctx.classes()[**sub_idx];
+                    let variant = format_ident!("{}", sub.name().to_upper_camel_case());
+                    let log_ty = format_ident!("{}Log", sub.name().to_upper_camel_case());
+                    quote! {
+                        (#support_path::#union_name::#variant(inner_op), #support_path::#container_enum::Unset) => {
+                            let variant_id = object_id.clone().variant(stringify!(#variant));
+                            VertexSyncLog::collect_vertex_effects(&#support_path::#log_ty::default(), inner_op, event_id, &variant_id, refs, out);
+                        }
+                        (#support_path::#union_name::#variant(inner_op), #support_path::#container_enum::Value(child)) => {
+                            match child.as_ref() {
+                                #support_path::#child_enum::#variant(log) => {
+                                    let variant_id = object_id.clone().variant(stringify!(#variant));
+                                    VertexSyncLog::collect_vertex_effects(log, inner_op, event_id, &variant_id, refs, out);
+                                }
+                                _ => {
+                                    let variant_id = object_id.clone().variant(stringify!(#variant));
+                                    VertexSyncLog::collect_vertex_effects(&#support_path::#log_ty::default(), inner_op, event_id, &variant_id, refs, out);
+                                }
+                            }
+                        }
+                        (#support_path::#union_name::#variant(inner_op), #support_path::#container_enum::Conflicts(children)) => {
+                            let variant_id = object_id.clone().variant(stringify!(#variant));
+                            if let Some(#support_path::#child_enum::#variant(log)) = children.iter().find(|child| matches!(child, #support_path::#child_enum::#variant(_))) {
+                                VertexSyncLog::collect_vertex_effects(log, inner_op, event_id, &variant_id, refs, out);
+                            } else {
+                                VertexSyncLog::collect_vertex_effects(&#support_path::#log_ty::default(), inner_op, event_id, &variant_id, refs, out);
+                            }
+                        }
+                    }
+                });
+                quote! {
+                    impl VertexSyncLog for #support_path::#log_name {
+                        type Op = #support_path::#union_name;
+
+                        fn collect_vertex_effects(
+                            &self,
+                            op: &Self::Op,
+                            event_id: &#support_path::EventId,
+                            object_id: &#support_path::ObjectId,
+                            refs: &<#support_path::ReferenceManager<#support_path::LwwPolicy> as #support_path::PureCRDT>::Value,
+                            out: &mut std::vec::Vec<VertexGraphEffect>,
+                        ) {
+                            match (op, &self.child) {
+                                #(#arms,)*
+                            }
+                        }
+                    }
+
+                    impl VertexSyncLog for #support_path::#feat_log_name {
+                        type Op = #support_path::#feat_name;
+
+                        fn collect_vertex_effects(
+                            &self,
+                            op: &Self::Op,
+                            event_id: &#support_path::EventId,
+                            object_id: &#support_path::ObjectId,
+                            refs: &<#support_path::ReferenceManager<#support_path::LwwPolicy> as #support_path::PureCRDT>::Value,
+                            out: &mut std::vec::Vec<VertexGraphEffect>,
+                        ) {
+                            match op {
+                                #(#feat_inherited_arms,)*
+                                #(#feat_containment_arms,)*
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            } else {
+                let op_name = format_ident!("{}", class.name().to_upper_camel_case());
+                let log_name = format_ident!("{}Log", class.name().to_upper_camel_case());
+
+                let inherited_arms = class.sup().iter().map(|super_idx| {
+                    let super_class = &self.ctx.classes()[**super_idx];
+                    let field_name_str = format!("{}{}", super_class.name(), INHERITANCE_SUFFIX).to_snake_case();
+                    let field_name = format_ident!("{}", field_name_str);
+                    let variant = format_ident!("{}", field_name_str.to_upper_camel_case());
+                    quote! {
+                            #support_path::#op_name::#variant(inner_op) => {
+                                let child_id = object_id.clone().field(#field_name_str);
+                                VertexSyncLog::collect_vertex_effects(self.#field_name(), inner_op, event_id, &child_id, refs, out);
+                            }
+                        }
+                    });
+
+                let containment_arms = class.structural().iter().filter(|feature| {
+                    feature.kind == structural::Typ::EReference && feature.containment
+                }).map(|feature| {
+                    let field_name_str = feature.name.to_snake_case();
+                    let field_name = format_ident!("{}", field_name_str);
+                    let variant = format_ident!("{}", field_name_str.to_upper_camel_case());
+                    quote! {
+                        #support_path::#op_name::#variant(inner_op) => {
+                            let child_id = object_id.clone().field(#field_name_str);
+                            VertexSyncLog::collect_vertex_effects(self.#field_name(), inner_op, event_id, &child_id, refs, out);
+                        }
                     }
                 });
 
-                helper_fns.extend(
-                    self.generate_descriptor_helpers(root_ord, path_ord, *root, path)
-                        .into_iter(),
-                );
-            }
-        }
+                quote! {
+                    impl VertexSyncLog for #support_path::#log_name {
+                        type Op = #support_path::#op_name;
 
-        quote! {
-            #[derive(Clone, Copy)]
-            struct #descriptor_name {
-                matches_create: fn(&#package_ident) -> bool,
-                should_create: fn(&#package_log_name, &#package_ident) -> bool,
-                make_instance: fn(#support_path::EventId) -> #support_path::Instance,
-                lookup_deleted_id: fn(&#package_log_name, &#package_ident) -> Option<#support_path::EventId>,
-            }
+                        fn collect_vertex_effects(
+                            &self,
+                            op: &Self::Op,
+                            event_id: &#support_path::EventId,
+                            object_id: &#support_path::ObjectId,
+                            refs: &<#support_path::ReferenceManager<#support_path::LwwPolicy> as #support_path::PureCRDT>::Value,
+                            out: &mut std::vec::Vec<VertexGraphEffect>,
+                        ) {
+                            if #support_path::IsLog::is_default(self) {
+                                out.extend(ToInstances::to_instances(op, object_id.clone()).into_iter().map(VertexGraphEffect::Add));
+                            }
 
-            impl #package_log_name {
-                fn vertex_sync_descriptors() -> &'static [#descriptor_name] {
-                    &[#(#descriptor_entries),*]
-                }
-
-                fn sync_reference_vertices(&mut self, event: &#support_path::Event<#package_ident>) {
-                    #(#root_bootstraps)*
-
-                    for descriptor in Self::vertex_sync_descriptors() {
-                        if (descriptor.matches_create)(event.op())
-                            && (descriptor.should_create)(self, event.op())
-                        {
-                            let new_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::AddVertex {
-                                id: (descriptor.make_instance)(event.id().clone()),
-                            };
-                            #support_path::IsLog::effect(&mut self.reference_manager_log, #support_path::Event::unfold(event.clone(), new_vertex));
-                        }
-
-                        if let Some(event_id) = (descriptor.lookup_deleted_id)(self, event.op()) {
-                            let remove_vertex = #support_path::ReferenceManager::<#support_path::LwwPolicy>::RemoveVertex {
-                                id: (descriptor.make_instance)(event_id),
-                            };
-                            #support_path::IsLog::effect(&mut self.reference_manager_log, #support_path::Event::unfold(event.clone(), remove_vertex));
+                            match op {
+                                #support_path::#op_name::New => {}
+                                #(#inherited_arms,)*
+                                #(#containment_arms,)*
+                                _ => {}
+                            }
                         }
                     }
                 }
-
-                #(#helper_fns)*
             }
-        }
-    }
+        });
 
-    fn generate_descriptor_helpers(
-        &self,
-        root_ord: usize,
-        path_ord: usize,
-        root: RootMeta,
-        containment_path: &ContainmentPath,
-    ) -> Vec<TokenStream> {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let root_class_ident = self.root_variant_ident(root);
-        let class_log_name = self.root_field_ident(root);
-        let support_path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-
-        let matches_create_fn = format_ident!("matches_create_{}_{}", root_ord, path_ord);
-        let should_create_fn = format_ident!("should_create_{}_{}", root_ord, path_ord);
-        let make_instance_fn = format_ident!("make_instance_{}_{}", root_ord, path_ord);
-        let lookup_deleted_id_fn = format_ident!("lookup_deleted_id_{}_{}", root_ord, path_ord);
-
-        let vertex_class = &self.ctx.classes()[*containment_path.vertex_class];
-        let id_struct = format_ident!("{}Id", vertex_class.name());
-        let instance_variant = format_ident!("{}Id", vertex_class.name());
-        let is_list_path = matches!(containment_path.steps.last(), Some(PathStep::ListInsert));
-        let canonical_path = {
-            let mut segments = vec![self.root_class_name(root).to_snake_case()];
-            segments.extend(containment_path.log_field_path.iter().cloned());
-            segments.join(".")
-        };
-
-        let create_matcher = if let Some(box_idx) = containment_path
-            .steps
-            .iter()
-            .position(|step| matches!(step, PathStep::Field { is_boxed: true, .. }))
-        {
-            let outer_steps = containment_path.steps[..=box_idx].to_vec();
-            let inner_steps = &containment_path.steps[box_idx + 1..];
-            let outer_pattern = self.build_nested_pattern_with_capture(&outer_steps, "inner_val");
-            let inner_pattern = self.build_nested_pattern(inner_steps);
-            let inner_var = format_ident!("inner_val");
-            let captured_value = match outer_steps.last() {
-                Some(PathStep::Field { is_boxed: true, .. }) => quote! { #inner_var.as_ref() },
-                _ => quote! { #inner_var },
-            };
-
-            quote! {
-                fn #matches_create_fn(op: &#package_ident) -> bool {
-                    match op {
-                        #package_ident::#root_class_ident(#outer_pattern) => {
-                            matches!(#captured_value, #inner_pattern)
-                        }
-                        _ => false,
-                    }
-                }
-            }
-        } else {
-            let pattern = self.build_nested_pattern(&containment_path.steps);
-            quote! {
-                fn #matches_create_fn(op: &#package_ident) -> bool {
-                    matches!(op, #package_ident::#root_class_ident(#pattern))
-                }
-            }
-        };
-
-        let make_instance = if is_list_path {
-            quote! {
-                fn #make_instance_fn(event_id: #support_path::EventId) -> #support_path::Instance {
-                    #support_path::Instance::#instance_variant(
-                        #support_path::#id_struct(#support_path::ObjectKey::Event(event_id))
-                    )
-                }
-            }
-        } else {
-            quote! {
-                fn #make_instance_fn(_event_id: #support_path::EventId) -> #support_path::Instance {
-                    #support_path::Instance::#instance_variant(
-                        #support_path::#id_struct(
-                            #support_path::ObjectKey::Path(::std::string::String::from(#canonical_path))
-                        )
-                    )
-                }
-            }
-        };
-
-        let log_path = self.build_log_field_path(&containment_path.log_field_path);
-        let should_create = if matches!(containment_path.steps.last(), Some(PathStep::ListInsert)) {
-            quote! {
-                fn #should_create_fn(&self, _op: &#package_ident) -> bool {
-                    true
-                }
-            }
-        } else {
-            quote! {
-                fn #should_create_fn(&self, _op: &#package_ident) -> bool {
-                    self
-                        .#class_log_name()
-                        #log_path
-                        .__id()
-                        .is_none()
-                }
-            }
-        };
-
-        let lookup_deleted_id = if !is_list_path
-            || containment_path
-                .steps
-                .iter()
-                .any(|step| matches!(step, PathStep::Field { is_boxed: true, .. }))
-        {
-            quote! {
-                fn #lookup_deleted_id_fn(&self, _op: &#package_ident) -> Option<#support_path::EventId> {
-                    None
-                }
-            }
-        } else {
-            let delete_steps: Vec<PathStep> = containment_path
-                .steps
-                .iter()
-                .map(|step| match step {
-                    PathStep::ListInsert => PathStep::ListDelete,
-                    other => other.clone(),
-                })
-                .collect();
-            let pattern = self.build_nested_pattern(&delete_steps);
-            quote! {
-                fn #lookup_deleted_id_fn(&self, op: &#package_ident) -> Option<#support_path::EventId> {
-                    match op {
-                        #package_ident::#root_class_ident(#pattern) => {
-                            let positions = #support_path::EvalNested::execute_query(
-                                self.#class_log_name() #log_path .positions(),
-                                #support_path::Read::new(),
-                            );
-                            Some(positions[*pos].clone())
-                        }
-                        _ => None,
-                    }
-                }
-            }
-        };
-
-        vec![
-            create_matcher,
-            should_create,
-            make_instance,
-            lookup_deleted_id,
-        ]
-    }
-
-    fn build_nested_pattern(&self, steps: &[PathStep]) -> TokenStream {
-        if steps.is_empty() {
-            return quote! { _ };
-        }
-
-        let mut pattern = self.build_leaf_pattern(steps.last().unwrap());
-        for step in steps.iter().rev().skip(1) {
-            pattern = self.wrap_step_pattern(step, pattern);
-        }
-        pattern
-    }
-
-    fn build_nested_pattern_with_capture(
-        &self,
-        steps: &[PathStep],
-        capture_name: &str,
-    ) -> TokenStream {
-        if steps.is_empty() {
-            let var = Ident::new(capture_name, Span::call_site());
-            return quote! { #var };
-        }
-
-        let var = Ident::new(capture_name, Span::call_site());
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-
-        let mut pattern = match steps.last().unwrap() {
-            PathStep::Field {
-                class_name,
-                variant_name,
-                ..
-            } => {
-                let class = Ident::new(class_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#class::#variant(#var) }
-            }
-            PathStep::Variant {
-                union_name,
-                variant_name,
-            } => {
-                let union_n = Ident::new(union_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#union_n::#variant(#var) }
-            }
-            _ => quote! { #var },
-        };
-
-        for step in steps.iter().rev().skip(1) {
-            pattern = self.wrap_step_pattern(step, pattern);
-        }
-
-        pattern
-    }
-
-    fn build_leaf_pattern(&self, step: &PathStep) -> TokenStream {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        match step {
-            PathStep::ListInsert => quote! { #path::NestedList::Insert { .. } },
-            PathStep::ListDelete => quote! { #path::NestedList::Delete { pos } },
-            PathStep::Field {
-                class_name,
-                variant_name,
-                ..
-            } => {
-                let class = Ident::new(class_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#class::#variant(..) }
-            }
-            PathStep::Variant {
-                union_name,
-                variant_name,
-            } => {
-                let union_n = Ident::new(union_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#union_n::#variant(..) }
-            }
-        }
-    }
-
-    fn wrap_step_pattern(&self, step: &PathStep, inner: TokenStream) -> TokenStream {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        match step {
-            PathStep::Field {
-                class_name,
-                variant_name,
-                ..
-            } => {
-                let class = Ident::new(class_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#class::#variant(#inner) }
-            }
-            PathStep::Variant {
-                union_name,
-                variant_name,
-            } => {
-                let union_n = Ident::new(union_name, Span::call_site());
-                let variant = Ident::new(variant_name, Span::call_site());
-                quote! { #path::#union_n::#variant(#inner) }
-            }
-            PathStep::ListInsert => quote! { #path::NestedList::Insert { .. } },
-            PathStep::ListDelete => quote! { #path::NestedList::Delete { pos } },
-        }
-    }
-
-    fn build_log_field_path(&self, path: &[String]) -> TokenStream {
-        let fields: Vec<Ident> = path
-            .iter()
-            .map(|f| Ident::new(f, Span::call_site()))
-            .collect();
-
-        quote! { #(.#fields())* }
+        quote! { #(#impls)* }
     }
 
     fn generate_eval_nested_impl(&self) -> TokenStream {
@@ -819,5 +864,27 @@ impl<'a> PackageGenerator<'a> {
                 }
             }
         }
+    }
+}
+
+impl<'a> Generate for PackageGenerator<'a> {
+    fn generate(&self) -> anyhow::Result<Fragment> {
+        let package_enum = self.generate_package_enum();
+        let package_value = self.generate_package_value_struct();
+        let package_log = self.generate_package_log_struct();
+        let reference_sync_support = self.generate_reference_sync_support();
+        let is_log_impl = self.generate_is_log_impl();
+        let eval_nested_impl = self.generate_eval_nested_impl();
+
+        let tokens = quote! {
+            #package_enum
+            #package_value
+            #package_log
+            #reference_sync_support
+            #is_log_impl
+            #eval_nested_impl
+        };
+
+        Ok(Fragment::new(tokens, self.imports(), vec![]))
     }
 }

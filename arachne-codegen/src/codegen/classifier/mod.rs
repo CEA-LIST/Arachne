@@ -332,11 +332,11 @@ impl<'a> ClassGenerator<'a> {
                         matches!(value_feature.bounds.ubound, Some(1)),
                         "UWMap value feature must be single-valued"
                     );
-                    let payload = quote! { #path::UWMapValue<#key_ty, Box<#value_payload>> };
+                    let payload = quote! { #path::UWMap<#key_ty, Box<#value_payload>> };
                     let log = quote! { #path::UWMapLog<#key_ty, #value_log> };
                     imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(CrdtMap::UWMap))));
                     imports.push(Import::Custom(
-                        "moirai_crdt::map::uw_map::UWMap as UWMapValue".to_string(),
+                        "moirai_crdt::map::uw_map::UWMap".to_string(),
                     ));
                     let mut all_warnings = warnings;
                     all_warnings.append(&mut field_warnings);
@@ -388,7 +388,7 @@ impl<'a> ClassGenerator<'a> {
                                 quote! { Box<#target_log> }
                             };
                         (
-                            quote! { #path::NestedListValue<#inner_payload> },
+                            quote! { #path::NestedList<#inner_payload> },
                             quote! { #path::NestedListLog<#inner_log> },
                             vec![
                                 Import::Crdt(Crdt::Nested(NestedCrdt::List)),

@@ -222,8 +222,8 @@ pub fn generate_from_parser<'a>(
         &parser.ctx,
         pack.idx,
         top_level_roots,
+        reachable_package_classes.clone(),
         &reference_analysis,
-        &cycle_analysis,
     );
     let fragment = package_gen.generate()?;
     package.register(fragment);

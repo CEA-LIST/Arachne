@@ -59,28 +59,28 @@ impl<'a> Generate for AttributeGenerator<'a> {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.attribute.name.clone(),
                 property: "transient".into(),
-                value: transient.to_string().into(),
+                value: transient.to_string(),
             })
         }
         if let Some(volatile) = self.attribute.volatile {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.attribute.name.clone(),
                 property: "volatile".into(),
-                value: volatile.to_string().into(),
+                value: volatile.to_string(),
             })
         }
         if let Some(derived) = self.attribute.derived {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.attribute.name.clone(),
                 property: "derived".into(),
-                value: derived.to_string().into(),
+                value: derived.to_string(),
             })
         }
         if let Some(derived) = self.attribute.unsettable {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.attribute.name.clone(),
                 property: "derived".into(),
-                value: derived.to_string().into(),
+                value: derived.to_string(),
             })
         }
 

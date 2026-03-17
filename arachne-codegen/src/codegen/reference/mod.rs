@@ -38,13 +38,13 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 
-        let object_key = self.generate_object_key();
+        let object_id = self.generate_object_id();
         let id_structs = self.generate_id_structs(&analysis);
         let edge_structs = self.generate_edge_structs(&analysis);
         let typed_graph = self.generate_typed_graph(&analysis);
 
         let tokens = quote! {
-            #object_key
+            #object_id
             #id_structs
             #edge_structs
             #typed_graph
@@ -60,14 +60,71 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    fn generate_object_key(&self) -> TokenStream {
+    fn generate_object_id(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD)).unwrap();
         quote! {
             #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-            pub enum ObjectKey {
-                Event(#path::EventId),
-                Path(std::string::String),
+            pub struct ObjectId {
+                pub root: RootId,
+                pub path: std::vec::Vec<PathSegment>,
+            }
+
+            impl #path::Display for ObjectId {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.root)?;
+                    for segment in &self.path {
+                        match segment {
+                            PathSegment::Field(name) => write!(f, "/{}", name)?,
+                            PathSegment::ListElement(id) => write!(f, "/{}", id)?,
+                            PathSegment::MapEntry(key) => write!(f, "/{}", key)?,
+                            PathSegment::Variant(name) => write!(f, "/{}", name)?,
+                        }
+                    }
+                    Ok(())
+                }
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+            pub enum RootId {
+                Package(&'static str),
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+            pub enum PathSegment {
+                Field(&'static str),
+                ListElement(#path::EventId),
+                MapEntry(std::string::String),
+                Variant(&'static str),
+            }
+
+            impl ObjectId {
+                pub fn root(name: &'static str) -> Self {
+                    Self {
+                        root: RootId::Package(name),
+                        path: std::vec::Vec::new(),
+                    }
+                }
+
+                pub fn field(mut self, name: &'static str) -> Self {
+                    self.path.push(PathSegment::Field(name));
+                    self
+                }
+
+                pub fn list_element(mut self, id: #path::EventId) -> Self {
+                    self.path.push(PathSegment::ListElement(id));
+                    self
+                }
+
+                pub fn map_entry(mut self, key: impl Into<std::string::String>) -> Self {
+                    self.path.push(PathSegment::MapEntry(key.into()));
+                    self
+                }
+
+                pub fn variant(mut self, name: &'static str) -> Self {
+                    self.path.push(PathSegment::Variant(name));
+                    self
+                }
             }
         }
     }
@@ -101,7 +158,7 @@ impl<'a> ReferenceGenerator<'a> {
             .collect()
     }
 
-    /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {ClassName}Id(pub ObjectKey);`
+    /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {ClassName}Id(pub ObjectId);`
     /// for each class that participates in a non-containment reference.
     pub fn generate_id_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let structs: Vec<TokenStream> = analysis
@@ -112,7 +169,7 @@ impl<'a> ReferenceGenerator<'a> {
                 let id_name = format_ident!("{}Id", class.name());
                 quote! {
                     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-                    pub struct #id_name(pub ObjectKey);
+                    pub struct #id_name(pub ObjectId);
                 }
             })
             .collect();

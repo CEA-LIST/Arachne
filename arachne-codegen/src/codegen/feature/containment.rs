@@ -69,28 +69,28 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.reference.name.clone(),
                 property: "transient".into(),
-                value: transient.to_string().into(),
+                value: transient.to_string(),
             })
         }
         if let Some(volatile) = self.reference.volatile {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.reference.name.clone(),
                 property: "volatile".into(),
-                value: volatile.to_string().into(),
+                value: volatile.to_string(),
             })
         }
         if let Some(derived) = self.reference.derived {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.reference.name.clone(),
                 property: "derived".into(),
-                value: derived.to_string().into(),
+                value: derived.to_string(),
             })
         }
         if let Some(derived) = self.reference.unsettable {
             warnings.push(Warning::UnsupportedFeatureProperty {
                 feature: self.reference.name.clone(),
                 property: "derived".into(),
-                value: derived.to_string().into(),
+                value: derived.to_string(),
             })
         }
 
