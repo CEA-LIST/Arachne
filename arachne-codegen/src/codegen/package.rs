@@ -84,6 +84,7 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::Version),
             Import::Protocol(Protocol::Event),
             Import::Protocol(Protocol::QueryOperation),
+            Import::Protocol(Protocol::ObjectPath),
             Import::Custom("crate::classifiers::*"),
         ];
 
@@ -93,6 +94,7 @@ impl<'a> PackageGenerator<'a> {
                 Import::Log(Log::VecLog),
                 Import::Protocol(Protocol::PureCRDT),
                 Import::Protocol(Protocol::SinkCollector),
+                Import::Protocol(Protocol::IsLogSink),
                 Import::Custom("crate::references::*"),
             ]);
         }
@@ -253,24 +255,59 @@ impl<'a> PackageGenerator<'a> {
         } else {
             quote! {}
         };
+        let root_variants = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let log_field = self.root_field_ident(root);
+            let field_stringify = self.root_class_name(root).to_snake_case();
+            quote! { #package_ident::#variant(o) =>
+                #path::IsLogSink::effect_with_sink(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink),
+            }
+        });
+
         let effect = if self.has_references() {
             quote! {
             let mut sink = #path::SinkCollector::new();
                 match event.op().clone() {
+                    #(#root_variants)*
+                    #package_ident::AddReference(o) =>
+                        self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o))),
+                    #package_ident::RemoveReference(o) =>
+                        self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o))),
                     _ => {}
                 }
                 for sink in sink.into_sinks() {
-                    // TODO: event id may not be uniques in the Typed Graph!
-                    if let Some(op) = #path::vertex_ops_from_sink::<#path::LwwPolicy>(&sink) {
-                        let vertex_event = #path::Event::unfold(event.clone(), op);
-                        self.reference_manager_log.effect(vertex_event);
+                    match sink.effect() {
+                        SinkEffect::Create | SinkEffect::Update => {
+                            let vertex_ops = #path::instance_from_path(&sink.path())
+                                .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
+                            if let Some(o) = vertex_ops {
+                                self.reference_manager_log
+                                    .effect(#path::Event::unfold(event.clone(), o));
+                            }
+                        }
+                        SinkEffect::Delete => {
+                            let graph = self.reference_manager_log.eval(#path::Read::new());
+                            let removals = graph
+                                .node_weights()
+                                .filter(|n| sink.path().is_prefix_of(instance_path(n)))
+                                .collect::<Vec<_>>();
+                            for removal in removals {
+                                let removal_event = #path::Event::unfold(
+                                    event.clone(),
+                                    #path::ReferenceManager::RemoveVertex {
+                                        id: removal.clone(),
+                                    },
+                                );
+                                self.reference_manager_log.effect(removal_event);
+                            }
+                        }
                     }
                 }
             }
         } else {
             quote! {
                 match event.op().clone() {
-                    _ => {}
+                    #(#root_variants)*
                 }
             }
         };

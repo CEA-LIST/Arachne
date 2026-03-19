@@ -80,9 +80,9 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
 
 fn render_lib_rs() -> TokenStream {
     quote! {
-        mod package;
-        mod classifiers;
-        mod references;
+        pub mod package;
+        pub mod classifiers;
+        pub mod references;
     }
 }
 

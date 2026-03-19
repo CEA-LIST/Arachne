@@ -172,6 +172,7 @@ pub enum Protocol {
     SinkCollector,
     PathSegment,
     ObjectPath,
+    IsLogSink,
 }
 
 impl ToUseStatement for Protocol {
@@ -191,9 +192,13 @@ impl ToUseStatement for Protocol {
             Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
             Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
-            Protocol::PathSegment => format!("{}::state::sink::PathSegment", PROTOCOL_PREFIX),
+            Protocol::PathSegment => format!(
+                "{}::state::sink::PathSegment::{{Field, ListElement, MapEntry, Variant}}",
+                PROTOCOL_PREFIX
+            ),
             Protocol::ObjectPath => format!("{}::state::sink::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
+            Protocol::IsLogSink => format!("{}::state::sink::IsLogSink", PROTOCOL_PREFIX),
         }
     }
 }

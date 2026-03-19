@@ -173,7 +173,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 ],
             ),
             (BoundKind::Many, false, true) => (
-                quote! { #path::ListLog<#log_type<#crdt_inner>> },
+                quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
                 vec![
                     Import::Log(Log::EventGraph),
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),

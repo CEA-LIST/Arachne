@@ -56,35 +56,38 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         let id_structs = self.generate_id_structs(&analysis);
         let edge_structs = self.generate_edge_structs(&analysis);
         let typed_graph = self.generate_typed_graph(&analysis);
-
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
+        let instances = analysis
+            .referenceable_classes
+            .iter()
+            .map(|&class_idx| {
+                let class = &self.ctx.classes()[*class_idx];
+                let id_name = format_ident!("{}Id", class.name());
+                let variant_name = format_ident!("{}Id", class.name());
+                quote! {
+                    #variant_name(#id_name)
+                }
+            })
+            .collect::<Vec<_>>();
 
-        let vertex_ops_from_sink = if analysis.has_references() {
-            quote! {
-                pub fn vertex_ops_from_sink<P: #path::Policy>(sink: &#path::Sink) -> Option<ReferenceManager<P>> {
-                    let instance = instance_from_path(sink.object_path())?;
-
-                    match sink.effect() {
-                        #path::SinkEffect::Create | #path::SinkEffect::Update => {
-                            Some(#path::ReferenceManager::AddVertex { id: instance })
-                        }
-                        #path::SinkEffect::Delete => Some(#path::ReferenceManager::RemoveVertex { id: instance }),
-                    }
+        let instance_path = quote! {
+            pub fn instance_path(instance: &Instance) -> &#path::ObjectPath {
+                match instance {
+                    #(Instance::#instances(id) => &id.0,)*
                 }
             }
-        } else {
-            quote! {}
         };
 
         let tokens = quote! {
             #instance_from_path
-
-            #vertex_ops_from_sink
+            #instance_path
 
             #id_structs
+
             #edge_structs
+
             #typed_graph
         };
 
@@ -137,6 +140,13 @@ impl<'a> ReferenceGenerator<'a> {
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
 
+        // let to_instance = self.ref_analysis.referenceable_classes
+        // .iter()
+        // .map(|&class_idx| {
+        //     let class = &self.ctx.classes()[*class_idx];
+        //     if class.is_abstract() {}
+        // });
+
         let mut seen = std::collections::HashSet::<String>::new();
         let mut arms = Vec::new();
 
@@ -163,19 +173,20 @@ impl<'a> ReferenceGenerator<'a> {
                 let id_ty = format_ident!("{}Id", vertex_class.name());
                 let variant = format_ident!("{}Id", vertex_class.name());
 
+                // TODO: map entry
                 let seg_patterns: Vec<TokenStream> = containment_path
                     .steps
                     .iter()
                     .filter_map(|step| match step {
                         PathStep::Field { variant_name, .. } => {
                             let field_name = variant_name.to_snake_case();
-                            Some(quote! { Field(#field_name) })
+                            Some(quote! { #path::Field(#field_name) })
                         }
                         PathStep::Variant { variant_name, .. } => {
-                            Some(quote! { Variant(#variant_name) })
+                            Some(quote! { #path::Variant(#variant_name) })
                         }
                         PathStep::ListInsert | PathStep::ListDelete => {
-                            Some(quote! { ListElement(_) })
+                            Some(quote! { #path::ListElement(_) })
                         }
                     })
                     .collect();
@@ -199,8 +210,6 @@ impl<'a> ReferenceGenerator<'a> {
 
         quote! {
             fn instance_from_path(path: &#path::ObjectPath) -> Option<Instance> {
-                use #path::PathSegment::*;
-
                 let segs = path.segments();
 
                 match segs {
