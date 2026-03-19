@@ -17,7 +17,7 @@ pub enum Import {
     CrdtOp(CrdtOp),
     Macros(Macros),
     Protocol(Protocol),
-    Custom(String),
+    Custom(&'static str),
 }
 
 impl Import {
@@ -27,7 +27,7 @@ impl Import {
             Import::Crdt(crdt) => crdt.path(),
             Import::Macros(macros) => macros.path(),
             Import::Protocol(protocol) => protocol.path(),
-            Import::Custom(path) => path.clone(),
+            Import::Custom(path) => path.to_string(),
             Import::CrdtOp(op) => op.path(),
         }
     }
@@ -162,10 +162,16 @@ pub enum Protocol {
     EvalNested,
     IsLog,
     Version,
+    Policy,
     LwwPolicy,
     Event,
     PureCRDT,
     QueryOperation,
+    Sink,
+    SinkEffect,
+    SinkCollector,
+    PathSegment,
+    ObjectPath,
 }
 
 impl ToUseStatement for Protocol {
@@ -182,6 +188,12 @@ impl ToUseStatement for Protocol {
             Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
             Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
             Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
+            Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
+            Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
+            Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
+            Protocol::PathSegment => format!("{}::state::sink::PathSegment", PROTOCOL_PREFIX),
+            Protocol::ObjectPath => format!("{}::state::sink::ObjectPath", PROTOCOL_PREFIX),
+            Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
         }
     }
 }

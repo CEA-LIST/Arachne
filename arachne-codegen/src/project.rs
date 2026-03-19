@@ -22,9 +22,9 @@ pub fn write_project(
 
     fs::create_dir_all(&src_dir)?;
 
-    let main_rs = render_main_rs();
+    let lib_rs = render_lib_rs();
 
-    let (formatted_classifiers, formatted_references, formatted_package, formatted_main) =
+    let (formatted_classifiers, formatted_references, formatted_package, formatted_lib) =
         match config.format_code {
             Formatting::None => {
                 // Do not format the code
@@ -32,27 +32,27 @@ pub fn write_project(
                     classifiers_code.to_string(),
                     references_code.to_string(),
                     package_code.to_string(),
-                    main_rs.to_string(),
+                    lib_rs.to_string(),
                 )
             }
             Formatting::Rustfmt => (
                 format_with_rustfmt(classifiers_code)?,
                 format_with_rustfmt(references_code)?,
                 format_with_rustfmt(package_code)?,
-                format_with_rustfmt(main_rs)?,
+                format_with_rustfmt(lib_rs)?,
             ),
             Formatting::Prettyplease => (
                 format_with_prettyplease(classifiers_code)?,
                 format_with_prettyplease(references_code)?,
                 format_with_prettyplease(package_code)?,
-                format_with_prettyplease(main_rs)?,
+                format_with_prettyplease(lib_rs)?,
             ),
         };
 
     let cargo_toml = render_cargo_toml(&project_name, &config.moirai_root)?;
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
-    fs::write(src_dir.join("main.rs"), formatted_main)?;
+    fs::write(src_dir.join("lib.rs"), formatted_lib)?;
     fs::write(src_dir.join("classifiers.rs"), formatted_classifiers)?;
     fs::write(src_dir.join("references.rs"), formatted_references)?;
     fs::write(src_dir.join("package.rs"), formatted_package)?;
@@ -67,22 +67,22 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     let moirai_crdt = moirai_root.join("moirai-crdt");
     let moirai_protocol = moirai_root.join("moirai-protocol");
     let moirai_macros = moirai_root.join("moirai-macros");
+    let moirai_fuzz = moirai_root.join("moirai-fuzz");
 
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\"]\nfuzz = []\n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
-        to_path_string(&moirai_macros)
+        to_path_string(&moirai_macros),
+        to_path_string(&moirai_fuzz)
     ))
 }
 
-fn render_main_rs() -> TokenStream {
+fn render_lib_rs() -> TokenStream {
     quote! {
         mod package;
         mod classifiers;
         mod references;
-
-        fn main() {}
     }
 }
 

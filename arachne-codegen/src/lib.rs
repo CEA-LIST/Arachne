@@ -214,17 +214,17 @@ pub fn generate_from_parser<'a>(
         classifiers.register(fragment);
     }
 
-    let refs = ReferenceGenerator::new(&parser.ctx, reachable_package_classes.clone());
+    let refs = ReferenceGenerator::new(
+        &parser.ctx,
+        reachable_package_classes.clone(),
+        top_level_roots.clone(),
+        &cycle_analysis,
+    );
     let fragment = refs.generate()?;
     references.register(fragment);
 
-    let package_gen = PackageGenerator::new(
-        &parser.ctx,
-        pack.idx,
-        top_level_roots,
-        reachable_package_classes.clone(),
-        &reference_analysis,
-    );
+    let package_gen =
+        PackageGenerator::new(&parser.ctx, pack.idx, top_level_roots, &reference_analysis);
     let fragment = package_gen.generate()?;
     package.register(fragment);
 

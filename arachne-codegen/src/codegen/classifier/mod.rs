@@ -335,9 +335,7 @@ impl<'a> ClassGenerator<'a> {
                     let payload = quote! { #path::UWMap<#key_ty, Box<#value_payload>> };
                     let log = quote! { #path::UWMapLog<#key_ty, #value_log> };
                     imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(CrdtMap::UWMap))));
-                    imports.push(Import::Custom(
-                        "moirai_crdt::map::uw_map::UWMap".to_string(),
-                    ));
+                    imports.push(Import::Custom("moirai_crdt::map::uw_map::UWMap"));
                     let mut all_warnings = warnings;
                     all_warnings.append(&mut field_warnings);
                     return Ok((payload, log, imports, all_warnings));
@@ -392,9 +390,7 @@ impl<'a> ClassGenerator<'a> {
                             quote! { #path::NestedListLog<#inner_log> },
                             vec![
                                 Import::Crdt(Crdt::Nested(NestedCrdt::List)),
-                                Import::Custom(
-                                    "moirai_crdt::list::nested_list::NestedList".to_string(),
-                                ),
+                                Import::Custom("moirai_crdt::list::nested_list::NestedList"),
                             ],
                         )
                     }
