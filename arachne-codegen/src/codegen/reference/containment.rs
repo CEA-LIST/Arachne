@@ -3,9 +3,10 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 
 use crate::{
     codegen::{
+        annotation::uw_map_spec,
         classifier::INHERITANCE_SUFFIX,
         cycles::{BoxingStrategy, CycleAnalysis},
-        reference::analysis::{ReferenceAnalysis, find_concrete_descendants},
+        reference::analysis::ReferenceAnalysis,
     },
     utils::hash::HashSet,
 };
@@ -13,34 +14,30 @@ use crate::{
 /// A single step in the containment path from root to a referenceable class.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathStep {
-    /// A record field access: `ClassName::VariantName(inner)`.
+    /// A record field access emitted as `path.field("...")`.
     Field {
         class_name: String,
         variant_name: String,
         is_boxed: bool,
     },
-    /// A union variant: `UnionName::VariantName(inner)`.
+    /// A union variant emitted as `path.variant("...")`.
     Variant {
         union_name: String,
         variant_name: String,
     },
-    /// `List::Insert { .. }` — creation of a new element in a list.
-    ListInsert,
-    /// `List::Delete { pos }` — deletion of an element in a list.
-    ListDelete,
+    /// A nested-list child emitted as `path.list_element(...)`.
+    ListElement,
+    /// A map child emitted as `path.map_entry(...)`.
+    MapEntry,
 }
 
 /// A complete path from root to a creation/deletion point for a referenceable class.
 #[derive(Debug, Clone)]
 pub struct ContainmentPath {
     /// The referenceable class that this path leads to.
-    /// This is the class at the "reference definition level" — if the class is abstract,
-    /// the concrete subclass(es) are the ones actually created, but we use the abstract
-    /// class's ID type for the vertex.
     pub vertex_class: idx::Class,
-    /// Steps from the root (exclusive) to the creation/deletion point.
+    /// Steps from the root field (exclusive) to the concrete object path emitted by sinks.
     pub steps: Vec<PathStep>,
-    /// For deletion: the field path on the log struct to access the list's position data.
     pub log_field_path: Vec<String>,
 }
 
@@ -57,10 +54,7 @@ struct TraversalState {
     result: Vec<ContainmentPath>,
 }
 
-/// Find all creation paths from the root class to each referenceable class.
-///
-/// A creation path exists for every List-type containment feature that can contain
-/// (directly or through concrete subclasses) a referenceable class.
+/// Find all sink paths from a package root class to each concrete referenceable class.
 pub fn find_creation_paths(
     ctx: &Ctx,
     root_class: idx::Class,
@@ -82,12 +76,15 @@ pub fn find_creation_paths(
         result: Vec::new(),
     };
 
-    find_paths_recursive(&env, root_class, &mut state, false);
+    if ctx.classes()[*root_class].is_abstract() {
+        explore_abstract_class(&env, root_class, &mut state, false);
+    } else {
+        find_paths_recursive(&env, root_class, &mut state, false);
+    }
 
     state.result
 }
 
-/// Recursively explore the containment tree to find paths to referenceable classes.
 fn find_paths_recursive(
     env: &TraversalEnv,
     current_class: idx::Class,
@@ -96,6 +93,15 @@ fn find_paths_recursive(
 ) {
     if !state.visited.insert(current_class) {
         return; // Avoid infinite loops in cyclic containment
+    }
+
+    if env.referenceable_set.contains(&current_class) {
+        push_unique_path(
+            &mut state.result,
+            current_class,
+            state.current_steps.clone(),
+            state.current_log_path.clone(),
+        );
     }
 
     let class = &env.ctx.classes()[*current_class];
@@ -136,30 +142,20 @@ fn find_paths_recursive(
         state.current_log_path.push(field_snake.clone());
 
         if is_many {
-            // This is a List containment: check if the target is referenceable
-            // and generate List::Insert / List::Delete patterns.
-            // We do NOT recurse into the target's sub-features because
-            // operations on existing list elements are wrapped in the List type
-            // and cannot be matched with direct nesting.
-            check_list_target(
-                env.ctx,
-                target_idx,
-                env.referenceable_set,
-                &state.current_steps,
-                &state.current_log_path,
-                &mut state.result,
-            );
-        } else {
-            check_single_target(
-                env.ctx,
-                target_idx,
-                env.referenceable_set,
-                &state.current_steps,
-                &state.current_log_path,
-                &mut state.result,
-            );
+            if uw_map_spec(feature).is_some() {
+                state.current_steps.push(PathStep::MapEntry);
+            } else {
+                state.current_steps.push(PathStep::ListElement);
+            }
 
-            // Single containment: recurse into the target class
+            if target_class.is_abstract() {
+                explore_abstract_class(env, target_idx, state, passed_through_box || is_boxed);
+            } else {
+                find_paths_recursive(env, target_idx, state, passed_through_box || is_boxed);
+            }
+
+            state.current_steps.pop();
+        } else {
             let new_passed = passed_through_box || is_boxed;
             if target_class.is_abstract() {
                 explore_abstract_class(env, target_idx, state, new_passed);
@@ -197,8 +193,6 @@ fn find_paths_recursive(
     state.visited.remove(&current_class);
 }
 
-/// Explore features defined on an abstract class (through its *Feat record).
-/// This handles the case where inherited features contain referenceable classes.
 fn find_feat_paths_recursive(
     env: &TraversalEnv,
     class_idx: idx::Class,
@@ -241,24 +235,21 @@ fn find_feat_paths_recursive(
         state.current_log_path.push(field_snake.clone());
 
         if is_many {
-            check_list_target(
-                env.ctx,
-                target_idx,
-                env.referenceable_set,
-                &state.current_steps,
-                &state.current_log_path,
-                &mut state.result,
-            );
-        } else {
-            check_single_target(
-                env.ctx,
-                target_idx,
-                env.referenceable_set,
-                &state.current_steps,
-                &state.current_log_path,
-                &mut state.result,
-            );
+            if uw_map_spec(feature).is_some() {
+                state.current_steps.push(PathStep::MapEntry);
+            } else {
+                state.current_steps.push(PathStep::ListElement);
+            }
 
+            let new_passed = passed_through_box || is_boxed;
+            if target_class.is_abstract() {
+                explore_abstract_class(env, target_idx, state, new_passed);
+            } else {
+                find_paths_recursive(env, target_idx, state, new_passed);
+            }
+
+            state.current_steps.pop();
+        } else {
             let new_passed = passed_through_box || is_boxed;
             if target_class.is_abstract() {
                 explore_abstract_class(env, target_idx, state, new_passed);
@@ -292,100 +283,6 @@ fn find_feat_paths_recursive(
     }
 }
 
-/// Check if a list-contained target class (or any of its concrete descendants)
-/// is referenceable, and if so, record creation paths.
-fn check_list_target(
-    ctx: &Ctx,
-    target_idx: idx::Class,
-    referenceable_set: &HashSet<idx::Class>,
-    current_steps: &[PathStep],
-    current_log_path: &[String],
-    result: &mut Vec<ContainmentPath>,
-) {
-    // Check if the target class itself is referenceable
-    if referenceable_set.contains(&target_idx) {
-        // Direct match: the list contains instances of a referenceable class
-        let mut insert_steps = current_steps.to_owned();
-        insert_steps.push(PathStep::ListInsert);
-
-        result.push(ContainmentPath {
-            vertex_class: target_idx,
-            steps: insert_steps,
-            log_field_path: current_log_path.to_vec(),
-        });
-    }
-
-    // Check if the target (or any of its concrete descendants) is a subtype
-    // of a referenceable class. This covers:
-    // - Abstract target with concrete descendants that inherit from a referenceable class
-    // - Concrete target that itself inherits from a referenceable class
-    let target_class = &ctx.classes()[*target_idx];
-    let classes_to_check = if target_class.is_abstract() {
-        find_concrete_descendants(ctx, target_idx)
-    } else {
-        vec![target_idx]
-    };
-
-    for concrete_idx in &classes_to_check {
-        for &ref_class in referenceable_set {
-            if ref_class != target_idx && is_subtype_of(ctx, *concrete_idx, ref_class) {
-                let mut insert_steps = current_steps.to_owned();
-                insert_steps.push(PathStep::ListInsert);
-
-                if !result.iter().any(|p| {
-                    p.vertex_class == ref_class && steps_prefix_match(&p.steps, &insert_steps)
-                }) {
-                    result.push(ContainmentPath {
-                        vertex_class: ref_class,
-                        steps: insert_steps,
-                        log_field_path: current_log_path.to_vec(),
-                    });
-                }
-            }
-        }
-    }
-}
-
-/// Check if a singly-contained target class (or any of its concrete descendants)
-/// is referenceable, and if so, record creation paths.
-fn check_single_target(
-    ctx: &Ctx,
-    target_idx: idx::Class,
-    referenceable_set: &HashSet<idx::Class>,
-    current_steps: &[PathStep],
-    current_log_path: &[String],
-    result: &mut Vec<ContainmentPath>,
-) {
-    if referenceable_set.contains(&target_idx) {
-        push_unique_path(
-            result,
-            target_idx,
-            current_steps.to_vec(),
-            current_log_path.to_vec(),
-        );
-    }
-
-    let target_class = &ctx.classes()[*target_idx];
-    let classes_to_check = if target_class.is_abstract() {
-        find_concrete_descendants(ctx, target_idx)
-    } else {
-        vec![target_idx]
-    };
-
-    for concrete_idx in &classes_to_check {
-        for &ref_class in referenceable_set {
-            if ref_class != target_idx && is_subtype_of(ctx, *concrete_idx, ref_class) {
-                push_unique_path(
-                    result,
-                    ref_class,
-                    current_steps.to_vec(),
-                    current_log_path.to_vec(),
-                );
-            }
-        }
-    }
-}
-
 fn push_unique_path(
     result: &mut Vec<ContainmentPath>,
     vertex_class: idx::Class,
@@ -406,7 +303,6 @@ fn push_unique_path(
     });
 }
 
-/// Explore an abstract class by following all its concrete subclass variants.
 fn explore_abstract_class(
     env: &TraversalEnv,
     abstract_class: idx::Class,
@@ -432,52 +328,4 @@ fn explore_abstract_class(
 
         state.current_steps.pop();
     }
-}
-
-/// Check if class `a` is a subtype of class `b` (transitively through inheritance).
-fn is_subtype_of(ctx: &Ctx, a: idx::Class, b: idx::Class) -> bool {
-    if a == b {
-        return true;
-    }
-    let a_class = &ctx.classes()[*a];
-    for super_idx in a_class.sup() {
-        if is_subtype_of(ctx, *super_idx, b) {
-            return true;
-        }
-    }
-    false
-}
-
-/// Check if two step sequences share the same prefix (for deduplication).
-fn steps_prefix_match(a: &[PathStep], b: &[PathStep]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b.iter()).all(|(x, y)| match (x, y) {
-        (
-            PathStep::Field {
-                class_name: a1,
-                variant_name: a2,
-                ..
-            },
-            PathStep::Field {
-                class_name: b1,
-                variant_name: b2,
-                ..
-            },
-        ) => a1 == b1 && a2 == b2,
-        (
-            PathStep::Variant {
-                union_name: a1,
-                variant_name: a2,
-            },
-            PathStep::Variant {
-                union_name: b1,
-                variant_name: b2,
-            },
-        ) => a1 == b1 && a2 == b2,
-        (PathStep::ListInsert, PathStep::ListInsert) => true,
-        (PathStep::ListDelete, PathStep::ListDelete) => true,
-        _ => false,
-    })
 }

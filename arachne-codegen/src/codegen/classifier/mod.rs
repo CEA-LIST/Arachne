@@ -33,6 +33,14 @@ pub struct ClassGenerator<'a> {
     cycle_analysis: &'a CycleAnalysis,
 }
 
+struct TransparentVariantSpec {
+    variant_name: Ident,
+    payload_ty: TokenStream,
+    log_ty: TokenStream,
+    imports: Vec<Import>,
+    warnings: Vec<Warning>,
+}
+
 impl<'a> ClassGenerator<'a> {
     pub fn new(class: &'a Class, ctx: &'a Ctx, cycle_analysis: &'a CycleAnalysis) -> Self {
         Self {
@@ -135,7 +143,7 @@ impl<'a> ClassGenerator<'a> {
     fn transparent_variant_spec(
         &self,
         subclass: &Class,
-    ) -> anyhow::Result<Option<(Ident, TokenStream, TokenStream, Vec<Import>, Vec<Warning>)>> {
+    ) -> anyhow::Result<Option<TransparentVariantSpec>> {
         let Some(field_name) = transparent_field(subclass) else {
             return Ok(None);
         };
@@ -156,7 +164,13 @@ impl<'a> ClassGenerator<'a> {
         let (payload_ty, log_ty, imports, warnings) =
             self.transparent_field_types(subclass, field)?;
 
-        Ok(Some((variant_name, payload_ty, log_ty, imports, warnings)))
+        Ok(Some(TransparentVariantSpec {
+            variant_name,
+            payload_ty,
+            log_ty,
+            imports,
+            warnings,
+        }))
     }
 
     fn transparent_field_types(
@@ -199,7 +213,7 @@ impl<'a> ClassGenerator<'a> {
                             quote! { #path::Counter<#rust_typ> },
                             quote! { #path::VecLog<#path::Counter<#rust_typ>> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(primitive))),
                             ],
                         )
@@ -210,7 +224,7 @@ impl<'a> ClassGenerator<'a> {
                             quote! { #path::#flag_name },
                             quote! { #path::VecLog<#path::#flag_name> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::Flag(
                                     flag,
                                 )))),
@@ -224,7 +238,7 @@ impl<'a> ClassGenerator<'a> {
                             quote! { #path::#reg_name<#rust_typ> },
                             quote! { #path::VecLog<#path::#reg_name<#rust_typ>> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(
                                     Primitive::Register(register),
                                 ))),
@@ -438,8 +452,13 @@ impl<'a> ClassGenerator<'a> {
         let mut union_warnings = Vec::new();
         for idx in self.class.sub() {
             let subclass = &self.ctx.classes()[**idx];
-            if let Some((variant_name, payload_ty, log_ty, imports, warnings)) =
-                self.transparent_variant_spec(subclass)?
+            if let Some(TransparentVariantSpec {
+                variant_name,
+                payload_ty,
+                log_ty,
+                imports,
+                warnings,
+            }) = self.transparent_variant_spec(subclass)?
             {
                 let payload_alias = format_ident!("{}{}Value", name, variant_name);
                 let log_alias = format_ident!("{}{}Log", name, variant_name);

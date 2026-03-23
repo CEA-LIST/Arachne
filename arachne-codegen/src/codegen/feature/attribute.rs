@@ -121,7 +121,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
-                    Import::Log(Log::VecLog),
+                    Import::Log(Log::Vec),
                 )
             }
             Primitive::Flag(_) => {
@@ -129,7 +129,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name },
-                    Import::Log(Log::VecLog),
+                    Import::Log(Log::Vec),
                 )
             }
             Primitive::Register(_) => {
@@ -138,7 +138,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
-                    Import::Log(Log::VecLog),
+                    Import::Log(Log::Vec),
                 )
             }
             Primitive::List => {

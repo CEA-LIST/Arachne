@@ -236,7 +236,7 @@ impl<'a> ContainmentGenerator<'a> {
                         (
                             quote! { #path::VecLog<#path::Counter<#rust_ty>> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(primitive))),
                             ],
                         )
@@ -246,7 +246,7 @@ impl<'a> ContainmentGenerator<'a> {
                         (
                             quote! { #path::VecLog<#path::#flag_name> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::Flag(
                                     flag,
                                 )))),
@@ -260,7 +260,7 @@ impl<'a> ContainmentGenerator<'a> {
                         (
                             quote! { #path::VecLog<#path::#register_name<#rust_ty>> },
                             vec![
-                                Import::Log(Log::VecLog),
+                                Import::Log(Log::Vec),
                                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(
                                     Primitive::Register(register),
                                 ))),

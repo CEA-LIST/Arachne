@@ -125,15 +125,17 @@ impl ToUseStatement for Crdt {
 
 #[derive(Clone, Debug)]
 pub enum Log {
-    VecLog,
+    Vec,
     EventGraph,
+    PartiallyOrdered,
 }
 
 impl ToUseStatement for Log {
     fn path(&self) -> String {
         match self {
-            Log::VecLog => format!("{}::state::po_log::VecLog", PROTOCOL_PREFIX),
+            Log::Vec => format!("{}::state::po_Log::Vec", PROTOCOL_PREFIX),
             Log::EventGraph => format!("{}::state::event_graph::EventGraph", PROTOCOL_PREFIX),
+            Log::PartiallyOrdered => format!("{}::state::po_log::POLog", PROTOCOL_PREFIX),
         }
     }
 }
@@ -162,8 +164,10 @@ pub enum Protocol {
     EvalNested,
     IsLog,
     Version,
+    ReplicaIdx,
     Policy,
     LwwPolicy,
+    FairPolicy,
     Event,
     PureCRDT,
     QueryOperation,
@@ -173,6 +177,8 @@ pub enum Protocol {
     PathSegment,
     ObjectPath,
     IsLogSink,
+    Interner,
+    TranslateIds,
 }
 
 impl ToUseStatement for Protocol {
@@ -185,7 +191,9 @@ impl ToUseStatement for Protocol {
             }
             Protocol::IsLog => format!("{}::state::log::IsLog", PROTOCOL_PREFIX),
             Protocol::Version => format!("{}::clock::version_vector::Version", PROTOCOL_PREFIX),
+            Protocol::ReplicaIdx => format!("{}::replica::ReplicaIdx", PROTOCOL_PREFIX),
             Protocol::LwwPolicy => format!("{}::policy::LwwPolicy", CRDT_PREFIX),
+            Protocol::FairPolicy => format!("{}::policy::FairPolicy", CRDT_PREFIX),
             Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
             Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
             Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
@@ -199,6 +207,10 @@ impl ToUseStatement for Protocol {
             Protocol::ObjectPath => format!("{}::state::sink::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
             Protocol::IsLogSink => format!("{}::state::sink::IsLogSink", PROTOCOL_PREFIX),
+            Protocol::Interner => format!("{}::utils::intern_str::Interner", PROTOCOL_PREFIX),
+            Protocol::TranslateIds => {
+                format!("{}::utils::translate_ids::TranslateIds", PROTOCOL_PREFIX)
+            }
         }
     }
 }

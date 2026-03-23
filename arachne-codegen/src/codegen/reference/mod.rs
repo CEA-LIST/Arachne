@@ -53,29 +53,25 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         }
 
         let instance_from_path = self.generate_instance_from_path(&analysis);
-        let id_structs = self.generate_id_structs(&analysis);
         let edge_structs = self.generate_edge_structs(&analysis);
         let typed_graph = self.generate_typed_graph(&analysis);
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
-        let instances = analysis
+        let instance_variants = analysis
             .referenceable_classes
             .iter()
             .map(|&class_idx| {
                 let class = &self.ctx.classes()[*class_idx];
-                let id_name = format_ident!("{}Id", class.name());
                 let variant_name = format_ident!("{}Id", class.name());
-                quote! {
-                    #variant_name(#id_name)
-                }
+                variant_name
             })
             .collect::<Vec<_>>();
 
         let instance_path = quote! {
             pub fn instance_path(instance: &Instance) -> &#path::ObjectPath {
                 match instance {
-                    #(Instance::#instances(id) => &id.0,)*
+                    #(Instance::#instance_variants(id) => &id.0,)*
                 }
             }
         };
@@ -84,7 +80,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             #instance_from_path
             #instance_path
 
-            #id_structs
+            // #id_structs
 
             #edge_structs
 
@@ -93,12 +89,8 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 
         let imports = vec![
             Import::Macros(Macros::TypedGraph),
-            Import::Protocol(Protocol::Sink),
             Import::Protocol(Protocol::ObjectPath),
             Import::Protocol(Protocol::PathSegment),
-            Import::Protocol(Protocol::SinkEffect),
-            Import::Protocol(Protocol::Policy),
-            Import::Custom("crate::references::*"),
         ];
 
         Ok(Fragment::new(tokens, imports, vec![]))
@@ -106,33 +98,42 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    fn referenceable_class_chain(
+    fn shortest_discriminating_suffixes(
         &self,
-        class_idx: idx::Class,
-        analysis: &ReferenceAnalysis,
-    ) -> Vec<idx::Class> {
-        fn collect(
-            ctx: &Ctx,
-            class_idx: idx::Class,
-            referenceable: &[idx::Class],
-            acc: &mut Vec<idx::Class>,
-        ) {
-            if referenceable.contains(&class_idx) && !acc.contains(&class_idx) {
-                acc.push(class_idx);
+        full_paths: &[(idx::Class, Vec<PathPatternSegment>)],
+    ) -> Vec<(idx::Class, Vec<PathPatternSegment>)> {
+        let mut result = Vec::new();
+
+        for (i, (vertex_class, full_path)) in full_paths.iter().enumerate() {
+            let mut chosen = full_path.clone();
+
+            for suffix_len in 1..=full_path.len() {
+                let suffix = full_path[full_path.len() - suffix_len..].to_vec();
+                let ambiguous =
+                    full_paths
+                        .iter()
+                        .enumerate()
+                        .any(|(j, (other_class, other_path))| {
+                            i != j
+                                && other_class != vertex_class
+                                && other_path.len() >= suffix_len
+                                && other_path[other_path.len() - suffix_len..] == suffix
+                        });
+
+                if !ambiguous {
+                    chosen = suffix;
+                    break;
+                }
             }
-            for super_idx in ctx.classes()[*class_idx].sup() {
-                collect(ctx, *super_idx, referenceable, acc);
+
+            if !result.iter().any(|(existing_class, existing_suffix)| {
+                existing_class == vertex_class && existing_suffix == &chosen
+            }) {
+                result.push((*vertex_class, chosen));
             }
         }
 
-        let mut out = Vec::new();
-        collect(
-            self.ctx,
-            class_idx,
-            &analysis.referenceable_classes,
-            &mut out,
-        );
-        out
+        result
     }
 
     fn generate_instance_from_path(&self, analysis: &ReferenceAnalysis) -> TokenStream {
@@ -140,76 +141,37 @@ impl<'a> ReferenceGenerator<'a> {
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
 
-        // let to_instance = self.ref_analysis.referenceable_classes
-        // .iter()
-        // .map(|&class_idx| {
-        //     let class = &self.ctx.classes()[*class_idx];
-        //     if class.is_abstract() {}
-        // });
-
-        let mut seen = std::collections::HashSet::<String>::new();
+        let mut full_paths = Vec::<(idx::Class, Vec<PathPatternSegment>)>::new();
         let mut arms = Vec::new();
 
         for &root_idx in &self.root_class_indices {
-            let root_class = &self.ctx.classes()[*root_idx];
-            if root_class.is_concrete() {
-                for ref_class_idx in self.referenceable_class_chain(root_idx, analysis) {
-                    let ref_class = &self.ctx.classes()[*ref_class_idx];
-                    let id_ty = format_ident!("{}Id", ref_class.name());
-                    let variant = format_ident!("{}Id", ref_class.name());
-                    let key = format!("root:{}:{}", root_class.name(), ref_class.name());
-                    if seen.insert(key) {
-                        arms.push(quote! {
-                            [] => Some(Instance::#variant(#id_ty(path.clone())))
-                        });
-                    }
-                }
-            }
+            let root_field = self.ctx.classes()[*root_idx].name().to_snake_case();
 
             for containment_path in
                 find_creation_paths(self.ctx, root_idx, analysis, self.cycle_analysis)
             {
                 let vertex_class = &self.ctx.classes()[*containment_path.vertex_class];
-                let id_ty = format_ident!("{}Id", vertex_class.name());
-                let variant = format_ident!("{}Id", vertex_class.name());
-
-                // TODO: map entry
-                let seg_patterns: Vec<TokenStream> = containment_path
-                    .steps
-                    .iter()
-                    .filter_map(|step| match step {
-                        PathStep::Field { variant_name, .. } => {
-                            let field_name = variant_name.to_snake_case();
-                            Some(quote! { #path::Field(#field_name) })
-                        }
-                        PathStep::Variant { variant_name, .. } => {
-                            Some(quote! { #path::Variant(#variant_name) })
-                        }
-                        PathStep::ListInsert | PathStep::ListDelete => {
-                            Some(quote! { #path::ListElement(_) })
-                        }
-                    })
-                    .collect();
-
-                let pattern_key = seg_patterns
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("|");
-                let key = format!("{}:{}", vertex_class.name(), pattern_key);
-
-                if seen.insert(key) {
-                    arms.push(quote! {
-                        [.., #(#seg_patterns),*] => {
-                            Some(Instance::#variant(#id_ty(path.clone())))
-                        }
-                    });
-                }
+                let mut seg_patterns = vec![PathPatternSegment::Field(root_field.clone())];
+                seg_patterns.extend(containment_path.steps.iter().map(PathPatternSegment::from));
+                full_paths.push((vertex_class.idx, seg_patterns));
             }
         }
 
+        for (vertex_class, seg_patterns) in self.shortest_discriminating_suffixes(&full_paths) {
+            let vertex_class = &self.ctx.classes()[*vertex_class];
+            let id_ty = format_ident!("{}Id", vertex_class.name());
+            let variant = format_ident!("{}Id", vertex_class.name());
+            let seg_patterns = seg_patterns.iter().map(|segment| segment.to_tokens(&path));
+
+            arms.push(quote! {
+                [.., #(#seg_patterns),*] => {
+                    Some(Instance::#variant(#id_ty(path.clone())))
+                }
+            });
+        }
+
         quote! {
-            fn instance_from_path(path: &#path::ObjectPath) -> Option<Instance> {
+            pub fn instance_from_path(path: &#path::ObjectPath) -> Option<Instance> {
                 let segs = path.segments();
 
                 match segs {
@@ -220,7 +182,23 @@ impl<'a> ReferenceGenerator<'a> {
         }
     }
 
-    fn reference_type_names(&self, analysis: &ReferenceAnalysis) -> Vec<(Ident, Ident)> {
+    fn edge_type_names(&self, analysis: &ReferenceAnalysis) -> Vec<Ident> {
+        analysis
+            .refs
+            .iter()
+            .map(|r| {
+                let source_class = &self.ctx.classes()[*r.source_class];
+                let base_name = format!(
+                    "{}{}Edge",
+                    source_class.name().to_upper_camel_case(),
+                    r.reference_name.to_upper_camel_case()
+                );
+                Ident::new(&base_name, Span::call_site())
+            })
+            .collect()
+    }
+
+    fn connection_names(&self, analysis: &ReferenceAnalysis) -> Vec<Ident> {
         let mut counts: HashMap<String, usize> = HashMap::default();
 
         analysis
@@ -228,10 +206,11 @@ impl<'a> ReferenceGenerator<'a> {
             .iter()
             .map(|r| {
                 let source_class = &self.ctx.classes()[*r.source_class];
+                let target_class = &self.ctx.classes()[*r.target_class];
                 let base_name = format!(
-                    "{}{}",
+                    "{}To{}",
                     source_class.name().to_upper_camel_case(),
-                    r.reference_name.to_upper_camel_case()
+                    target_class.name().to_upper_camel_case()
                 );
                 let suffix = counts.entry(base_name.clone()).or_insert(0);
                 let unique_name = if *suffix == 0 {
@@ -241,47 +220,29 @@ impl<'a> ReferenceGenerator<'a> {
                 };
                 *suffix += 1;
 
-                (
-                    Ident::new(&format!("{unique_name}Edge"), Span::call_site()),
-                    Ident::new(&unique_name, Span::call_site()),
-                )
+                Ident::new(&unique_name, Span::call_site())
             })
             .collect()
-    }
-
-    pub fn generate_id_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
-        let path =
-            syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
-                .unwrap();
-        let structs: Vec<TokenStream> = analysis
-            .referenceable_classes
-            .iter()
-            .map(|&class_idx| {
-                let class = &self.ctx.classes()[*class_idx];
-                let id_name = format_ident!("{}Id", class.name());
-                quote! {
-                    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-                    pub struct #id_name(pub #path::ObjectPath);
-                }
-            })
-            .collect();
-
-        quote! { #(#structs)* }
     }
 
     /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {RefName}Edge;`
     /// for each non-containment reference.
     fn generate_edge_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
-        let reference_names = self.reference_type_names(analysis);
+        let mut seen = std::collections::HashSet::new();
+        let edge_names = self.edge_type_names(analysis);
         let structs: Vec<TokenStream> = analysis
             .refs
             .iter()
-            .zip(reference_names.iter())
-            .map(|(_, (edge_name, _))| {
-                quote! {
+            .zip(edge_names.iter())
+            .filter_map(|(_, edge_name)| {
+                if !seen.insert(edge_name.to_string()) {
+                    return None;
+                }
+
+                Some(quote! {
                     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
                     pub struct #edge_name;
-                }
+                })
             })
             .collect();
 
@@ -292,7 +253,8 @@ impl<'a> ReferenceGenerator<'a> {
     fn generate_typed_graph(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD)).unwrap();
-        let reference_names = self.reference_type_names(analysis);
+        let edge_names = self.edge_type_names(analysis);
+        let connection_names = self.connection_names(analysis);
 
         // Vertices: one per referenceable class
         let vertices: Vec<Ident> = analysis
@@ -308,7 +270,7 @@ impl<'a> ReferenceGenerator<'a> {
         let connections: Vec<TokenStream> = analysis
             .refs
             .iter()
-            .zip(reference_names.iter())
+            .zip(edge_names.iter().zip(connection_names.iter()))
             .map(|(r, (edge_name, conn_name))| {
                 let source_class = &self.ctx.classes()[*r.source_class];
                 let target_class = &self.ctx.classes()[*r.target_class];
@@ -340,6 +302,36 @@ impl<'a> ReferenceGenerator<'a> {
                     #(#connections),*
                 }
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PathPatternSegment {
+    Field(String),
+    Variant(String),
+    ListElement,
+    MapEntry,
+}
+
+impl PathPatternSegment {
+    fn to_tokens(&self, path: &syn::Path) -> TokenStream {
+        match self {
+            Self::Field(name) => quote! { #path::Field(#name) },
+            Self::Variant(name) => quote! { #path::Variant(#name) },
+            Self::ListElement => quote! { #path::ListElement(_) },
+            Self::MapEntry => quote! { #path::MapEntry(_) },
+        }
+    }
+}
+
+impl From<&PathStep> for PathPatternSegment {
+    fn from(step: &PathStep) -> Self {
+        match step {
+            PathStep::Field { variant_name, .. } => Self::Field(variant_name.to_snake_case()),
+            PathStep::Variant { variant_name, .. } => Self::Variant(variant_name.to_snake_case()),
+            PathStep::ListElement => Self::ListElement,
+            PathStep::MapEntry => Self::MapEntry,
         }
     }
 }

@@ -35,11 +35,19 @@ impl ReferenceAnalysis {
 
 /// Analyze the Ecore model to find all non-containment references.
 ///
-/// For abstract source/target classes, the abstract class itself is recorded
-/// (not its concrete subclasses), since the reference is defined at that level.
+/// References are projected onto the concrete classes that can actually appear
+/// in the generated model. For example, a reference `StructuralFeature -> Classifier`
+/// becomes:
+/// - `Attribute -> Class`
+/// - `Attribute -> DataType`
+/// - `Reference -> Class`
+/// - `Reference -> DataType`
+///
+/// restricted to the classes that are part of the generated package slice.
 pub fn analyze_references(ctx: &Ctx, package_classes: &[idx::Class]) -> ReferenceAnalysis {
     let package_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
     let mut refs = Vec::new();
+    let mut seen_refs = HashSet::default();
     let mut referenceable_set = HashSet::default();
 
     for &class_idx in package_classes {
@@ -63,18 +71,47 @@ pub fn analyze_references(ctx: &Ctx, package_classes: &[idx::Class]) -> Referenc
                 continue;
             }
 
-            refs.push(NonContainmentRef {
-                source_class: class_idx,
-                target_class: target_idx,
-                reference_name: feature.name.clone(),
-                lower_bound: feature.bounds.lbound,
-                upper_bound: feature.bounds.ubound,
-            });
+            let concrete_sources = concrete_classes_in_package(ctx, class_idx, &package_set);
+            let concrete_targets = concrete_classes_in_package(ctx, target_idx, &package_set);
 
-            referenceable_set.insert(class_idx);
-            referenceable_set.insert(target_idx);
+            for source_class in &concrete_sources {
+                for target_class in &concrete_targets {
+                    let key = (
+                        *source_class,
+                        *target_class,
+                        feature.name.clone(),
+                        feature.bounds.lbound,
+                        feature.bounds.ubound,
+                    );
+
+                    if !seen_refs.insert(key) {
+                        continue;
+                    }
+
+                    refs.push(NonContainmentRef {
+                        source_class: *source_class,
+                        target_class: *target_class,
+                        reference_name: feature.name.clone(),
+                        lower_bound: feature.bounds.lbound,
+                        upper_bound: feature.bounds.ubound,
+                    });
+
+                    referenceable_set.insert(*source_class);
+                    referenceable_set.insert(*target_class);
+                }
+            }
         }
     }
+
+    refs.sort_by_key(|r| {
+        (
+            r.source_class,
+            r.target_class,
+            r.reference_name.clone(),
+            r.lower_bound,
+            r.upper_bound,
+        )
+    });
 
     // Stable ordering: sort by class index
     let mut referenceable_classes: Vec<idx::Class> = referenceable_set.into_iter().collect();
@@ -84,6 +121,23 @@ pub fn analyze_references(ctx: &Ctx, package_classes: &[idx::Class]) -> Referenc
         refs,
         referenceable_classes,
     }
+}
+
+fn concrete_classes_in_package(
+    ctx: &Ctx,
+    class_idx: idx::Class,
+    package_set: &HashSet<idx::Class>,
+) -> Vec<idx::Class> {
+    let mut classes = if ctx.classes()[*class_idx].is_concrete() {
+        vec![class_idx]
+    } else {
+        find_concrete_descendants(ctx, class_idx)
+    };
+
+    classes.retain(|class_idx| package_set.contains(class_idx));
+    classes.sort_by_key(|class_idx| *class_idx);
+    classes.dedup();
+    classes
 }
 
 /// Find all concrete subclasses of a class (recursively).

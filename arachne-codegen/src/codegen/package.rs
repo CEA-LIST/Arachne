@@ -82,20 +82,26 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
+            Import::Protocol(Protocol::ReplicaIdx),
             Import::Protocol(Protocol::Event),
             Import::Protocol(Protocol::QueryOperation),
             Import::Protocol(Protocol::ObjectPath),
+            Import::Protocol(Protocol::SinkEffect),
+            Import::Protocol(Protocol::Interner),
+            Import::Protocol(Protocol::TranslateIds),
+            Import::Log(Log::PartiallyOrdered),
             Import::Custom("crate::classifiers::*"),
         ];
 
         if self.has_references() {
             imports.extend([
-                Import::Protocol(Protocol::LwwPolicy),
-                Import::Log(Log::VecLog),
+                Import::Protocol(Protocol::FairPolicy),
+                Import::Log(Log::Vec),
                 Import::Protocol(Protocol::PureCRDT),
                 Import::Protocol(Protocol::SinkCollector),
                 Import::Protocol(Protocol::IsLogSink),
                 Import::Custom("crate::references::*"),
+                Import::Custom("crate::classifiers::*"),
             ]);
         }
 
@@ -141,7 +147,7 @@ impl<'a> PackageGenerator<'a> {
         });
         let refs_field = if self.has_references() {
             quote! {
-                pub refs: <#path::ReferenceManager<#path::LwwPolicy> as #path::PureCRDT>::Value,
+                pub refs: <#path::ReferenceManager<#path::FairPolicy> as #path::PureCRDT>::Value,
             }
         } else {
             quote! {}
@@ -178,14 +184,14 @@ impl<'a> PackageGenerator<'a> {
         });
         let reference_field = if self.has_references() {
             quote! {
-                reference_manager_log: #path::VecLog<#path::ReferenceManager<#path::LwwPolicy>>,
+                reference_manager_log: #path::VecLog<#path::ReferenceManager<#path::FairPolicy>>,
             }
         } else {
             quote! {}
         };
         let reference_getter = if self.has_references() {
             quote! {
-                pub fn reference_manager_log(&self) -> &#path::VecLog<#path::ReferenceManager<#path::LwwPolicy>> {
+                pub fn reference_manager_log(&self) -> &#path::VecLog<#path::ReferenceManager<#path::FairPolicy>> {
                     &self.reference_manager_log
                 }
             }
@@ -259,8 +265,14 @@ impl<'a> PackageGenerator<'a> {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
             let field_stringify = self.root_class_name(root).to_snake_case();
-            quote! { #package_ident::#variant(o) =>
+            if self.has_references() {
+                quote! { #package_ident::#variant(o) =>
                 #path::IsLogSink::effect_with_sink(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink),
+                }
+            } else {
+                quote! {
+                    #package_ident::#variant(o) => self.#log_field.effect(#path::Event::unfold(event.clone(), o)),
+                }
             }
         });
 
@@ -273,11 +285,10 @@ impl<'a> PackageGenerator<'a> {
                         self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o))),
                     #package_ident::RemoveReference(o) =>
                         self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o))),
-                    _ => {}
                 }
                 for sink in sink.into_sinks() {
                     match sink.effect() {
-                        SinkEffect::Create | SinkEffect::Update => {
+                        #path::SinkEffect::Create | #path::SinkEffect::Update => {
                             let vertex_ops = #path::instance_from_path(&sink.path())
                                 .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
                             if let Some(o) = vertex_ops {
@@ -285,21 +296,13 @@ impl<'a> PackageGenerator<'a> {
                                     .effect(#path::Event::unfold(event.clone(), o));
                             }
                         }
-                        SinkEffect::Delete => {
-                            let graph = self.reference_manager_log.eval(#path::Read::new());
-                            let removals = graph
-                                .node_weights()
-                                .filter(|n| sink.path().is_prefix_of(instance_path(n)))
-                                .collect::<Vec<_>>();
-                            for removal in removals {
-                                let removal_event = #path::Event::unfold(
-                                    event.clone(),
-                                    #path::ReferenceManager::RemoveVertex {
-                                        id: removal.clone(),
-                                    },
-                                );
-                                self.reference_manager_log.effect(removal_event);
-                            }
+                        #path::SinkEffect::Delete => {
+                            self.reference_manager_log.effect(__package::Event::unfold(
+                                event.clone(),
+                                __package::ReferenceManager::DeleteSubtree {
+                                    prefix: sink.path().clone(),
+                                },
+                            ));
                         }
                     }
                 }
@@ -380,6 +383,38 @@ impl<'a> PackageGenerator<'a> {
             }
         }
     }
+
+    fn translate_ids_impl(&self) -> TokenStream {
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let translate_root_arms = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            quote! { #package_ident::#variant(op) => #package_ident::#variant(op.clone()) }
+        });
+        let translate_ref_arms = if self.has_references() {
+            quote! {
+                #package_ident::AddReference(op) => {
+                    #package_ident::AddReference(op.translate_ids(from, interner))
+                }
+                #package_ident::RemoveReference(op) => {
+                    #package_ident::RemoveReference(op.translate_ids(from, interner))
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        quote! {
+            impl __package::TranslateIds for #package_ident {
+                fn translate_ids(&self, from: __package::ReplicaIdx, interner: &__package::Interner) -> Self {
+                    match self {
+                        #(#translate_root_arms,)*
+                        #translate_ref_arms
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl<'a> Generate for PackageGenerator<'a> {
@@ -387,17 +422,29 @@ impl<'a> Generate for PackageGenerator<'a> {
         let package_enum = self.generate_package_enum();
         let package_value = self.generate_package_value_struct();
         let package_log = self.generate_package_log_struct();
-        // let reference_sync_support = self.generate_reference_sync_support();
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
+        let translate_ids = self.translate_ids_impl();
+
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let ref_manager_log = if self.has_references() {
+            quote! {
+                pub type ReferenceManagerLog = #path::POLog<#path::ReferenceManager<#path::FairPolicy>, #path::ReferenceManagerState<#path::FairPolicy>>;
+            }
+        } else {
+            quote! {}
+        };
 
         let tokens = quote! {
+            #ref_manager_log
+
             #package_enum
             #package_value
             #package_log
-            // #reference_sync_support
             #is_log_impl
             #eval_nested_impl
+            #translate_ids
         };
 
         Ok(Fragment::new(tokens, self.imports(), vec![]))
