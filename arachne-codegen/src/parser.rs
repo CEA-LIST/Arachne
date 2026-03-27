@@ -23,3 +23,49 @@ impl EcoreParser {
         Ok(Self { ctx })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::EcoreParser;
+
+    #[test]
+    fn rejects_unknown_external_datatype() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            eType="ecore:EDataType ../../org.eclipse.uml2.types/model/Types.ecore#//String"/>
+    </eClassifiers>
+</ecore:EPackage>"##;
+
+        assert!(EcoreParser::from_string(ecore).is_err());
+    }
+
+    #[test]
+    fn rejects_interpackage_links() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="root"
+    nsURI="http://example.org/root"
+    nsPrefix="root">
+    <eClassifiers xsi:type="ecore:EClass" name="A">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="toB" eType="#//sub/B"/>
+    </eClassifiers>
+    <ecore:EPackage name="sub" nsURI="http://example.org/root/sub" nsPrefix="sub">
+        <eClassifiers xsi:type="ecore:EClass" name="B"/>
+    </ecore:EPackage>
+</ecore:EPackage>"##;
+
+        assert!(EcoreParser::from_string(ecore).is_err());
+    }
+}

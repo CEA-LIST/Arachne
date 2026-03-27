@@ -676,7 +676,19 @@ impl<'a> PathCtx<'a> {
     }
 
     pub fn resolve_etype(&mut self, s: impl AsRef<str>) -> Res<idx::Class> {
-        repr::Path::resolve_etype(self, s)
+        let etype = repr::Path::resolve_etype(self, s.as_ref())?;
+        let class = &self.ctx[etype];
+
+        if class.path.last() != self.ctx.builtin_pack() && class.path != self.path {
+            bail!(
+                "inter-package links are not supported: current package `{}` cannot reference type `{}` from package `{}`",
+                self.path.display(self.ctx.packs()),
+                class.name(),
+                class.path.display(self.ctx.packs()),
+            );
+        }
+
+        Ok(etype)
     }
 
     pub fn add_sub_pack(&mut self, name: impl Into<String>) -> Res<idx::Pack> {

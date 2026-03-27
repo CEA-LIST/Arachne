@@ -159,6 +159,11 @@ impl<'a> ReferenceGenerator<'a> {
 
         for (vertex_class, seg_patterns) in self.shortest_discriminating_suffixes(&full_paths) {
             let vertex_class = &self.ctx.classes()[*vertex_class];
+            println!(
+                "Vertex class {}: path pattern: {:?}",
+                vertex_class.name(),
+                seg_patterns
+            );
             let id_ty = format_ident!("{}Id", vertex_class.name());
             let variant = format_ident!("{}Id", vertex_class.name());
             let seg_patterns = seg_patterns.iter().map(|segment| segment.to_tokens(&path));
@@ -355,8 +360,8 @@ impl PathPatternSegment {
 impl From<&PathStep> for PathPatternSegment {
     fn from(step: &PathStep) -> Self {
         match step {
-            PathStep::Field { variant_name, .. } => Self::Field(variant_name.to_snake_case()),
-            PathStep::Variant { variant_name, .. } => Self::Variant(variant_name.to_snake_case()),
+            PathStep::Field { variant_name, .. } => Self::Field(variant_name.to_lowercase()),
+            PathStep::Variant { variant_name, .. } => Self::Variant(variant_name.to_lowercase()),
             PathStep::ListElement => Self::ListElement,
             PathStep::MapEntry => Self::MapEntry,
         }

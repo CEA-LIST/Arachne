@@ -1029,22 +1029,7 @@ impl<'input> Parser<'input> {
             }
         }
 
-        // Try to resolve the eType, if it fails with an external reference, create external structural
-        let mut structural = match ctx.resolve_etype(etype_str) {
-            Ok(etype) => repr::Structural::new(name, typ, etype, bounds),
-            Err(err) => {
-                // Check if this is an external type reference
-                if etype_str.contains(".ecore#") {
-                    warn!(
-                        "External type reference in structural feature: {}",
-                        etype_str
-                    );
-                    repr::Structural::with_external(name, typ, etype_str, bounds)
-                } else {
-                    return Err(err);
-                }
-            }
-        };
+        let mut structural = repr::Structural::new(name, typ, ctx.resolve_etype(etype_str)?, bounds);
 
         if let Some(containment) = containment {
             structural.set_containment(helpers::bool(containment)?);
