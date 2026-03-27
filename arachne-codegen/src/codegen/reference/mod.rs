@@ -266,6 +266,31 @@ impl<'a> ReferenceGenerator<'a> {
             })
             .collect();
 
+        let mut seen_edge_types = std::collections::HashSet::new();
+        let edge_types: Vec<TokenStream> = analysis
+            .refs
+            .iter()
+            .zip(edge_names.iter())
+            .filter_map(|(r, edge_name)| {
+                if !seen_edge_types.insert(edge_name.to_string()) {
+                    return None;
+                }
+
+                let lower = proc_macro2::Literal::usize_unsuffixed(r.lower_bound);
+                let upper_token: TokenStream = match r.upper_bound {
+                    Some(u) => {
+                        let lit = proc_macro2::Literal::usize_unsuffixed(u);
+                        quote! { #lit }
+                    }
+                    None => quote! { * },
+                };
+
+                Some(quote! {
+                    #edge_name [#lower, #upper_token]
+                })
+            })
+            .collect();
+
         // Connections: one per non-containment reference
         let connections: Vec<TokenStream> = analysis
             .refs
@@ -276,29 +301,31 @@ impl<'a> ReferenceGenerator<'a> {
                 let target_class = &self.ctx.classes()[*r.target_class];
                 let source_id = format_ident!("{}Id", source_class.name());
                 let target_id = format_ident!("{}Id", target_class.name());
-                let lower = proc_macro2::Literal::usize_unsuffixed(r.lower_bound);
-                let upper_token: TokenStream = match r.upper_bound {
-                    Some(u) => {
-                        let lit = proc_macro2::Literal::usize_unsuffixed(u);
-                        quote! { #lit }
-                    }
-                    None => quote! { * },
-                };
 
                 quote! {
-                    #conn_name: #source_id -> #target_id (#edge_name) [#lower, #upper_token]
+                    #conn_name: #source_id -> #target_id (#edge_name)
                 }
             })
             .collect();
 
         quote! {
             #path::typed_graph! {
-                graph: ReferenceManager,
-                vertex: Instance,
-                edge: Ref,
-                arcs_type: Refs,
-                vertices { #(#vertices),* },
-                connections {
+                types {
+                    graph = ReferenceManager,
+                    vertex_kind = Instance,
+                    edge_kind = Ref,
+                    arc_kind = Refs,
+                },
+
+                vertices {
+                    #(#vertices),*
+                },
+
+                edges {
+                    #(#edge_types),*
+                },
+
+                arcs {
                     #(#connections),*
                 }
             }

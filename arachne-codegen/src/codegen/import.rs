@@ -133,7 +133,7 @@ pub enum Log {
 impl ToUseStatement for Log {
     fn path(&self) -> String {
         match self {
-            Log::Vec => format!("{}::state::po_Log::Vec", PROTOCOL_PREFIX),
+            Log::Vec => format!("{}::state::po_log::VecLog", PROTOCOL_PREFIX),
             Log::EventGraph => format!("{}::state::event_graph::EventGraph", PROTOCOL_PREFIX),
             Log::PartiallyOrdered => format!("{}::state::po_log::POLog", PROTOCOL_PREFIX),
         }
