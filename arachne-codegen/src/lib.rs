@@ -185,7 +185,7 @@ pub fn generate_from_parser<'a>(
         .ctx
         .classes()
         .iter()
-        .filter(|c| reachable_classes.contains(&c.idx))
+        .filter(|c| reachable_classes.contains(&c.idx) || c.is_enum())
         .collect();
 
     // Sort classes topologically by inheritance hierarchy
@@ -209,6 +209,7 @@ pub fn generate_from_parser<'a>(
     );
 
     for class in &sorted_classes {
+        println!("Processing class: {}", class.name());
         let class_gen = ClassGenerator::new(class, &parser.ctx, &cycle_analysis);
         let fragment = class_gen.generate()?;
         classifiers.register(fragment);

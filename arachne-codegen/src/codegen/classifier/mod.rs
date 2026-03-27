@@ -81,26 +81,38 @@ impl<'a> ClassGenerator<'a> {
 
     /// Compute inherited field names and types from superclasses
     fn inherited_fields(&self) -> (Vec<Ident>, Vec<Ident>) {
-        let sup = self
+        let inherited = self
             .class
             .sup()
             .iter()
-            .map(|idx| self.ctx.classes()[**idx].name())
+            .map(|idx| &self.ctx.classes()[**idx])
             .collect::<Vec<_>>();
 
-        let field_names_str = sup
+        let field_names = inherited
             .iter()
-            .map(|name| format!("{}{}", name, INHERITANCE_SUFFIX).to_snake_case())
+            .map(|class| {
+                let base = if class.is_abstract() || class.is_interface() {
+                    format!("{}{}", class.name(), INHERITANCE_SUFFIX)
+                } else {
+                    class.name().to_string()
+                };
+                Ident::new(&base.to_snake_case(), Span::call_site())
+            })
             .collect::<Vec<_>>();
 
-        let field_names = field_names_str
+        let field_types = inherited
             .iter()
-            .map(|name| Ident::new(name, Span::call_site()))
-            .collect::<Vec<_>>();
-
-        let field_types = sup
-            .iter()
-            .map(|name| format_ident!("{}{}Log", name.to_upper_camel_case(), INHERITANCE_SUFFIX))
+            .map(|class| {
+                if class.is_abstract() || class.is_interface() {
+                    format_ident!(
+                        "{}{}Log",
+                        class.name().to_upper_camel_case(),
+                        INHERITANCE_SUFFIX
+                    )
+                } else {
+                    format_ident!("{}Log", class.name().to_upper_camel_case())
+                }
+            })
             .collect::<Vec<_>>();
 
         (field_names, field_types)
