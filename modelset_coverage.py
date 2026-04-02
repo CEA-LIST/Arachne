@@ -125,6 +125,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Maximum number of .ecore files to process; default is all discovered files",
     )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of discovered .ecore files to skip before processing",
+    )
     return parser.parse_args()
 
 
@@ -281,6 +287,11 @@ def main() -> int:
     if not ecore_files:
         print(f"No .ecore files found under {scan_root}", file=sys.stderr)
         return 1
+    if args.offset < 0:
+        print("--offset must be >= 0", file=sys.stderr)
+        return 1
+    if args.offset:
+        ecore_files = ecore_files[args.offset :]
     if args.limit is not None:
         if args.limit < 0:
             print("--limit must be >= 0", file=sys.stderr)
@@ -295,6 +306,7 @@ def main() -> int:
     print(f"CLI binary   : {cli_binary}")
     print(f"Scan root    : {scan_root}")
     print(f"Moirai root  : {moirai_root}")
+    print(f"Offset       : {args.offset}")
     print(f"Ecore files  : {len(ecore_files)}")
     print(f"Temp root    : {temp_root}")
     print("")

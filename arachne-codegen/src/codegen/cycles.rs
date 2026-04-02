@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use ecore_rs::{ctx::Ctx, prelude::idx::Class};
 
-use crate::codegen::classifier::INHERITANCE_SUFFIX;
+use crate::codegen::classifier::{has_subclasses, inherited_field_ident};
 
 type ClassIdx = Class;
 
@@ -81,7 +81,8 @@ impl<'a> CycleAnalyzer<'a> {
     fn analyze(&self) -> anyhow::Result<CycleAnalysis> {
         let graph = self.build_containment_graph()?;
         let cycles = self.find_all_cycles(&graph);
-        let boxing_requirements = Self::determine_boxing_strategy(&cycles);
+        let mut boxing_requirements = Self::determine_boxing_strategy(&cycles);
+        boxing_requirements.extend(self.determine_polymorphic_family_boxing(&graph));
 
         Ok(CycleAnalysis {
             cycles,
@@ -106,28 +107,24 @@ impl<'a> CycleAnalyzer<'a> {
                 let field_name = structural.name.clone();
                 let is_many = structural.bounds.ubound != Some(1);
 
-                edges.push(ContainmentEdge {
-                    source,
-                    target,
-                    field_name: field_name.clone(),
-                    is_many,
-                    is_union_variant: false,
-                });
-
-                if target_class.is_abstract() || target_class.is_interface() {
-                    for sub_class in self.ctx.classes().iter() {
-                        let sub = sub_class.idx;
-                        let mut visited = HashSet::new();
-                        if self.is_subtype_of(sub, target, &mut visited) {
-                            edges.push(ContainmentEdge {
-                                source,
-                                target: sub,
-                                field_name: field_name.clone(),
-                                is_many,
-                                is_union_variant: true,
-                            });
-                        }
+                if Self::is_polymorphic_class(target_class) {
+                    for member in self.polymorphic_family_members(target) {
+                        edges.push(ContainmentEdge {
+                            source,
+                            target: member,
+                            field_name: field_name.clone(),
+                            is_many,
+                            is_union_variant: true,
+                        });
                     }
+                } else {
+                    edges.push(ContainmentEdge {
+                        source,
+                        target,
+                        field_name: field_name.clone(),
+                        is_many,
+                        is_union_variant: false,
+                    });
                 }
             }
 
@@ -136,7 +133,7 @@ impl<'a> CycleAnalyzer<'a> {
                 edges.push(ContainmentEdge {
                     source,
                     target: superclass.idx,
-                    field_name: format!("{}{}", superclass.name(), INHERITANCE_SUFFIX),
+                    field_name: inherited_field_ident(superclass).to_string(),
                     is_many: false,
                     is_union_variant: false,
                 });
@@ -144,28 +141,6 @@ impl<'a> CycleAnalyzer<'a> {
         }
 
         Ok(edges)
-    }
-
-    /// Check if class `a` is a subtype of class `b`
-    fn is_subtype_of(&self, a: ClassIdx, b: ClassIdx, visited: &mut HashSet<ClassIdx>) -> bool {
-        if a == b {
-            return true;
-        }
-
-        if !visited.insert(a) {
-            return false;
-        }
-
-        if let Some(a_class) = self.ctx.classes().iter().find(|c| c.idx == a) {
-            for superclass_idx in a_class.sup() {
-                let super_class_idx = self.ctx.classes()[**superclass_idx].idx;
-                if self.is_subtype_of(super_class_idx, b, visited) {
-                    return true;
-                }
-            }
-        }
-
-        false
     }
 
     /// Phase 2: Find all elementary cycles in the containment graph
@@ -309,6 +284,96 @@ impl<'a> CycleAnalyzer<'a> {
         }
 
         boxing_requirements
+    }
+
+    fn determine_polymorphic_family_boxing(
+        &self,
+        edges: &[ContainmentEdge],
+    ) -> HashMap<(ClassIdx, String), BoxingStrategy> {
+        let mut boxing_requirements = HashMap::new();
+        let mut adj_list: HashMap<ClassIdx, Vec<ClassIdx>> = HashMap::new();
+
+        for edge in edges {
+            adj_list.entry(edge.source).or_default().push(edge.target);
+        }
+
+        for class in self.ctx.classes().iter() {
+            for structural in class.structural() {
+                if !structural.containment {
+                    continue;
+                }
+
+                let Some(target_idx) = structural.typ else {
+                    continue;
+                };
+                let target_class = &self.ctx.classes()[*target_idx];
+
+                if !Self::is_polymorphic_class(target_class) {
+                    continue;
+                }
+
+                let family_members = self.polymorphic_family_members(target_idx);
+                let closes_family_cycle = family_members.into_iter().any(|member| {
+                    let mut visited = HashSet::new();
+                    Self::path_exists(&adj_list, member, class.idx, &mut visited)
+                });
+
+                if !closes_family_cycle {
+                    continue;
+                }
+
+                let strategy = if structural.bounds.ubound != Some(1) {
+                    BoxingStrategy::CollectionElement
+                } else {
+                    BoxingStrategy::DirectReference
+                };
+                boxing_requirements.insert((class.idx, structural.name.clone()), strategy);
+            }
+        }
+
+        boxing_requirements
+    }
+
+    fn polymorphic_family_members(&self, root: ClassIdx) -> HashSet<ClassIdx> {
+        let mut members = HashSet::new();
+        let mut stack = vec![root];
+
+        while let Some(class_idx) = stack.pop() {
+            if !members.insert(class_idx) {
+                continue;
+            }
+
+            let class = &self.ctx.classes()[*class_idx];
+            stack.extend(class.sub().iter().copied());
+        }
+
+        members
+    }
+
+    fn path_exists(
+        adj_list: &HashMap<ClassIdx, Vec<ClassIdx>>,
+        start: ClassIdx,
+        goal: ClassIdx,
+        visited: &mut HashSet<ClassIdx>,
+    ) -> bool {
+        if start == goal {
+            return true;
+        }
+
+        if !visited.insert(start) {
+            return false;
+        }
+
+        adj_list.get(&start).is_some_and(|targets| {
+            targets
+                .iter()
+                .copied()
+                .any(|target| Self::path_exists(adj_list, target, goal, visited))
+        })
+    }
+
+    fn is_polymorphic_class(class: &ecore_rs::repr::Class) -> bool {
+        class.is_abstract() || class.is_interface() || has_subclasses(class)
     }
 
     /// Select the best edge to break in a cycle using heuristics

@@ -3,6 +3,7 @@ pub mod containment;
 
 use ecore_rs::{ctx::Ctx, prelude::idx};
 use heck::{ToSnakeCase, ToUpperCamelCase};
+use log::debug;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::Ident;
@@ -46,14 +47,18 @@ impl<'a> ReferenceGenerator<'a> {
 
 impl<'a> Generate for ReferenceGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
+        debug!("Analyzing references...");
         let analysis = analyze_references(self.ctx, &self.pack_classes);
 
         if !analysis.has_references() {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 
+        debug!("Generating instance_from_path...");
         let instance_from_path = self.generate_instance_from_path(&analysis);
+        debug!("Generating edge structs...");
         let edge_structs = self.generate_edge_structs(&analysis);
+        debug!("Generating typed graph...");
         let typed_graph = self.generate_typed_graph(&analysis);
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
@@ -79,8 +84,6 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         let tokens = quote! {
             #instance_from_path
             #instance_path
-
-            // #id_structs
 
             #edge_structs
 
@@ -159,11 +162,6 @@ impl<'a> ReferenceGenerator<'a> {
 
         for (vertex_class, seg_patterns) in self.shortest_discriminating_suffixes(&full_paths) {
             let vertex_class = &self.ctx.classes()[*vertex_class];
-            println!(
-                "Vertex class {}: path pattern: {:?}",
-                vertex_class.name(),
-                seg_patterns
-            );
             let id_ty = format_ident!("{}Id", vertex_class.name());
             let variant = format_ident!("{}Id", vertex_class.name());
             let seg_patterns = seg_patterns.iter().map(|segment| segment.to_tokens(&path));

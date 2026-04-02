@@ -208,13 +208,14 @@ pub fn generate_from_parser<'a>(
             .join("`, `")
     );
 
+    info!("Generating classifiers...",);
     for class in &sorted_classes {
-        println!("Processing class: {}", class.name());
         let class_gen = ClassGenerator::new(class, &parser.ctx, &cycle_analysis);
         let fragment = class_gen.generate()?;
         classifiers.register(fragment);
     }
 
+    info!("Generating reference manager...");
     let refs = ReferenceGenerator::new(
         &parser.ctx,
         reachable_package_classes.clone(),
@@ -224,6 +225,7 @@ pub fn generate_from_parser<'a>(
     let fragment = refs.generate()?;
     references.register(fragment);
 
+    info!("Generating package...");
     let package_gen =
         PackageGenerator::new(&parser.ctx, pack.idx, top_level_roots, &reference_analysis);
     let fragment = package_gen.generate()?;
@@ -256,7 +258,7 @@ fn collect_reachable_classes(
             stack.push(*parent);
         }
 
-        if class.is_abstract() || class.is_interface() {
+        if !class.sub().is_empty() {
             for sub in class.sub() {
                 stack.push(*sub);
             }
@@ -407,4 +409,72 @@ fn abstract_family_has_no_external_container(
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{EcoreParser, generate_from_parser};
+
+    fn normalize(code: impl ToString) -> String {
+        code.to_string()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect()
+    }
+
+    fn generate_modules_from_parser(parser: &EcoreParser) -> (String, String) {
+        let pack = parser
+            .ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+            .expect("package should exist");
+        let (classifiers, references, _package, _generated_class_count) =
+            generate_from_parser(&parser, pack).expect("generation should succeed");
+
+        (
+            normalize(classifiers.build()),
+            normalize(references.build()),
+        )
+    }
+
+    fn generate_modules_from_file(path: impl AsRef<Path>) -> (String, String) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+        generate_modules_from_parser(&parser)
+    }
+
+    #[test]
+    fn concrete_superclass_with_subclasses_emits_family_union() {
+        let (classifiers, _references) =
+            generate_modules_from_file("../examples/concrete_inherits_concrete.ecore");
+
+        assert!(classifiers.contains("__classifiers::record!(A{"));
+        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(B,BLog));"));
+    }
+
+    #[test]
+    fn containment_typed_by_concrete_superclass_uses_family_log() {
+        let (classifiers, _references) =
+            generate_modules_from_file("../examples/concrete_polymorphic_targets.ecore");
+
+        assert!(
+            classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));")
+        );
+        assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog)|C(C,CLog));"));
+        assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>,}"));
+    }
+
+    #[test]
+    fn non_containment_reference_typed_by_concrete_superclass_expands_to_family() {
+        let (_classifiers, references) =
+            generate_modules_from_file("../examples/concrete_polymorphic_targets.ecore");
+
+        assert!(references.contains("DTargetEdge[0,1]"));
+        assert!(references.contains("DToA:DId->AId(DTargetEdge)"));
+        assert!(references.contains("DToB:DId->BId(DTargetEdge)"));
+        assert!(references.contains("DToC:DId->CId(DTargetEdge)"));
+    }
 }

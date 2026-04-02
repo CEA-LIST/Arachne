@@ -11,6 +11,7 @@ use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         annotation::{DatatypeOverride, datatype_override, uw_map_spec},
+        classifier::containment_target_log_ident,
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
@@ -103,7 +104,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
         let snake = self.reference.name.to_snake_case();
         let name = syn::parse_str::<Ident>(&snake)
             .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
-        let target_type = format_ident!("{}Log", target_class.name().to_upper_camel_case());
+        let target_type = containment_target_log_ident(target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
@@ -283,7 +284,7 @@ impl<'a> ContainmentGenerator<'a> {
                     "UWMap value feature cannot be a non-containment reference"
                 );
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
-                let value_log = format_ident!("{}Log", value_class.name().to_upper_camel_case());
+                let value_log = containment_target_log_ident(value_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);

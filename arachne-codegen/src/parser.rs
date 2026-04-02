@@ -26,6 +26,8 @@ impl EcoreParser {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::EcoreParser;
 
     #[test]
@@ -67,5 +69,25 @@ mod tests {
 </ecore:EPackage>"##;
 
         assert!(EcoreParser::from_string(ecore).is_err());
+    }
+
+    #[test]
+    fn preserves_subclasses_for_forward_referenced_supertypes() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/Company.ecore");
+        let parser = EcoreParser::from_file(path).expect("company.ecore should parse");
+        let subunit = parser
+            .ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Subunit")
+            .expect("Subunit should exist");
+
+        let subclass_names: Vec<_> = subunit
+            .sub()
+            .iter()
+            .map(|idx| parser.ctx.classes()[**idx].name().to_string())
+            .collect();
+
+        assert_eq!(subclass_names, vec!["Dept".to_string(), "Employee".to_string()]);
     }
 }

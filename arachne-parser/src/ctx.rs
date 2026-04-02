@@ -475,7 +475,14 @@ impl Ctx {
             if self.forward_ref_classes.contains(&idx) {
                 self.forward_ref_classes.remove(&idx);
                 let class = build_class!(idx);
-                let _dummy = std::mem::replace(&mut self[idx], class);
+                let dummy = std::mem::replace(&mut self[idx], class);
+
+                for sup in dummy.sup().iter().copied() {
+                    let _ = self[idx].add_sup(sup);
+                }
+                for sub in dummy.sub().iter().copied() {
+                    let _ = self[idx].add_sub(sub);
+                }
                 // don't need to update the class' parent, the forward ref already did that
                 return Ok(idx);
             } else {

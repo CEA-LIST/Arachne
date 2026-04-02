@@ -4,7 +4,7 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 use crate::{
     codegen::{
         annotation::uw_map_spec,
-        classifier::INHERITANCE_SUFFIX,
+        classifier::{containment_target_ident, has_subclasses, inherited_field_ident},
         cycles::{BoxingStrategy, CycleAnalysis},
         reference::analysis::ReferenceAnalysis,
     },
@@ -51,6 +51,7 @@ struct TraversalState {
     current_steps: Vec<PathStep>,
     current_log_path: Vec<String>,
     visited: HashSet<idx::Class>,
+    visited_polymorphic_families: HashSet<idx::Class>,
     result: Vec<ContainmentPath>,
 }
 
@@ -73,11 +74,14 @@ pub fn find_creation_paths(
         current_steps: Vec::new(),
         current_log_path: Vec::new(),
         visited: HashSet::default(),
+        visited_polymorphic_families: HashSet::default(),
         result: Vec::new(),
     };
 
-    if ctx.classes()[*root_class].is_abstract() {
-        explore_abstract_class(&env, root_class, &mut state, false);
+    if is_polymorphic_class(&ctx.classes()[*root_class])
+        && !ctx.classes()[*root_class].is_concrete()
+    {
+        explore_polymorphic_class(&env, root_class, &mut state, false);
     } else {
         find_paths_recursive(&env, root_class, &mut state, false);
     }
@@ -148,8 +152,8 @@ fn find_paths_recursive(
                 state.current_steps.push(PathStep::ListElement);
             }
 
-            if target_class.is_abstract() {
-                explore_abstract_class(env, target_idx, state, passed_through_box || is_boxed);
+            if is_polymorphic_class(target_class) {
+                explore_polymorphic_class(env, target_idx, state, passed_through_box || is_boxed);
             } else {
                 find_paths_recursive(env, target_idx, state, passed_through_box || is_boxed);
             }
@@ -157,8 +161,8 @@ fn find_paths_recursive(
             state.current_steps.pop();
         } else {
             let new_passed = passed_through_box || is_boxed;
-            if target_class.is_abstract() {
-                explore_abstract_class(env, target_idx, state, new_passed);
+            if is_polymorphic_class(target_class) {
+                explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
             }
@@ -171,20 +175,21 @@ fn find_paths_recursive(
     // Process inherited features: for each superclass, recurse through its Feat type
     for super_idx in class.sup() {
         let super_class = &env.ctx.classes()[**super_idx];
-        let feat_field_snake =
-            format!("{}{}", super_class.name(), INHERITANCE_SUFFIX).to_snake_case();
-        let feat_variant_name = feat_field_snake.to_upper_camel_case();
+        let field_snake = inherited_field_ident(super_class).to_string();
+        let field_variant_name = field_snake.to_upper_camel_case();
 
         state.current_steps.push(PathStep::Field {
             class_name: class.name().to_string(),
-            variant_name: feat_variant_name,
+            variant_name: field_variant_name,
             is_boxed: false,
         });
-        state.current_log_path.push(feat_field_snake);
+        state.current_log_path.push(field_snake);
 
-        // Recurse into the superclass to find its features
-        // (but treat it as a Feat record, not a union)
-        find_feat_paths_recursive(env, *super_idx, state, passed_through_box);
+        if super_class.is_abstract() || super_class.is_interface() {
+            find_feat_paths_recursive(env, *super_idx, state, passed_through_box);
+        } else {
+            find_paths_recursive(env, *super_idx, state, passed_through_box);
+        }
 
         state.current_steps.pop();
         state.current_log_path.pop();
@@ -217,8 +222,7 @@ fn find_feat_paths_recursive(
         let variant_name = field_snake.to_upper_camel_case();
         let is_many = feature.bounds.ubound != Some(1);
 
-        // Use the feat class name (e.g., "ExecutionNodeFeat") for the field step
-        let feat_class_name = format!("{}{}", class.name(), INHERITANCE_SUFFIX);
+        let feat_class_name = class.name().to_string();
         let is_boxed = env.cycle_analysis.boxing_strategy(class_idx, &feature.name)
             == BoxingStrategy::DirectReference;
 
@@ -242,8 +246,8 @@ fn find_feat_paths_recursive(
             }
 
             let new_passed = passed_through_box || is_boxed;
-            if target_class.is_abstract() {
-                explore_abstract_class(env, target_idx, state, new_passed);
+            if is_polymorphic_class(target_class) {
+                explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
             }
@@ -251,8 +255,8 @@ fn find_feat_paths_recursive(
             state.current_steps.pop();
         } else {
             let new_passed = passed_through_box || is_boxed;
-            if target_class.is_abstract() {
-                explore_abstract_class(env, target_idx, state, new_passed);
+            if is_polymorphic_class(target_class) {
+                explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
             }
@@ -265,18 +269,27 @@ fn find_feat_paths_recursive(
     // Continue up the inheritance chain
     for super_idx in class.sup() {
         let super_class = &env.ctx.classes()[**super_idx];
-        let feat_field_snake =
-            format!("{}{}", super_class.name(), INHERITANCE_SUFFIX).to_snake_case();
-        let feat_variant_name = feat_field_snake.to_upper_camel_case();
+        let (field_snake, field_variant_name, field_class_name) = {
+            let feat_field_snake = inherited_field_ident(super_class).to_string();
+            (
+                feat_field_snake.clone(),
+                feat_field_snake.to_upper_camel_case(),
+                class.name().to_string(),
+            )
+        };
 
         state.current_steps.push(PathStep::Field {
-            class_name: format!("{}{}", class.name(), INHERITANCE_SUFFIX),
-            variant_name: feat_variant_name,
+            class_name: field_class_name,
+            variant_name: field_variant_name,
             is_boxed: false,
         });
-        state.current_log_path.push(feat_field_snake);
+        state.current_log_path.push(field_snake);
 
-        find_feat_paths_recursive(env, *super_idx, state, passed_through_box);
+        if super_class.is_abstract() || super_class.is_interface() {
+            find_feat_paths_recursive(env, *super_idx, state, passed_through_box);
+        } else {
+            find_paths_recursive(env, *super_idx, state, passed_through_box);
+        }
 
         state.current_steps.pop();
         state.current_log_path.pop();
@@ -303,29 +316,48 @@ fn push_unique_path(
     });
 }
 
-fn explore_abstract_class(
+fn explore_polymorphic_class(
     env: &TraversalEnv,
-    abstract_class: idx::Class,
+    class_idx: idx::Class,
     state: &mut TraversalState,
     passed_through_box: bool,
 ) {
-    let class = &env.ctx.classes()[*abstract_class];
+    if !state.visited_polymorphic_families.insert(class_idx) {
+        return;
+    }
+
+    let class = &env.ctx.classes()[*class_idx];
+    let union_name = containment_target_ident(class).to_string();
+
+    if class.is_concrete() && has_subclasses(class) {
+        state.current_steps.push(PathStep::Variant {
+            union_name: union_name.clone(),
+            variant_name: class.name().to_string(),
+        });
+        find_paths_recursive(env, class_idx, state, passed_through_box);
+        state.current_steps.pop();
+    }
 
     for sub_idx in class.sub() {
         let sub_class = &env.ctx.classes()[**sub_idx];
 
         state.current_steps.push(PathStep::Variant {
-            union_name: class.name().to_string(),
+            union_name: union_name.clone(),
             variant_name: sub_class.name().to_string(),
         });
 
-        if sub_class.is_abstract() {
-            // Continue through sub-abstract classes
-            explore_abstract_class(env, *sub_idx, state, passed_through_box);
+        if is_polymorphic_class(sub_class) {
+            explore_polymorphic_class(env, *sub_idx, state, passed_through_box);
         } else {
             find_paths_recursive(env, *sub_idx, state, passed_through_box);
         }
 
         state.current_steps.pop();
     }
+
+    state.visited_polymorphic_families.remove(&class_idx);
+}
+
+fn is_polymorphic_class(class: &ecore_rs::repr::Class) -> bool {
+    class.is_abstract() || class.is_interface() || has_subclasses(class)
 }

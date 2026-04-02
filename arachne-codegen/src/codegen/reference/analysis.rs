@@ -127,12 +127,8 @@ impl ReferenceAnalysis {
         class_idx: idx::Class,
         package_set: &HashSet<idx::Class>,
     ) -> Vec<idx::Class> {
-        let mut classes = if ctx.classes()[*class_idx].is_concrete() {
-            vec![class_idx]
-        } else {
-            let mut visited = HashSet::default();
-            Self::find_concrete_descendants(ctx, class_idx, &mut visited)
-        };
+        let mut visited = HashSet::default();
+        let mut classes = Self::find_concrete_descendants(ctx, class_idx, &mut visited);
 
         classes.retain(|class_idx| package_set.contains(class_idx));
         classes.sort_by_key(|class_idx| *class_idx);
@@ -140,8 +136,8 @@ impl ReferenceAnalysis {
         classes
     }
 
-    /// Find all concrete subclasses of a class (recursively).
-    /// If the class itself is concrete, it is included.
+    /// Find all concrete classes in the substitution family of a class.
+    /// If the class itself is concrete, it is included alongside its concrete descendants.
     fn find_concrete_descendants(
         ctx: &Ctx,
         class_idx: idx::Class,
@@ -153,11 +149,12 @@ impl ReferenceAnalysis {
 
         let class = &ctx.classes()[*class_idx];
 
+        let mut result = Vec::new();
+
         if class.is_concrete() {
-            return vec![class_idx];
+            result.push(class_idx);
         }
 
-        let mut result = Vec::new();
         for sub_idx in class.sub() {
             result.extend(Self::find_concrete_descendants(ctx, *sub_idx, visited));
         }
