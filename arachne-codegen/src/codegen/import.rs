@@ -176,9 +176,8 @@ pub enum Protocol {
     SinkCollector,
     PathSegment,
     ObjectPath,
-    IsLogSink,
     Interner,
-    TranslateIds,
+    InternalizeOp,
 }
 
 impl ToUseStatement for Protocol {
@@ -201,15 +200,14 @@ impl ToUseStatement for Protocol {
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
             Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
             Protocol::PathSegment => format!(
-                "{}::state::sink::PathSegment::{{Field, ListElement, MapEntry, Variant}}",
+                "{}::state::object_path::PathSegment::{{Field, ListElement, MapEntry, Variant}}",
                 PROTOCOL_PREFIX
             ),
-            Protocol::ObjectPath => format!("{}::state::sink::ObjectPath", PROTOCOL_PREFIX),
+            Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
-            Protocol::IsLogSink => format!("{}::state::sink::IsLogSink", PROTOCOL_PREFIX),
             Protocol::Interner => format!("{}::utils::intern_str::Interner", PROTOCOL_PREFIX),
-            Protocol::TranslateIds => {
-                format!("{}::utils::translate_ids::TranslateIds", PROTOCOL_PREFIX)
+            Protocol::InternalizeOp => {
+                format!("{}::utils::intern_str::InternalizeOp", PROTOCOL_PREFIX)
             }
         }
     }

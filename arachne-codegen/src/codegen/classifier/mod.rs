@@ -141,7 +141,9 @@ impl<'a> ClassGenerator<'a> {
                 let field_ident = inherited_field_ident(class);
                 let log_ident = format_ident!("{}Log", class.name().to_upper_camel_case());
                 let base_type = quote! { #log_ident };
-                if self.cycle_analysis.boxing_strategy(self.class.idx, &field_ident.to_string())
+                if self
+                    .cycle_analysis
+                    .boxing_strategy(self.class.idx, &field_ident.to_string())
                     == crate::codegen::cycles::BoxingStrategy::DirectReference
                 {
                     quote! { Box<#base_type> }

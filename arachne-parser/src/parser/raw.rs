@@ -1029,7 +1029,8 @@ impl<'input> Parser<'input> {
             }
         }
 
-        let mut structural = repr::Structural::new(name, typ, ctx.resolve_etype(etype_str)?, bounds);
+        let mut structural =
+            repr::Structural::new(name, typ, ctx.resolve_etype(etype_str)?, bounds);
 
         if let Some(containment) = containment {
             structural.set_containment(helpers::bool(containment)?);

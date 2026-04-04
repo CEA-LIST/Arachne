@@ -82,13 +82,12 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
-            Import::Protocol(Protocol::ReplicaIdx),
             Import::Protocol(Protocol::Event),
             Import::Protocol(Protocol::QueryOperation),
             Import::Protocol(Protocol::ObjectPath),
             Import::Protocol(Protocol::SinkEffect),
             Import::Protocol(Protocol::Interner),
-            Import::Protocol(Protocol::TranslateIds),
+            Import::Protocol(Protocol::InternalizeOp),
             Import::Log(Log::PartiallyOrdered),
             Import::Custom("crate::classifiers::*"),
         ];
@@ -99,7 +98,6 @@ impl<'a> PackageGenerator<'a> {
                 Import::Log(Log::Vec),
                 Import::Protocol(Protocol::PureCRDT),
                 Import::Protocol(Protocol::SinkCollector),
-                Import::Protocol(Protocol::IsLogSink),
                 Import::Custom("crate::references::*"),
                 Import::Custom("crate::classifiers::*"),
             ]);
@@ -267,11 +265,15 @@ impl<'a> PackageGenerator<'a> {
             let field_stringify = self.root_class_name(root).to_snake_case();
             if self.has_references() {
                 quote! { #package_ident::#variant(o) =>
-                #path::IsLogSink::effect_with_sink(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink),
+                #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink),
                 }
             } else {
                 quote! {
-                    #package_ident::#variant(o) => self.#log_field.effect(#path::Event::unfold(event.clone(), o)),
+                    #package_ident::#variant(o) => self.#log_field.effect(
+                        #path::Event::unfold(event.clone(), o),
+                        __package::ObjectPath::new(#package_name),
+                        &mut __package::SinkCollector::new(),
+                    ),
                 }
             }
         });
@@ -282,18 +284,29 @@ impl<'a> PackageGenerator<'a> {
                 match event.op().clone() {
                     #(#root_variants)*
                     #package_ident::AddReference(o) =>
-                        self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o))),
+                        self.reference_manager_log.effect(
+                            #path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
+                            __package::ObjectPath::new(#package_name),
+                            &mut __package::SinkCollector::new(),
+                        ),
                     #package_ident::RemoveReference(o) =>
-                        self.reference_manager_log.effect(#path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o))),
+                        self.reference_manager_log.effect(
+                            #path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
+                            __package::ObjectPath::new(#package_name),
+                            &mut __package::SinkCollector::new(),
+                        ),
                 }
                 for sink in sink.into_sinks() {
                     match sink.effect() {
                         #path::SinkEffect::Create | #path::SinkEffect::Update => {
-                            let vertex_ops = #path::instance_from_path(&sink.path())
+                            let vertex_ops = #path::instance_from_path(sink.path())
                                 .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
                             if let Some(o) = vertex_ops {
-                                self.reference_manager_log
-                                    .effect(#path::Event::unfold(event.clone(), o));
+                                self.reference_manager_log.effect(
+                                    #path::Event::unfold(event.clone(), o),
+                                    __package::ObjectPath::new(#package_name),
+                                    &mut __package::SinkCollector::new(),
+                                );
                             }
                         }
                         #path::SinkEffect::Delete => {
@@ -301,8 +314,10 @@ impl<'a> PackageGenerator<'a> {
                                 event.clone(),
                                 __package::ReferenceManager::DeleteSubtree {
                                     prefix: sink.path().clone(),
-                                },
-                            ));
+                                }),
+                                __package::ObjectPath::new(#package_name),
+                                &mut __package::SinkCollector::new(),
+                            );
                         }
                     }
                 }
@@ -327,7 +342,7 @@ impl<'a> PackageGenerator<'a> {
                     }
                 }
 
-                fn effect(&mut self, event: #path::Event<Self::Op>) {
+                fn effect(&mut self, event: #path::Event<Self::Op>, _path: #path::ObjectPath, _sink: &mut #path::SinkCollector) {
                     #effect
                 }
 
@@ -394,10 +409,10 @@ impl<'a> PackageGenerator<'a> {
         let translate_ref_arms = if self.has_references() {
             quote! {
                 #package_ident::AddReference(op) => {
-                    #package_ident::AddReference(op.translate_ids(from, interner))
+                    #package_ident::AddReference(op.internalize(interner))
                 }
                 #package_ident::RemoveReference(op) => {
-                    #package_ident::RemoveReference(op.translate_ids(from, interner))
+                    #package_ident::RemoveReference(op.internalize(interner))
                 }
             }
         } else {
@@ -405,8 +420,8 @@ impl<'a> PackageGenerator<'a> {
         };
 
         quote! {
-            impl __package::TranslateIds for #package_ident {
-                fn translate_ids(&self, from: __package::ReplicaIdx, interner: &__package::Interner) -> Self {
+            impl __package::InternalizeOp for #package_ident {
+                fn internalize(self, interner: &__package::Interner) -> Self {
                     match self {
                         #(#translate_root_arms,)*
                         #translate_ref_arms

@@ -70,7 +70,7 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     let moirai_fuzz = moirai_root.join("moirai-fuzz");
 
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\"]\nfuzz = []\n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\"]\nfuzz = []\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
         to_path_string(&moirai_macros),

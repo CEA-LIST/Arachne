@@ -460,9 +460,7 @@ mod tests {
         let (classifiers, _references) =
             generate_modules_from_file("../examples/concrete_polymorphic_targets.ecore");
 
-        assert!(
-            classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));")
-        );
+        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));"));
         assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog)|C(C,CLog));"));
         assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>,}"));
     }

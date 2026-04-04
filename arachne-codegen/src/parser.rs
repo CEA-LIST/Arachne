@@ -88,6 +88,9 @@ mod tests {
             .map(|idx| parser.ctx.classes()[**idx].name().to_string())
             .collect();
 
-        assert_eq!(subclass_names, vec!["Dept".to_string(), "Employee".to_string()]);
+        assert_eq!(
+            subclass_names,
+            vec!["Dept".to_string(), "Employee".to_string()]
+        );
     }
 }

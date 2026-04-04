@@ -1,12 +1,13 @@
-use crate::codegen::{
-    generate::{Fragment, Generate},
-    warnings::Warning,
-};
 use ecore_rs::{
     ctx::Ctx,
     repr::{Class, Operation},
 };
 use quote::quote;
+
+use crate::codegen::{
+    generate::{Fragment, Generate},
+    warnings::Warning,
+};
 
 pub struct OperationGenerator<'a> {
     operation: &'a Operation,

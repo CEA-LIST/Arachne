@@ -15,8 +15,10 @@ use crate::{
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         import::{Import, Macros, Protocol},
-        reference::analysis::{ReferenceAnalysis, analyze_references},
-        reference::containment::{PathStep, find_creation_paths},
+        reference::{
+            analysis::{ReferenceAnalysis, analyze_references},
+            containment::{PathStep, find_creation_paths},
+        },
     },
     utils::hash::HashMap,
 };
