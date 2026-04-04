@@ -12,6 +12,26 @@ This code generator bridges the gap between high-level domain models (defined in
 - `arachne-codegen`: core component that generates a composition of CRDTs from a parsed Ecore metamodel.
 - `arachne-cli`: Command Line Interface tool.
 
+## Running the generator
+
+```sh
+RUST_LOG=debug cargo run generate -vv -o <WHERE_TO_GENERATE_PROJECT> <PATH_TO_ECORE_METAMODEL>
+```
+
+### Examples
+
+```sh
+RUST_LOG=debug cargo run generate -vv -o ../class_hierarchy ./examples/class_hierarchy.ecore
+```
+
+```sh
+RUST_LOG=debug cargo run generate -vv -o ../behavior_tree ./examples/bt.ecore
+```
+
+```sh
+RUST_LOG=debug cargo run generate -vv -o ../json ./examples/json.ecore
+```
+
 ## License
 
 See the [LICENSE](LICENSE) file for details.
