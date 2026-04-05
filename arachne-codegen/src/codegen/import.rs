@@ -174,6 +174,7 @@ pub enum Protocol {
     Sink,
     SinkEffect,
     SinkCollector,
+    SinkOwnership,
     PathSegment,
     ObjectPath,
     Interner,
@@ -198,6 +199,7 @@ impl ToUseStatement for Protocol {
             Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
             Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
+            Protocol::SinkOwnership => format!("{}::state::sink::SinkOwnership", PROTOCOL_PREFIX),
             Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
             Protocol::PathSegment => format!(
                 "{}::state::object_path::PathSegment::{{Field, ListElement, MapEntry, Variant}}",

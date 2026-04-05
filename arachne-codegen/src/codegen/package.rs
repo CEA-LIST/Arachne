@@ -7,6 +7,7 @@ use syn::Ident;
 use crate::{
     PACKAGE_PATH_MOD,
     codegen::{
+        classifier::{polymorphic_kind_ident, polymorphic_kind_log_ident},
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         import::{Import, Log, Protocol},
@@ -53,19 +54,21 @@ impl<'a> PackageGenerator<'a> {
         self.ctx.classes()[*root.class_idx].name()
     }
 
+    fn root_class(&self, root: RootMeta) -> &ecore_rs::repr::Class {
+        &self.ctx.classes()[*root.class_idx]
+    }
+
     fn root_variant_ident(&self, root: RootMeta) -> Ident {
-        Ident::new(
-            &self.root_class_name(root).to_upper_camel_case(),
-            Span::call_site(),
-        )
+        polymorphic_kind_ident(self.root_class(root))
     }
 
     fn root_log_ident(&self, root: RootMeta) -> Ident {
-        format_ident!("{}Log", self.root_class_name(root).to_upper_camel_case())
+        polymorphic_kind_log_ident(self.root_class(root))
     }
 
     fn root_value_ident(&self, root: RootMeta) -> Ident {
-        format_ident!("{}Value", self.root_class_name(root).to_upper_camel_case())
+        let kind_name = polymorphic_kind_ident(self.root_class(root));
+        format_ident!("{}Value", kind_name)
     }
 
     fn root_field_ident(&self, root: RootMeta) -> Ident {
@@ -86,8 +89,10 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::QueryOperation),
             Import::Protocol(Protocol::ObjectPath),
             Import::Protocol(Protocol::SinkEffect),
+            Import::Protocol(Protocol::SinkOwnership),
             Import::Protocol(Protocol::Interner),
             Import::Protocol(Protocol::InternalizeOp),
+            Import::Protocol(Protocol::SinkCollector),
             Import::Log(Log::PartiallyOrdered),
             Import::Custom("crate::classifiers::*"),
         ];
@@ -97,7 +102,6 @@ impl<'a> PackageGenerator<'a> {
                 Import::Protocol(Protocol::FairPolicy),
                 Import::Log(Log::Vec),
                 Import::Protocol(Protocol::PureCRDT),
-                Import::Protocol(Protocol::SinkCollector),
                 Import::Custom("crate::references::*"),
                 Import::Custom("crate::classifiers::*"),
             ]);
@@ -265,7 +269,7 @@ impl<'a> PackageGenerator<'a> {
             let field_stringify = self.root_class_name(root).to_snake_case();
             if self.has_references() {
                 quote! { #package_ident::#variant(o) =>
-                #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink),
+                #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink, #path::SinkOwnership::Owned),
                 }
             } else {
                 quote! {
@@ -273,6 +277,7 @@ impl<'a> PackageGenerator<'a> {
                         #path::Event::unfold(event.clone(), o),
                         __package::ObjectPath::new(#package_name),
                         &mut __package::SinkCollector::new(),
+                        #path::SinkOwnership::Owned
                     ),
                 }
             }
@@ -288,12 +293,14 @@ impl<'a> PackageGenerator<'a> {
                             #path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
                             __package::ObjectPath::new(#package_name),
                             &mut __package::SinkCollector::new(),
+                            #path::SinkOwnership::Owned
                         ),
                     #package_ident::RemoveReference(o) =>
                         self.reference_manager_log.effect(
                             #path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
                             __package::ObjectPath::new(#package_name),
                             &mut __package::SinkCollector::new(),
+                            #path::SinkOwnership::Owned
                         ),
                 }
                 for sink in sink.into_sinks() {
@@ -306,6 +313,7 @@ impl<'a> PackageGenerator<'a> {
                                     #path::Event::unfold(event.clone(), o),
                                     __package::ObjectPath::new(#package_name),
                                     &mut __package::SinkCollector::new(),
+                                    #path::SinkOwnership::Owned
                                 );
                             }
                         }
@@ -317,6 +325,7 @@ impl<'a> PackageGenerator<'a> {
                                 }),
                                 __package::ObjectPath::new(#package_name),
                                 &mut __package::SinkCollector::new(),
+                                #path::SinkOwnership::Owned
                             );
                         }
                     }
@@ -342,7 +351,7 @@ impl<'a> PackageGenerator<'a> {
                     }
                 }
 
-                fn effect(&mut self, event: #path::Event<Self::Op>, _path: #path::ObjectPath, _sink: &mut #path::SinkCollector) {
+                fn effect(&mut self, event: #path::Event<Self::Op>, _path: #path::ObjectPath, _sink: &mut #path::SinkCollector, _ownership: #path::SinkOwnership) {
                     #effect
                 }
 
