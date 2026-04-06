@@ -14,6 +14,8 @@ This code generator bridges the gap between high-level domain models (defined in
 
 ## Running the generator
 
+Rust must be installed on your machine: <https://rust-lang.org/tools/install>. You must have this project and `PureOpLib` in the same root folder. You can change the path of these dependencies in `Cargo.toml`. Replace `XXXX-1` by the name of `PureOpLib`.
+
 ```sh
 RUST_LOG=debug cargo run generate -vv -o <WHERE_TO_GENERATE_PROJECT> <PATH_TO_ECORE_METAMODEL>
 ```
@@ -37,17 +39,3 @@ RUST_LOG=debug cargo run generate -vv -o ../behavior_tree ./examples/bt.ecore
 ```sh
 RUST_LOG=debug cargo run generate -vv -o ../json ./examples/json.ecore
 ```
-
-## License
-
-See the [LICENSE](LICENSE) file for details.
-
----
-
-## Acknowledgments
-
-Developed at [CEA LIST](https://list.cea.fr/en/), the French Alternative Energies and Atomic Energy Commission.
-
-**Authors:**
-
-- Léo Olivier ([@leo-olivier](https://github.com/leo-olivier))
