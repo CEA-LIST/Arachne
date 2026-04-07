@@ -1,6 +1,6 @@
 [package]
 name = "arachne-codegen"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Code generator for Arachne"
 
@@ -17,6 +17,6 @@ heck = "0.5.0"
 log = "0.4.29"
 owo-colors = "4"
 xml-builder = "0.5.4"
-moirai-protocol = { version = "*", path = "../../moirai/moirai-protocol" }
-moirai-crdt = { version = "*", path = "../../moirai/moirai-crdt" }
-moirai-macros = { version = "*", path = "../../moirai/moirai-macros" }
+moirai-protocol = { git = "https://github.com/CEA-LIST/Moirai.git", branch = "22-review-models" }
+moirai-crdt = { git = "https://github.com/CEA-LIST/Moirai.git", branch = "22-review-models" }
+moirai-macros = { git = "https://github.com/CEA-LIST/Moirai.git", branch = "22-review-models" }
