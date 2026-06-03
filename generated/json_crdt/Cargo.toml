@@ -1,0 +1,21 @@
+[package]
+name = "json-crdt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moirai-crdt = { path = "/volatile/home/md270283/git/projects/decloud/moirai/moirai-crdt" }
+moirai-protocol = { path = "/volatile/home/md270283/git/projects/decloud/moirai/moirai-protocol", features = ["serde"] }
+moirai-macros = { path = "/volatile/home/md270283/git/projects/decloud/moirai/moirai-macros" }
+moirai-fuzz = { path = "/volatile/home/md270283/git/projects/decloud/moirai/moirai-fuzz" }
+moirai-network = { path = "/volatile/home/md270283/git/projects/decloud/moirai/moirai-network" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+petgraph = "0.8.3"
+rand = "0.10.0"
+
+[features]
+default = ["fuzz", "sink", "serde"]
+fuzz = []
+serde = ["moirai-protocol/serde", "moirai-macros/serde", "moirai-crdt/serde"]
+sink = ["moirai-protocol/sink","moirai-fuzz/sink","moirai-macros/sink","moirai-crdt/sink"]

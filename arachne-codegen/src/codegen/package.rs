@@ -127,6 +127,7 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub enum #package_ident {
                 #(#root_variants),*
                 #reference_variants
@@ -148,7 +149,10 @@ impl<'a> PackageGenerator<'a> {
             quote! { pub #field: #path::#value_ty }
         });
         let refs_field = if self.has_references() {
+            // petgraph::Graph doesn't implement Serialize/Deserialize,
+            // so we skip the refs field during serde and default it on deserialization.
             quote! {
+                #[cfg_attr(feature = "serde", serde(skip))]
                 pub refs: <#path::ReferenceManager<#path::FairPolicy> as #path::PureCRDT>::Value,
             }
         } else {
@@ -157,6 +161,7 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone, Default)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub struct #package_value_name {
                 #(#root_fields,)*
                 #refs_field
@@ -408,6 +413,43 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
+    /// Generate the `QueryableLog` impl for the package log.
+    ///
+    /// This enables the `GET /api/state` endpoint in `GenericNode` by providing
+    /// a concrete function that calls `replica.query(Read::new())` and serializes
+    /// the resulting `Value` to JSON.
+    ///
+    /// Each generated package gets this automatically — downstream code just needs
+    /// to call `node.enable_state_query()` before `node.run()`.
+    fn generate_queryable_log_impl(&self) -> TokenStream {
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+
+        quote! {
+            /// Auto-generated [`QueryableLog`] impl — enables `GET /api/state` in `GenericNode`.
+            ///
+            /// Calls `replica.query(Read::new())` to evaluate the full CRDT state via
+            /// the `EvalNested<Read<Value>>` chain, then serializes the result to JSON.
+            impl moirai_network::query::QueryableLog for #package_log_name {
+                fn query_state_json(
+                    replica: &moirai_protocol::replica::Replica<
+                        Self,
+                        moirai_protocol::broadcast::tcsb::Tcsb<#package_ident>,
+                    >,
+                ) -> serde_json::Value {
+                    use moirai_protocol::replica::IsReplica;
+                    let value: #package_value_name = replica.query(#path::Read::new());
+                    serde_json::to_value(&value)
+                        .unwrap_or_else(|e| serde_json::json!({ "error": format!("serialize: {}", e) }))
+                }
+            }
+        }
+    }
+
     fn translate_ids_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
         let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
@@ -448,6 +490,7 @@ impl<'a> Generate for PackageGenerator<'a> {
         let package_log = self.generate_package_log_struct();
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
+        let queryable_log_impl = self.generate_queryable_log_impl();
         let translate_ids = self.translate_ids_impl();
 
         let path: syn::Path =
@@ -468,6 +511,7 @@ impl<'a> Generate for PackageGenerator<'a> {
             #package_log
             #is_log_impl
             #eval_nested_impl
+            #queryable_log_impl
             #translate_ids
         };
 

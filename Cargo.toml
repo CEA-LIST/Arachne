@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["arachne-codegen", "arachne-cli", "arachne-parser"]
+exclude = ["generated"]
 
 [workspace.package]
 license = "Apache-2.0"

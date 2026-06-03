@@ -1,5 +1,6 @@
 pub mod codegen;
 pub mod config;
+mod deployment;
 pub mod error;
 pub mod parser;
 mod project;
@@ -93,6 +94,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     project::write_project(
         &config,
         &project_name,
+        &pack.name().to_string(),
         classifiers_code,
         references_code,
         package_code,

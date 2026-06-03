@@ -5,6 +5,7 @@ use quote::quote;
 
 use crate::{
     config::{Config, Formatting},
+    deployment::{DeploymentCtx, write_deployment_artifacts},
     error::{ArachneError, Result},
 };
 
@@ -12,6 +13,7 @@ use crate::{
 pub fn write_project(
     config: &Config,
     project_name: &str,
+    package_name: &str,
     classifiers_code: TokenStream,
     references_code: TokenStream,
     package_code: TokenStream,
@@ -57,6 +59,10 @@ pub fn write_project(
     fs::write(src_dir.join("references.rs"), formatted_references)?;
     fs::write(src_dir.join("package.rs"), formatted_package)?;
 
+    // Generate deployment artifacts (network_node example + Dockerfile)
+    let ctx = DeploymentCtx::new(&project_name, package_name);
+    write_deployment_artifacts(root, &ctx)?;
+
     Ok(())
 }
 
@@ -68,13 +74,15 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
     let moirai_protocol = moirai_root.join("moirai-protocol");
     let moirai_macros = moirai_root.join("moirai-macros");
     let moirai_fuzz = moirai_root.join("moirai-fuzz");
+    let moirai_network = moirai_root.join("moirai-network");
 
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\"]\nfuzz = []\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\", features = [\"serde\"] }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\nmoirai-network = {{ path = \"{}\" }}\nserde = {{ version = \"1.0\", features = [\"derive\"] }}\nserde_json = \"1.0\"\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\", \"serde\"]\nfuzz = []\nserde = [\"moirai-protocol/serde\", \"moirai-macros/serde\", \"moirai-crdt/serde\"]\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
         to_path_string(&moirai_macros),
-        to_path_string(&moirai_fuzz)
+        to_path_string(&moirai_fuzz),
+        to_path_string(&moirai_network)
     ))
 }
 
@@ -146,3 +154,4 @@ fn format_with_rustfmt(tokens: TokenStream) -> Result<String> {
         ArachneError::Config(format!("Failed to convert rustfmt output to string: {e}"))
     })
 }
+

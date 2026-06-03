@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative edition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .connection-panel {
+            background: #e8f4fd;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #bee5eb;
+        }
+
+        .connection-panel label {
+            color: #004085;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .connection-panel input {
+            background: white;
+            padding: 10px;
+            border: 1px solid #b8daff;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .connection-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .connection-controls input {
+            flex: 1;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #6c757d;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connecting {
+            background: #ffc107;
+        }
+
+        .status-dot.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sync-mode {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        textarea.large {
+            min-height: 150px;
+        }
+
+        .field-meta {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #c3e6cb;
+        }
+
+        /* Animation for value updates */
+        @keyframes highlight {
+            0% { background-color: #fff3cd; }
+            100% { background-color: white; }
+        }
+
+        .updated {
+            animation: highlight 1s ease;
+        }
+
+        #lastSync {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Detune Collaborative Editor</h1>
+        
+        <div class="connection-panel">
+            <label for="nodeUrl">Node API URL</label>
+            <div class="connection-controls">
+                <input type="text" id="nodeUrl" placeholder="http://localhost:8081" value="http://localhost:8081">
+                <button type="button" class="btn-primary" id="connectBtn">🔌 Connect</button>
+            </div>
+            <div class="field-meta">Enter the HTTP API URL of the JSON CRDT node (e.g., http://localhost:8081)</div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Not connected</span>
+            </div>
+            <div class="sync-mode">
+                <label for="autoSync">Auto-refresh</label>
+                <label class="switch">
+                    <input type="checkbox" id="autoSync" checked>
+                    <span class="slider"></span>
+                </label>
+                <span id="lastSync">Last sync: never</span>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <form id="experimentForm">
+            <div class="form-group">
+                <label for="experiment_id">Record ID</label>
+                <input type="text" id="experiment_id" name="experiment_id" placeholder="exp-2026-05-11-001">
+                <div class="field-meta">Unique identifier</div>
+            </div>
+
+            <div class="form-group">
+                <label for="version">Version</label>
+                <input type="number" id="version" name="version" placeholder="1" min="0">
+                <div class="field-meta">Version number (auto-increments on concurrent changes)</div>
+            </div>
+
+            <div class="form-group">
+                <label for="timestamp">Timestamp</label>
+                <input type="text" id="timestamp" name="timestamp" placeholder="2026-05-11T14:30:00Z">
+                <div class="field-meta">ISO format timestamp</div>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Data description</label>
+                <textarea id="description" name="description" class="large" 
+                    placeholder="Enter a detailed description of the data. This field supports concurrent editing by multiple users."></textarea>
+                <div class="field-meta">Detailed data description used for federative learning (supports concurrent editing)</div>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" class="large" 
+                    placeholder="Additional notes, observations, or documentation. This field supports concurrent editing."></textarea>
+                <div class="field-meta">Extended notes with line breaks and documentation</div>
+            </div>
+
+            <div class="buttons">
+                <button type="button" class="btn-primary" id="refreshBtn">🔄 Refresh Now</button>
+                <button type="button" class="btn-secondary" id="clearBtn">🗑️ Clear All</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const REFRESH_INTERVAL = 500; // 500ms for faster updates
+        
+        let API_BASE = '';
+        let isConnected = false;
+        let currentState = {};
+        let refreshTimer = null;
+        let lastSyncTime = null;
+        let isUpdating = false;
+        let lastEditTime = {}; // Track last edit time per field
+        let lastKnownValues = {}; // Track the last known value we sent to server
+
+        // Field configurations
+        const fields = {
+            experiment_id: { type: 'string', path: ['experiment_id'] },
+            version: { type: 'number', path: ['version'] },
+            timestamp: { type: 'string', path: ['timestamp'] },
+            description: { type: 'string', path: ['description'] },
+            notes: { type: 'string', path: ['notes'] }
+        };
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('autoSync').addEventListener('change', (e) => {
+                if (e.target.checked && isConnected) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            });
+
+            // Immediate sync on every keystroke for all string fields
+            ['experiment_id', 'timestamp', 'description', 'notes'].forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                input.addEventListener('input', () => {
+                    lastEditTime[fieldId] = Date.now();
+                    if (isConnected) {
+                        syncTextField(fieldId);
+                    }
+                });
+            });
+
+            // Version is a number: sync on change or Enter
+            const versionInput = document.getElementById('version');
+            versionInput.addEventListener('input', () => {
+                lastEditTime['version'] = Date.now();
+            });
+            versionInput.addEventListener('change', () => {
+                if (isConnected) syncField('version');
+            });
+            versionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && isConnected) syncField('version');
+            });
+
+            document.getElementById('refreshBtn').addEventListener('click', refreshState);
+            document.getElementById('clearBtn').addEventListener('click', clearAll);
+            document.getElementById('connectBtn').addEventListener('click', handleConnect);
+            
+            // Allow Enter key in URL field to connect
+            document.getElementById('nodeUrl').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleConnect();
+                }
+            });
+        }
+
+        // Handle connection
+        async function handleConnect() {
+            const urlInput = document.getElementById('nodeUrl');
+            let url = urlInput.value.trim();
+            
+            if (!url) {
+                showError('Please enter a valid node URL');
+                return;
+            }
+
+            // Add http:// if no protocol specified
+            if (!url.match(/^https?:\/\//)) {
+                url = 'http://' + url;
+                urlInput.value = url;
+            }
+
+            // Remove trailing slash
+            url = url.replace(/\/$/, '');
+
+            updateStatus('Connecting...', false, true);
+            stopAutoRefresh();
+
+            try {
+                // Test connection with health check
+                const response = await fetch(`${url}/api/health`, { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                // Connection successful
+                API_BASE = url;
+                isConnected = true;
+                localStorage.setItem('nodeUrl', url);
+                
+                updateStatus(`Connected to ${url}`, false, false, true);
+                showSuccess(`Successfully connected to ${url}`);
+                
+                // Initialize lastKnownValues to empty for all fields
+                for (const fieldId of Object.keys(fields)) {
+                    if (fields[fieldId].type === 'string') {
+                        lastKnownValues[fieldId] = '';
+                    }
+                }
+                
+                // Load initial state
+                await refreshState();
+                
+                // Start auto-refresh if enabled
+                if (document.getElementById('autoSync').checked) {
+                    startAutoRefresh();
+                }
+            } catch (error) {
+                isConnected = false;
+                API_BASE = '';
+                updateStatus('Connection failed', true);
+                showError(`Failed to connect to ${url}: ${error.message}`);
+            }
+        }
+
+        // Refresh state from server
+        async function refreshState() {
+            if (isUpdating || !isConnected || !API_BASE) return;
+            isUpdating = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/state`, { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const rawState = await response.json();
+                
+                // The root state is wrapped in "json", so unwrap that first
+                const jsonWrapped = rawState.json || rawState;
+                const decoded = decodeState(jsonWrapped);
+                
+                console.log('Refreshed state:', decoded);
+                
+                // Preserve values for focused fields that were edited recently (within 2 seconds)
+                const preservedValues = {};
+                const now = Date.now();
+                for (const [fieldId, config] of Object.entries(fields)) {
+                    const input = document.getElementById(fieldId);
+                    const timeSinceEdit = now - (lastEditTime[fieldId] || 0);
+                    
+                    // Only preserve if focused AND edited within last 2 seconds
+                    if (document.activeElement === input && timeSinceEdit < 2000) {
+                        // Save the current value for actively editing fields
+                        let value = currentState;
+                        for (const key of config.path) {
+                            value = value?.[key];
+                        }
+                        preservedValues[fieldId] = { path: config.path, value: value };
+                        console.log(`Preserving ${fieldId} (edited ${timeSinceEdit}ms ago)`);
+                    }
+                }
+                
+                // Update current state with server data
+                currentState = decoded;
+                
+                // Restore preserved values for focused fields
+                for (const [fieldId, preserved] of Object.entries(preservedValues)) {
+                    if (preserved.value !== undefined) {
+                        let target = currentState;
+                        for (let i = 0; i < preserved.path.length - 1; i++) {
+                            if (!target[preserved.path[i]]) target[preserved.path[i]] = {};
+                            target = target[preserved.path[i]];
+                        }
+                        target[preserved.path[preserved.path.length - 1]] = preserved.value;
+                    }
+                }
+                
+                updateForm(decoded);
+                
+                lastSyncTime = new Date();
+                updateStatus(`Connected`, false, false, true);
+                updateSyncTime();
+            } catch (error) {
+                console.error('Refresh error:', error);
+                updateStatus('Sync error: ' + error.message, true);
+            } finally {
+                isUpdating = false;
+            }
+        }
+
+        // Decode CRDT state to plain values
+        function decodeState(state) {
+            if (!state || typeof state !== 'object') return state;
+            
+            // Handle Value wrapper
+            if ('Value' in state) {
+                return decodeState(state.Value);
+            }
+            
+            // Handle Object wrapper
+            if ('Object' in state) {
+                const result = {};
+                const obj = state.Object;
+                for (const key in obj) {
+                    result[key] = decodeState(obj[key]);
+                }
+                return result;
+            }
+            
+            // Handle Array wrapper
+            if ('Array' in state) {
+                return state.Array.map(decodeState);
+            }
+            
+            // Handle String as array of characters
+            if ('String' in state) {
+                if (Array.isArray(state.String)) {
+                    return state.String.join('');
+                }
+                return state.String;
+            }
+            
+            // Handle Number
+            if ('Number' in state) {
+                // Convert to integer if it's a whole number
+                const num = state.Number;
+                return Number.isInteger(num) ? Math.floor(num) : num;
+            }
+            
+            // Handle Boolean
+            if ('Boolean' in state) {
+                return state.Boolean;
+            }
+            
+            // Recursively decode plain objects (no wrapper keys)
+            const result = {};
+            for (const key in state) {
+                result[key] = decodeState(state[key]);
+            }
+            return result;
+        }
+
+        // Update form with decoded state
+        function updateForm(state) {
+            console.log('updateForm called with:', state);
+            for (const [fieldId, config] of Object.entries(fields)) {
+                const input = document.getElementById(fieldId);
+                
+                // Navigate through the path array
+                let value = state;
+                for (const key of config.path) {
+                    value = value?.[key];
+                }
+                
+                const now = Date.now();
+                const timeSinceEdit = now - (lastEditTime[fieldId] || 0);
+                const isActivelyEditing = document.activeElement === input && timeSinceEdit < 2000;
+                
+                console.log(`Field ${fieldId}: current="${input.value}", new="${value}", focused=${document.activeElement === input}, editing=${isActivelyEditing}`);
+                
+                // Update currentState for this field ONLY if not actively editing
+                // This prevents race conditions where server state differs from what user is typing
+                if (!isActivelyEditing) {
+                    // Update currentState
+                    let target = currentState;
+                    for (let i = 0; i < config.path.length - 1; i++) {
+                        if (!target[config.path[i]]) target[config.path[i]] = {};
+                        target = target[config.path[i]];
+                    }
+                    target[config.path[config.path.length - 1]] = value;
+                    
+                    // Update the input field
+                    if (config.type === 'string' && typeof value === 'string') {
+                        if (input.value !== value) {
+                            console.log(`Updating ${fieldId} from "${input.value}" to "${value}"`);
+                            input.value = value;
+                            lastKnownValues[fieldId] = value; // Sync lastKnownValues with server state
+                            input.classList.add('updated');
+                            setTimeout(() => input.classList.remove('updated'), 1000);
+                        }
+                    } else if (config.type === 'number' && typeof value === 'number') {
+                        const numValue = Number.isInteger(value) ? value : Math.floor(value);
+                        if (input.value !== String(numValue)) {
+                            console.log(`Updating ${fieldId} from "${input.value}" to "${numValue}"`);
+                            input.value = numValue;
+                            input.classList.add('updated');
+                            setTimeout(() => input.classList.remove('updated'), 1000);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sync a simple field
+        async function syncField(fieldId) {
+            const config = fields[fieldId];
+            const input = document.getElementById(fieldId);
+            const value = input.value;
+
+            if (config.type === 'string') {
+                await syncTextField(fieldId);
+            } else if (config.type === 'number') {
+                const numValue = parseFloat(value) || 0;
+                
+                // Navigate through path to get current value
+                let currentValue = currentState;
+                for (const key of config.path) {
+                    currentValue = currentValue?.[key];
+                }
+                currentValue = currentValue || 0;
+                
+                const diff = numValue - currentValue;
+                
+                if (diff !== 0) {
+                    // Build nested operation for path
+                    const payload = buildNestedOperation(config.path, { Number: { Inc: diff } });
+                    await postOperation(payload, true); // Refresh for simple fields
+                    
+                    // Optimistically update currentState
+                    let target = currentState;
+                    for (let i = 0; i < config.path.length - 1; i++) {
+                        if (!target[config.path[i]]) target[config.path[i]] = {};
+                        target = target[config.path[i]];
+                    }
+                    target[config.path[config.path.length - 1]] = numValue;
+                }
+            }
+        }
+
+        // Sync a text field with diff calculation
+        async function syncTextField(fieldId) {
+            const config = fields[fieldId];
+            const input = document.getElementById(fieldId);
+            const newText = input.value;
+            
+            // Use lastKnownValues instead of currentState for comparison
+            // This prevents issues when auto-refresh updates currentState
+            const oldText = lastKnownValues[fieldId] || '';
+
+            if (newText === oldText) return;
+
+            console.log(`Syncing ${fieldId}: "${oldText}" -> "${newText}"`);
+
+            // Calculate minimal operations
+            const ops = calculateTextDiff(oldText, newText);
+            
+            for (const op of ops) {
+                const payload = buildNestedOperation(config.path, { String: op });
+                await postOperation(payload, false); // Don't auto-refresh
+            }
+            
+            // Update lastKnownValues to track what we sent
+            lastKnownValues[fieldId] = newText;
+            
+            // Also update currentState to prevent refresh conflicts
+            let target = currentState;
+            for (let i = 0; i < config.path.length - 1; i++) {
+                if (!target[config.path[i]]) target[config.path[i]] = {};
+                target = target[config.path[i]];
+            }
+            target[config.path[config.path.length - 1]] = newText;
+        }
+
+        // Build nested operation for a path
+        function buildNestedOperation(path, innerOp) {
+            if (path.length === 1) {
+                return {
+                    JsonKind: {
+                        Object: {
+                            Update: [path[0], innerOp]
+                        }
+                    }
+                };
+            }
+            
+            // Build nested structure for multi-level paths
+            let result = innerOp;
+            for (let i = path.length - 1; i >= 0; i--) {
+                result = {
+                    Object: {
+                        Update: [path[i], result]
+                    }
+                };
+            }
+            return { JsonKind: result };
+        }
+
+        // Calculate minimal diff operations for text
+        function calculateTextDiff(oldText, newText) {
+            console.log(`calculateTextDiff: "${oldText}" -> "${newText}"`);
+            const ops = [];
+            
+            // Find common prefix
+            let prefixLen = 0;
+            while (prefixLen < oldText.length && prefixLen < newText.length && 
+                   oldText[prefixLen] === newText[prefixLen]) {
+                prefixLen++;
+            }
+            
+            // Find common suffix
+            let suffixLen = 0;
+            while (suffixLen < (oldText.length - prefixLen) && 
+                   suffixLen < (newText.length - prefixLen) &&
+                   oldText[oldText.length - 1 - suffixLen] === newText[newText.length - 1 - suffixLen]) {
+                suffixLen++;
+            }
+            
+            const deleteStart = prefixLen;
+            const deleteEnd = oldText.length - suffixLen;
+            const deleteCount = deleteEnd - deleteStart;
+            
+            // Delete changed characters
+            if (deleteCount > 0) {
+                ops.push({ DeleteRange: { start: deleteStart, len: deleteCount } });
+                console.log(`  - DeleteRange at ${deleteStart}, len ${deleteCount}`);
+            }
+            
+            // Insert new characters
+            const insertText = newText.substring(prefixLen, newText.length - suffixLen);
+            for (let i = 0; i < insertText.length; i++) {
+                ops.push({ Insert: { content: insertText[i], pos: prefixLen + i } });
+                console.log(`  - Insert '${insertText[i]}' at pos ${prefixLen + i}`);
+            }
+            
+            console.log(`  Total ops: ${ops.length}`);
+            return ops;
+        }
+
+        // Post an operation to the server
+        async function postOperation(payload, shouldRefresh = true) {
+            if (!isConnected || !API_BASE) {
+                showError('Not connected to a node. Please connect first.');
+                return;
+            }
+
+            console.log('Posting operation:', JSON.stringify(payload, null, 2));
+
+            try {
+                const response = await fetch(`${API_BASE}/api/op`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Operation failed:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.text();
+                console.log('Operation successful:', result);
+                
+                // Only refresh if requested (for non-typing operations)
+                if (shouldRefresh) {
+                    setTimeout(refreshState, 100);
+                }
+            } catch (error) {
+                console.error('Operation error:', error);
+                showError('Failed to sync: ' + error.message);
+            }
+        }
+
+        // Clear all fields
+        async function clearAll() {
+            if (!confirm('Are you sure you want to clear all fields?')) return;
+            
+            for (const config of Object.values(fields)) {
+                if (config.type === 'string') {
+                    // Navigate through path to get current value
+                    let currentValue = currentState;
+                    for (const key of config.path) {
+                        currentValue = currentValue?.[key];
+                    }
+                    currentValue = currentValue || '';
+                    
+                    if (currentValue) {
+                        const payload = buildNestedOperation(
+                            config.path,
+                            { String: { DeleteRange: { start: 0, len: currentValue.length } } }
+                        );
+                        await postOperation(payload);
+                    }
+                } else if (config.type === 'number') {
+                    // Navigate through path to get current value
+                    let currentValue = currentState;
+                    for (const key of config.path) {
+                        currentValue = currentValue?.[key];
+                    }
+                    currentValue = currentValue || 0;
+                    
+                    if (currentValue !== 0) {
+                        const payload = buildNestedOperation(
+                            config.path,
+                            { Number: { Inc: -currentValue } }
+                        );
+                        await postOperation(payload);
+                    }
+                }
+            }
+            
+            setTimeout(refreshState, 100);
+        }
+
+        // Auto-refresh management
+        function startAutoRefresh() {
+            if (refreshTimer || !isConnected) return;
+            console.log('Starting auto-refresh with interval:', REFRESH_INTERVAL);
+            refreshTimer = setInterval(refreshState, REFRESH_INTERVAL);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                console.log('Stopping auto-refresh');
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        // Update status display
+        function updateStatus(text, isError, isConnecting = false, isConnected = false) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.classList.toggle('error', isError);
+            dot.classList.toggle('connecting', isConnecting);
+            dot.classList.toggle('connected', isConnected);
+        }
+
+        function updateSyncTime() {
+            if (lastSyncTime) {
+                const elapsed = Math.floor((new Date() - lastSyncTime) / 1000);
+                document.getElementById('lastSync').textContent = 
+                    `Last sync: ${elapsed}s ago`;
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="error-message">${message}</div>`;
+            setTimeout(() => { container.innerHTML = ''; }, 5000);
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="success-message">${message}</div>`;
+            setTimeout(() => { container.innerHTML = ''; }, 3000);
+        }
+
+        // Update sync time every second
+        setInterval(updateSyncTime, 1000);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            
+            // Try to restore last connection from localStorage
+            const savedUrl = localStorage.getItem('nodeUrl');
+            if (savedUrl) {
+                document.getElementById('nodeUrl').value = savedUrl;
+            }
+        });
+    </script>
+</body>
+</html>
