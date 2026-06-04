@@ -16,35 +16,16 @@ A collaborative web application for editing experiment data using the JSON CRDT 
 ### 1. Start the JSON CRDT node
 
 ```bash
-cd atraktos/generated/json_crdt
+cd generated/json_crdt
 REPLICA_ID=a LISTEN_PORT=9001 HTTP_PORT=8081 cargo run --example network_node
 ```
 
-### 2. Handle CORS (required for local development)
+### 2. Open the web application
 
-The node needs to accept browser requests. You have two options:
-
-**Option A: Use a CORS proxy (simplest for testing)**
+From the repository root folder
 
 ```bash
-# Install cors-anywhere or similar
-npx cors-anywhere
-```
-
-Then update `API_BASE` in `experiment_editor.html` to use the proxy.
-
-**Option B: Add CORS headers to the node (recommended)**
-
-The node already serves HTTP, but you may need to enable CORS. If you see CORS errors in the browser console, you'll need to modify the HTTP server in `moirai-network` to add CORS headers.
-
-**Option C: Serve from the same origin**
-
-Serve the HTML file through the node's HTTP server (requires adding a static file handler).
-
-### 3. Open the web application
-
-```bash
-cd atraktos/generated/json_crdt/web
+cd generated/json_client
 python3 -m http.server 8080
 ```
 
@@ -53,7 +34,7 @@ Then open in your browser:
 http://localhost:8080/experiment_editor.html
 ```
 
-**Important**: If the API is on port 8081, you may encounter CORS issues. See the CORS section below.
+**Important**: If the API is on port 8081, you may encounter CORS issues. 
 
 ## Usage
 
@@ -148,25 +129,10 @@ These use last-writer-wins or counter semantics:
 - Numbers: incremented
 - Changes sync on blur or 500ms after typing stops
 
-## Troubleshooting
-
-### "Failed to save changes"
-- Check that the node is running on port 8081
-- Verify CORS is configured correctly
-- Check browser console for specific errors
-
-### Changes not appearing
-- Ensure auto-refresh is enabled
-- Check the "Last sync" time in the status bar
-- Click "Refresh Now" to manually sync
-
-### Cursor jumps while typing
-- This shouldn't happen - the app only updates fields that aren't currently focused
-- If it does, there may be a race condition; stop auto-refresh while typing
 
 ## Advanced: Multi-Node Setup
 
-To test true distributed editing:
+To test distributed editing:
 
 ```bash
 # Terminal 1 - Node A
@@ -177,6 +143,7 @@ REPLICA_ID=b LISTEN_PORT=9002 HTTP_PORT=8082 PEERS=a:localhost:9001 cargo run --
 ```
 
 Now you can:
-- Point one browser to `localhost:8081` 
-- Point another to `localhost:8082`
+- After connecting to the experiment:
+- Connect one browser to `localhost:8081` 
+- Connect another to `localhost:8082`
 - Edit simultaneously and watch CRDT convergence in action
