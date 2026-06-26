@@ -16,8 +16,6 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Optional generated project name (Cargo package name)
     pub project_name: Option<String>,
-    /// Path to the Moirai workspace root
-    pub moirai_root: PathBuf,
     /// Format output code
     pub format_code: Formatting,
 }
@@ -30,7 +28,6 @@ impl Config {
             input_path,
             output_dir: PathBuf::from(".output/generated_project"),
             project_name: None,
-            moirai_root: PathBuf::from("../moirai"),
             format_code: Formatting::Prettyplease,
         }
     }
@@ -47,12 +44,6 @@ impl Config {
         self
     }
 
-    /// Sets the path to the Moirai workspace root
-    pub fn with_moirai_root(mut self, moirai_root: impl Into<PathBuf>) -> Self {
-        self.moirai_root = moirai_root.into();
-        self
-    }
-
     pub fn with_formatting(mut self, formatting: Formatting) -> Self {
         self.format_code = formatting;
         self
@@ -64,13 +55,6 @@ impl Config {
             return Err(crate::error::ArachneError::Config(format!(
                 "Input file does not exist: {:?}",
                 self.input_path
-            )));
-        }
-
-        if !self.moirai_root.exists() {
-            return Err(crate::error::ArachneError::Config(format!(
-                "Moirai root does not exist: {:?}",
-                self.moirai_root
             )));
         }
 

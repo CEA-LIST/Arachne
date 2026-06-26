@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::fs;
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -49,7 +49,7 @@ pub fn write_project(
             ),
         };
 
-    let cargo_toml = render_cargo_toml(&project_name, &config.moirai_root)?;
+    let cargo_toml = render_cargo_toml(&project_name)?;
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
     fs::write(src_dir.join("lib.rs"), formatted_lib)?;
@@ -60,21 +60,25 @@ pub fn write_project(
     Ok(())
 }
 
-fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> Result<String> {
-    let moirai_root = fs::canonicalize(moirai_root)
-        .map_err(|e| ArachneError::Config(format!("Failed to resolve moirai root: {e}")))?;
-
-    let moirai_crdt = moirai_root.join("moirai-crdt");
-    let moirai_protocol = moirai_root.join("moirai-protocol");
-    let moirai_macros = moirai_root.join("moirai-macros");
-    let moirai_fuzz = moirai_root.join("moirai-fuzz");
-
+fn render_cargo_toml(project_name: &str) -> Result<String> {
     Ok(format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\" }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\"]\nfuzz = []\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
-        to_path_string(&moirai_crdt),
-        to_path_string(&moirai_protocol),
-        to_path_string(&moirai_macros),
-        to_path_string(&moirai_fuzz)
+        "[package]\n\
+        name = \"{project_name}\"\n\
+        version = \"0.1.0\"\n\
+        edition = \"2024\"\n\n\
+        [dependencies]\n\
+        moirai-protocol = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
+        moirai-fuzz = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
+        moirai-crdt = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
+        moirai-macros = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
+        petgraph = \"0.8.3\"\n\
+        rand = \"0.10.0\"\n\
+        deepsize = {{ git = \"https://github.com/leo-olivier/deepsize.git\", optional = true, features = [\"elsa\"] }}\n\n\
+        [features]\n\
+        default = [\"fuzz\", \"sink\"]\n\
+        fuzz = []\n\
+        sink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n\
+        test_utils = [\"dep:deepsize\",\"moirai-protocol/test_utils\",\"moirai-macros/test_utils\",\"moirai-crdt/test_utils\"]\n",
     ))
 }
 
@@ -109,10 +113,6 @@ fn sanitize_package_name(name: &str) -> String {
     } else {
         trimmed
     }
-}
-
-fn to_path_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
 }
 
 fn format_with_prettyplease(tokens: TokenStream) -> Result<String> {

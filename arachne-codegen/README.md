@@ -122,7 +122,7 @@ A reference from an object A to another object B is materialized by an arc betwe
 
 ### Operations
 
-The code generator intentionally does not support Ecore operations at this stage. This decision is primarily motivated by the semantic constraints of conflict-free replicated data types (CRDTs) and by limitations of the Ecore metamodel.
+The code generator intentionally does not support Ecore operations at this stage. This decision is primarily motivated by the semantic constraints of CRDTs and by limitations of the Ecore metamodel.
 
 - First, the implementation of operations is not specified in Ecore, which means a code generator cannot automatically derive their semantics in a meaningful or correct way. Generating operation signatures without being able to generate their behavior would therefore provide little practical value.
 - Second, Ecore does not distinguish between _pure queries_ (side-effect free operations that return a value) and _updates_ (operations with side effects). This distinction is essential in the context of CRDTs, since the underlying CRDT runtime only supports pure operations and a fixed, explicit set of update operations. Allowing users to implement operations manually would risk introducing side effects or updates that are incompatible with the CRDT's convergence guarantees.

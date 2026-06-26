@@ -65,15 +65,6 @@ struct GenerateArgs {
     #[arg(short = 'p', long = "project-name")]
     project_name: Option<String>,
 
-    /// Path to the Moirai workspace root
-    #[arg(
-        short = 'm',
-        long = "moirai-root",
-        default_value = "../moirai",
-        env = "ATRAKTOS_MOIRAI_ROOT"
-    )]
-    moirai_root: PathBuf,
-
     /// Increase log verbosity (`-v`, `-vv`)
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
     verbose: u8,
@@ -130,9 +121,7 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
 
     info!("{}", "Starting code generation".bold());
 
-    let mut config = Config::new(args.input)
-        .with_output_dir(args.output_dir)
-        .with_moirai_root(args.moirai_root);
+    let mut config = Config::new(args.input).with_output_dir(args.output_dir);
 
     if let Some(project_name) = args.project_name {
         config = config.with_project_name(project_name);
