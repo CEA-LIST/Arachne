@@ -67,10 +67,10 @@ fn render_cargo_toml(project_name: &str) -> Result<String> {
         version = \"0.1.0\"\n\
         edition = \"2024\"\n\n\
         [dependencies]\n\
-        moirai-protocol = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
-        moirai-fuzz = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
-        moirai-crdt = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
-        moirai-macros = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", branch = \"22-review-models\" }}\n\
+        moirai-protocol = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.4\" }}\n\
+        moirai-fuzz = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.4\" }}\n\
+        moirai-crdt = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.4\" }}\n\
+        moirai-macros = {{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.4\" }}\n\
         petgraph = \"0.8.3\"\n\
         rand = \"0.10.0\"\n\
         deepsize = {{ git = \"https://github.com/leo-olivier/deepsize.git\", optional = true, features = [\"elsa\"] }}\n\n\
