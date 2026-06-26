@@ -1,11 +1,14 @@
 [package]
 name = "ecore_rs"
-version = "0.1.0"
-authors = ["Red Iron Team <red-iron@ocamlpro.com>"]
+version = "0.2.0"
+authors = [
+    "Red Iron Team <red-iron@ocamlpro.com>",
+    "Léo Olivier <leo.olivier@cea.fr>",
+]
 edition = "2021"
 description = "A parser for the Eclipse Modeling Framework Ecore format."
 readme = "README.md"
-license = "LGPL-3.0-or-later"
+license = "Apache-2.0"
 keywords = ["ecore", "eclipse", "EMF"]
 categories = ["encoding", "parser-implementations"]
 
