@@ -1,7 +1,6 @@
 use ecore_rs::{ctx::Ctx, repr::idx};
-use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::TokenStream;
+use quote::quote;
 use syn::Ident;
 
 use crate::{
@@ -10,6 +9,10 @@ use crate::{
         classifier::{polymorphic_kind_ident, polymorphic_kind_log_ident},
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{
+            classifier_type_ident_with_suffix, type_ident, type_ident_with_suffix, value_ident,
+            value_ident_with_suffix,
+        },
         import::{Import, Log, Protocol},
         reference::analysis::ReferenceAnalysis,
     },
@@ -59,20 +62,24 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn root_variant_ident(&self, root: RootMeta) -> Ident {
-        polymorphic_kind_ident(self.root_class(root))
+        polymorphic_kind_ident(self.ctx, self.root_class(root))
     }
 
     fn root_log_ident(&self, root: RootMeta) -> Ident {
-        polymorphic_kind_log_ident(self.root_class(root))
+        polymorphic_kind_log_ident(self.ctx, self.root_class(root))
     }
 
     fn root_value_ident(&self, root: RootMeta) -> Ident {
-        let kind_name = polymorphic_kind_ident(self.root_class(root));
-        format_ident!("{}Value", kind_name)
+        let class = self.root_class(root);
+        if class.is_abstract() || class.is_interface() || !class.sub().is_empty() {
+            classifier_type_ident_with_suffix(self.ctx, class, "KindValue")
+        } else {
+            classifier_type_ident_with_suffix(self.ctx, class, "Value")
+        }
     }
 
     fn root_field_ident(&self, root: RootMeta) -> Ident {
-        format_ident!("{}_log", self.root_class_name(root).to_snake_case())
+        value_ident_with_suffix(self.root_class_name(root), "log")
     }
 
     fn has_references(&self) -> bool {
@@ -114,7 +121,7 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_ident = type_ident(package_name);
         let root_variants = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             quote! { #variant(#path::#variant) }
@@ -136,14 +143,11 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_package_value_struct(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let root_fields = self.roots().into_iter().map(|root| {
-            let field = Ident::new(
-                &self.root_class_name(root).to_snake_case(),
-                Span::call_site(),
-            );
+            let field = value_ident(self.root_class_name(root));
             let value_ty = self.root_value_ident(root);
             quote! { pub #field: #path::#value_ty }
         });
@@ -166,7 +170,7 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_package_log_struct(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
@@ -219,9 +223,9 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
+        let package_ident = type_ident(package_name);
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
 
         let enabled_root_arms = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
@@ -266,7 +270,7 @@ impl<'a> PackageGenerator<'a> {
         let root_variants = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
-            let field_stringify = self.root_class_name(root).to_snake_case();
+            let field_stringify = value_ident(self.root_class_name(root)).to_string();
             if self.has_references() {
                 quote! { #package_ident::#variant(o) =>
                 #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink, #path::SinkOwnership::Owned),
@@ -374,16 +378,13 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_eval_nested_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
         let root_reads = self.roots().into_iter().map(|root| {
-            let field_name = Ident::new(
-                &self.root_class_name(root).to_snake_case(),
-                Span::call_site(),
-            );
+            let field_name = value_ident(self.root_class_name(root));
             let log_field = self.root_field_ident(root);
             quote! { #field_name: self.#log_field.execute_query(#path::Read::new()) }
         });
@@ -410,7 +411,7 @@ impl<'a> PackageGenerator<'a> {
 
     fn translate_ids_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_ident = type_ident(package_name);
         let translate_root_arms = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             quote! { #package_ident::#variant(op) => #package_ident::#variant(op.clone()) }

@@ -2,10 +2,8 @@ use ecore_rs::{
     ctx::Ctx,
     repr::{Structural, builtin::Typ as BuiltinTyp, idx, structural},
 };
-use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
-use syn::Ident;
+use proc_macro2::TokenStream;
+use quote::quote;
 
 use crate::{
     CLASSIFIERS_PATH_MOD,
@@ -20,6 +18,7 @@ use crate::{
         feature::bounds::{BoundKind, normalize_bounds},
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
         warnings::Warning,
     },
@@ -101,10 +100,8 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             .get(*self.reference.typ.unwrap())
             .unwrap();
 
-        let snake = self.reference.name.to_snake_case();
-        let name = syn::parse_str::<Ident>(&snake)
-            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
-        let target_type = containment_target_log_ident(target_class);
+        let name = value_ident(&self.reference.name);
+        let target_type = containment_target_log_ident(self.ctx, target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
@@ -150,7 +147,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
 
             let key_class = self.ctx.classes().get(*key_feature.typ.unwrap()).unwrap();
             let key_ty = if key_class.is_enum() {
-                let enum_name = format_ident!("{}", key_class.name().to_upper_camel_case());
+                let enum_name = classifier_type_ident(self.ctx, key_class);
                 quote! { #enum_name }
             } else {
                 let typ: BuiltinTyp = key_class.name().parse().map_err(|_| {
@@ -212,7 +209,7 @@ impl<'a> ContainmentGenerator<'a> {
             structural::Typ::EAttribute => {
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
                 let (rust_ty, mut primitive) = if value_class.is_enum() {
-                    let enum_name = format_ident!("{}", value_class.name());
+                    let enum_name = classifier_type_ident(self.ctx, value_class);
                     (
                         Some(quote! { #enum_name }),
                         Primitive::Register(crate::codegen::datatype::crdt::Register::MultiValue),
@@ -243,7 +240,7 @@ impl<'a> ContainmentGenerator<'a> {
                         )
                     }
                     Primitive::Flag(flag) => {
-                        let flag_name = format_ident!("{}", flag.name());
+                        let flag_name = rust_ident(flag.name());
                         (
                             quote! { #path::VecLog<#path::#flag_name> },
                             vec![
@@ -257,7 +254,7 @@ impl<'a> ContainmentGenerator<'a> {
                     Primitive::Register(register) => {
                         let rust_ty = rust_ty
                             .ok_or_else(|| anyhow::anyhow!("Register must have a Rust type"))?;
-                        let register_name = format_ident!("{}", register.name());
+                        let register_name = rust_ident(register.name());
                         (
                             quote! { #path::VecLog<#path::#register_name<#rust_ty>> },
                             vec![
@@ -284,7 +281,7 @@ impl<'a> ContainmentGenerator<'a> {
                     "UWMap value feature cannot be a non-containment reference"
                 );
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
-                let value_log = containment_target_log_ident(value_class);
+                let value_log = containment_target_log_ident(self.ctx, value_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);

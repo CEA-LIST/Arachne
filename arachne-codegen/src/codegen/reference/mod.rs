@@ -2,10 +2,9 @@ pub mod analysis;
 pub mod containment;
 
 use ecore_rs::{ctx::Ctx, prelude::idx};
-use heck::{ToSnakeCase, ToUpperCamelCase};
 use log::debug;
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::TokenStream;
+use quote::quote;
 use syn::Ident;
 
 use crate::{
@@ -14,6 +13,10 @@ use crate::{
         cycles::CycleAnalysis,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{
+            classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident,
+            value_ident,
+        },
         import::{Import, Macros, Protocol},
         reference::{
             analysis::{ReferenceAnalysis, analyze_references},
@@ -70,8 +73,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             .iter()
             .map(|&class_idx| {
                 let class = &self.ctx.classes()[*class_idx];
-                let variant_name = format_ident!("{}Id", class.name());
-                variant_name
+                classifier_type_ident_with_suffix(self.ctx, class, "Id")
             })
             .collect::<Vec<_>>();
 
@@ -150,7 +152,7 @@ impl<'a> ReferenceGenerator<'a> {
         let mut arms = Vec::new();
 
         for &root_idx in &self.root_class_indices {
-            let root_field = self.ctx.classes()[*root_idx].name().to_snake_case();
+            let root_field = value_ident(self.ctx.classes()[*root_idx].name()).to_string();
 
             for containment_path in
                 find_creation_paths(self.ctx, root_idx, analysis, self.cycle_analysis)
@@ -164,8 +166,8 @@ impl<'a> ReferenceGenerator<'a> {
 
         for (vertex_class, seg_patterns) in self.shortest_discriminating_suffixes(&full_paths) {
             let vertex_class = &self.ctx.classes()[*vertex_class];
-            let id_ty = format_ident!("{}Id", vertex_class.name());
-            let variant = format_ident!("{}Id", vertex_class.name());
+            let id_ty = classifier_type_ident_with_suffix(self.ctx, vertex_class, "Id");
+            let variant = classifier_type_ident_with_suffix(self.ctx, vertex_class, "Id");
             let seg_patterns = seg_patterns.iter().map(|segment| segment.to_tokens(&path));
 
             arms.push(quote! {
@@ -193,12 +195,9 @@ impl<'a> ReferenceGenerator<'a> {
             .iter()
             .map(|r| {
                 let source_class = &self.ctx.classes()[*r.source_class];
-                let base_name = format!(
-                    "{}{}Edge",
-                    source_class.name().to_upper_camel_case(),
-                    r.reference_name.to_upper_camel_case()
-                );
-                Ident::new(&base_name, Span::call_site())
+                let source_name = classifier_type_ident(self.ctx, source_class);
+                let reference_name = type_ident(&r.reference_name);
+                rust_ident(format!("{source_name}{reference_name}Edge"))
             })
             .collect()
     }
@@ -212,11 +211,9 @@ impl<'a> ReferenceGenerator<'a> {
             .map(|r| {
                 let source_class = &self.ctx.classes()[*r.source_class];
                 let target_class = &self.ctx.classes()[*r.target_class];
-                let base_name = format!(
-                    "{}To{}",
-                    source_class.name().to_upper_camel_case(),
-                    target_class.name().to_upper_camel_case()
-                );
+                let source_name = classifier_type_ident(self.ctx, source_class);
+                let target_name = classifier_type_ident(self.ctx, target_class);
+                let base_name = format!("{source_name}To{target_name}");
                 let suffix = counts.entry(base_name.clone()).or_insert(0);
                 let unique_name = if *suffix == 0 {
                     base_name
@@ -225,7 +222,7 @@ impl<'a> ReferenceGenerator<'a> {
                 };
                 *suffix += 1;
 
-                Ident::new(&unique_name, Span::call_site())
+                rust_ident(unique_name)
             })
             .collect()
     }
@@ -267,7 +264,7 @@ impl<'a> ReferenceGenerator<'a> {
             .iter()
             .map(|&class_idx| {
                 let class = &self.ctx.classes()[*class_idx];
-                format_ident!("{}Id", class.name())
+                classifier_type_ident_with_suffix(self.ctx, class, "Id")
             })
             .collect();
 
@@ -304,8 +301,8 @@ impl<'a> ReferenceGenerator<'a> {
             .map(|(r, (edge_name, conn_name))| {
                 let source_class = &self.ctx.classes()[*r.source_class];
                 let target_class = &self.ctx.classes()[*r.target_class];
-                let source_id = format_ident!("{}Id", source_class.name());
-                let target_id = format_ident!("{}Id", target_class.name());
+                let source_id = classifier_type_ident_with_suffix(self.ctx, source_class, "Id");
+                let target_id = classifier_type_ident_with_suffix(self.ctx, target_class, "Id");
 
                 quote! {
                     #conn_name: #source_id -> #target_id (#edge_name)

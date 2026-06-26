@@ -1,11 +1,14 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
-use heck::{ToSnakeCase, ToUpperCamelCase};
+use heck::ToUpperCamelCase;
 
 use crate::{
     codegen::{
         annotation::uw_map_spec,
-        classifier::{containment_target_ident, has_subclasses, inherited_field_ident},
+        classifier::{
+            classifier_ident, containment_target_ident, has_subclasses, inherited_field_ident,
+        },
         cycles::{BoxingStrategy, CycleAnalysis},
+        ident::value_ident,
         reference::analysis::ReferenceAnalysis,
     },
     utils::hash::HashSet,
@@ -122,8 +125,8 @@ fn find_paths_recursive(
         };
 
         let target_class = &env.ctx.classes()[*target_idx];
-        let field_snake = feature.name.to_snake_case();
-        let variant_name = field_snake.to_upper_camel_case();
+        let field_ident = value_ident(&feature.name).to_string();
+        let variant_name = field_ident.to_upper_camel_case();
         let is_many = feature.bounds.ubound != Some(1);
         let is_boxed = env
             .cycle_analysis
@@ -143,7 +146,7 @@ fn find_paths_recursive(
             variant_name: variant_name.clone(),
             is_boxed,
         });
-        state.current_log_path.push(field_snake.clone());
+        state.current_log_path.push(field_ident.clone());
 
         if is_many {
             if uw_map_spec(feature).is_some() {
@@ -175,15 +178,15 @@ fn find_paths_recursive(
     // Process inherited features: for each superclass, recurse through its Feat type
     for super_idx in class.sup() {
         let super_class = &env.ctx.classes()[**super_idx];
-        let field_snake = inherited_field_ident(super_class).to_string();
-        let field_variant_name = field_snake.to_upper_camel_case();
+        let field_ident = inherited_field_ident(super_class).to_string();
+        let field_variant_name = field_ident.to_upper_camel_case();
 
         state.current_steps.push(PathStep::Field {
             class_name: class.name().to_string(),
             variant_name: field_variant_name,
             is_boxed: false,
         });
-        state.current_log_path.push(field_snake);
+        state.current_log_path.push(field_ident);
 
         if super_class.is_abstract() || super_class.is_interface() {
             find_feat_paths_recursive(env, *super_idx, state, passed_through_box);
@@ -218,8 +221,8 @@ fn find_feat_paths_recursive(
         };
 
         let target_class = &env.ctx.classes()[*target_idx];
-        let field_snake = feature.name.to_snake_case();
-        let variant_name = field_snake.to_upper_camel_case();
+        let field_ident = value_ident(&feature.name).to_string();
+        let variant_name = field_ident.to_upper_camel_case();
         let is_many = feature.bounds.ubound != Some(1);
 
         let feat_class_name = class.name().to_string();
@@ -236,7 +239,7 @@ fn find_feat_paths_recursive(
             variant_name: variant_name.clone(),
             is_boxed,
         });
-        state.current_log_path.push(field_snake.clone());
+        state.current_log_path.push(field_ident.clone());
 
         if is_many {
             if uw_map_spec(feature).is_some() {
@@ -327,12 +330,12 @@ fn explore_polymorphic_class(
     }
 
     let class = &env.ctx.classes()[*class_idx];
-    let union_name = containment_target_ident(class).to_string();
+    let union_name = containment_target_ident(env.ctx, class).to_string();
 
     if class.is_concrete() && has_subclasses(class) {
         state.current_steps.push(PathStep::Variant {
             union_name: union_name.clone(),
-            variant_name: class.name().to_string(),
+            variant_name: classifier_ident(env.ctx, class).to_string(),
         });
         find_paths_recursive(env, class_idx, state, passed_through_box);
         state.current_steps.pop();
@@ -343,7 +346,7 @@ fn explore_polymorphic_class(
 
         state.current_steps.push(PathStep::Variant {
             union_name: union_name.clone(),
-            variant_name: sub_class.name().to_string(),
+            variant_name: classifier_ident(env.ctx, sub_class).to_string(),
         });
 
         if is_polymorphic_class(sub_class) {

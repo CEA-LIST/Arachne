@@ -4,10 +4,7 @@ use ecore_rs::{
     ctx::Ctx,
     repr::{Structural, builtin::Typ},
 };
-use heck::ToSnakeCase;
-use proc_macro2::Span;
 use quote::quote;
-use syn::Ident;
 
 use crate::{
     CLASSIFIERS_PATH_MOD,
@@ -20,6 +17,7 @@ use crate::{
         feature::bounds::{BoundKind, normalize_bounds},
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
         warnings::Warning,
     },
@@ -84,9 +82,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             })
         }
 
-        let snake = self.attribute.name.to_snake_case();
-        let name = syn::parse_str::<Ident>(&snake)
-            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
+        let name = value_ident(&self.attribute.name);
         let class_typ = self
             .ctx
             .classes()
@@ -94,7 +90,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .unwrap();
 
         let (rust_typ, mut crdt) = if class_typ.is_enum() {
-            let enum_name = Ident::new(class_typ.name(), Span::call_site());
+            let enum_name = classifier_type_ident(self.ctx, class_typ);
             (
                 Some(quote! { #enum_name }),
                 Primitive::Register(Default::default()),
@@ -117,7 +113,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (log_type, crdt_inner, log_import) = match &crdt {
             Primitive::Counter(_) => {
                 let rust_typ = rust_typ.clone().expect("Counter should have a rust type");
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
@@ -125,7 +121,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 )
             }
             Primitive::Flag(_) => {
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name },
@@ -134,7 +130,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
             Primitive::Register(_) => {
                 let rust_typ = rust_typ.clone().expect("Register should have a rust type");
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
@@ -143,7 +139,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
             Primitive::List => {
                 // EString -> List<char>, uses EventGraph as log type
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::EventGraph },
                     quote! { #path::#type_name<char> },
@@ -207,7 +203,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                     Some(DatatypeOverride::Set(set)) => set,
                     _ => Set::AWSet,
                 };
-                let set_name = syn::Ident::new(set_typ.name(), Span::call_site());
+                let set_name = rust_ident(set_typ.name());
                 (
                     quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
                     vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(

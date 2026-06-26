@@ -5,6 +5,7 @@ mod datatype;
 mod feature;
 pub mod generate;
 pub mod generator;
+mod ident;
 mod import;
 mod operation;
 pub mod package;
