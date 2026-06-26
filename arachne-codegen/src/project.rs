@@ -78,7 +78,7 @@ fn render_cargo_toml(project_name: &str) -> Result<String> {
         default = [\"fuzz\", \"sink\"]\n\
         fuzz = []\n\
         sink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n\
-        test_utils = [\"dep:deepsize\",\"moirai-protocol/test_utils\",\"moirai-macros/test_utils\",\"moirai-crdt/test_utils\"]\n",
+        test_utils = [\"dep:deepsize\"]\n",
     ))
 }
 
