@@ -12,7 +12,7 @@ We outline the principles that guided the design of the mapping from Ecore to CR
 2. Every sequential execution produces only valid models.
 3. The mapping preserves the metamodel's structural decomposition as much as possible (e.g., classes become replicated objects, attributes become replicated fields, etc...).
 
-Depending on the chosen CRDTs during generation (the default mapping can be overridden using EAnnotations), the generated CRDT may allow some invalid models to be constructed, when conflicts arise between concurrent updates. For example, a single-valued attribute may be concurrently set to two different values, and the generated CRDT may resolve the conflict by keeping both values (this is the semantics of the Multi-value Register CRDT). In this case, the generated CRDT would allow a model to be constructed that violates the metamodel's multiplicity constraints. This is a trade-off between conflict-resolution in practical collaborative editing and strict enforcement of metamodel constraints.
+Depending on the chosen CRDTs during generation (the default mapping can be overridden using `EAnnotation`s), the generated CRDT may allow some invalid models to be constructed, when conflicts arise between concurrent updates. For example, a single-valued attribute may be concurrently set to two different values, and the generated CRDT may resolve the conflict by keeping both values (this is the semantics of the Multi-value Register CRDT). In this case, the generated CRDT would allow a model to be constructed that violates the metamodel's multiplicity constraints. This is a trade-off between conflict-resolution in practical collaborative editing and strict enforcement of metamodel constraints.
 
 ## Supported metalanguage
 
@@ -241,7 +241,7 @@ When all concrete top-level variants of an abstract root are transparent, the pa
 
 Keeping track of the current state of the code generator, here is a list of features that are either implemented or still missing:
 
-- [x] EAnnotations support for datatype overrides
+- [x] `EAnnotation`s support for datatype overrides
 - [x] Transparent representation annotations
 - [x] Reference manager
 - [ ] Multiple EPackages
@@ -249,4 +249,4 @@ Keeping track of the current state of the code generator, here is a list of feat
 - [ ] Parser: defaultValue, defaultValueLiteral, generic type panic, resolveProxies
 - [ ] _unexpected `cfg` condition value: `test_utils`_: decide whose feature flag controls the generated code
 - [x] Reserved Rust keywords
-- [ ] Macro generated struct names clash with user-defined metamodel constructs
+- [x] Macro generated struct names clash with user-defined metamodel constructs
