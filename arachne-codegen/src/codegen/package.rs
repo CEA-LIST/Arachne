@@ -14,6 +14,7 @@ use crate::{
             value_ident_with_suffix,
         },
         import::{Import, Log, Protocol},
+        read_as_ecore::ReadAsEcoreGenerator,
         reference::analysis::ReferenceAnalysis,
     },
 };
@@ -26,6 +27,7 @@ struct RootMeta {
 pub struct PackageGenerator<'a> {
     ctx: &'a Ctx,
     pack_idx: idx::Pack,
+    package_classes: Vec<idx::Class>,
     root_class_indices: Vec<idx::Class>,
     ref_analysis: &'a ReferenceAnalysis,
 }
@@ -34,12 +36,14 @@ impl<'a> PackageGenerator<'a> {
     pub fn new(
         ctx: &'a Ctx,
         pack_idx: idx::Pack,
+        package_classes: Vec<idx::Class>,
         root_class_indices: Vec<idx::Class>,
         ref_analysis: &'a ReferenceAnalysis,
     ) -> Self {
         Self {
             ctx,
             pack_idx,
+            package_classes,
             root_class_indices,
             ref_analysis,
         }
@@ -99,6 +103,7 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::Interner),
             Import::Protocol(Protocol::InternalizeOp),
             Import::Protocol(Protocol::SinkCollector),
+            Import::Protocol(Protocol::ObjectPath),
             Import::Log(Log::PartiallyOrdered),
             Import::Custom("crate::classifiers::*"),
         ];
@@ -520,6 +525,16 @@ impl<'a> Generate for PackageGenerator<'a> {
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
         let translate_ids = self.translate_ids_impl();
+        let (read_as_ecore, read_as_ecore_imports, read_as_ecore_warnings) =
+            ReadAsEcoreGenerator::new(
+                self.ctx,
+                self.pack_idx,
+                self.package_classes.clone(),
+                self.root_class_indices.clone(),
+                self.ref_analysis,
+            )
+            .generate()?
+            .into();
 
         let tokens = quote! {
             #package_enum
@@ -529,8 +544,12 @@ impl<'a> Generate for PackageGenerator<'a> {
             #is_log_impl
             #eval_nested_impl
             #translate_ids
+            #read_as_ecore
         };
 
-        Ok(Fragment::new(tokens, self.imports(), vec![]))
+        let mut imports = self.imports();
+        imports.extend(read_as_ecore_imports);
+
+        Ok(Fragment::new(tokens, imports, read_as_ecore_warnings))
     }
 }

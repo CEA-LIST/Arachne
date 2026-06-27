@@ -240,17 +240,18 @@ pub fn generate_from_parser<'a>(
     references.register(fragment);
 
     info!("Generating package...");
-    let package_gen =
-        PackageGenerator::new(&parser.ctx, pack.idx, top_level_roots, &reference_analysis);
+    let generated_class_count = reachable_package_classes.len();
+    let package_gen = PackageGenerator::new(
+        &parser.ctx,
+        pack.idx,
+        reachable_package_classes,
+        top_level_roots,
+        &reference_analysis,
+    );
     let fragment = package_gen.generate()?;
     package.register(fragment);
 
-    Ok((
-        classifiers,
-        references,
-        package,
-        reachable_package_classes.len(),
-    ))
+    Ok((classifiers, references, package, generated_class_count))
 }
 
 fn collect_reachable_classes(
@@ -466,6 +467,21 @@ mod tests {
         generate_modules_from_parser(&parser)
     }
 
+    fn generate_package_from_file(path: impl AsRef<Path>) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+        let pack = parser
+            .ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+            .expect("package should exist");
+        let (_classifiers, _references, package, _generated_class_count) =
+            generate_from_parser(&parser, pack).expect("generation should succeed");
+
+        normalize(package.build())
+    }
+
     #[test]
     fn unique_ordered_many_attribute_uses_graph_list() {
         let (classifiers, _references) =
@@ -536,5 +552,14 @@ mod tests {
             "name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>"
         ));
         assert!(references.contains("BazFooEdge[1,1]"));
+    }
+
+    #[test]
+    fn package_generates_read_as_ecore_query() {
+        let package = generate_package_from_file("../examples/class_hierarchy.ecore");
+
+        assert!(package.contains("pubstructReadAsEcore;"));
+        assert!(package.contains("impl__package::QueryOperationforReadAsEcore"));
+        assert!(package.contains("impl__package::EvalNested<ReadAsEcore>forClassHierarchyLog"));
     }
 }

@@ -9,5 +9,6 @@ mod ident;
 mod import;
 mod operation;
 pub mod package;
+pub mod read_as_ecore;
 pub mod reference;
 mod warnings;
