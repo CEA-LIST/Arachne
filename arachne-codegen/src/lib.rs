@@ -11,12 +11,12 @@ pub use config::Config;
 use ecore_rs::repr::{Class, Pack, idx, structural};
 pub use error::{ArachneError, Result};
 use heck::ToSnakeCase;
-use log::{debug, info};
+use log::{debug, info, warn};
 pub use parser::EcoreParser;
 
 use crate::{
     codegen::{
-        classifier::ClassGenerator,
+        classifier::{ClassGenerator, is_instantiable_class},
         cycles::analyze_cycles,
         generate::Generate,
         generator::Generator,
@@ -53,6 +53,21 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     info!("Parsing ecore metamodel: {:?}", config.input_path);
     let parser = EcoreParser::from_file(&config.input_path)?;
 
+    if parser
+        .ctx
+        .packs()
+        .iter()
+        .filter(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .count()
+        > 1
+    {
+        warn!(
+            "Multiple packages found in the Ecore model. Only the first valid package will be used for code generation."
+        );
+    }
+
+    // Find the first valid package (not [root] or [builtin]) to generate code for
+    // TODO: Consider allowing the user to specify a package name in the config
     let pack = parser
         .ctx
         .packs()
@@ -126,7 +141,7 @@ pub fn generate_from_parser<'a>(
     let concrete_package_classes: Vec<idx::Class> = package_classes
         .iter()
         .copied()
-        .filter(|class_idx| parser.ctx.classes()[**class_idx].is_concrete())
+        .filter(|class_idx| is_instantiable_class(&parser.ctx.classes()[**class_idx]))
         .collect();
 
     let concrete_containment_incoming =
@@ -153,8 +168,7 @@ pub fn generate_from_parser<'a>(
             .filter(|class_idx| {
                 let class = &parser.ctx.classes()[**class_idx];
                 !class.is_enum()
-                    && !class.is_interface()
-                    && !class.is_concrete()
+                    && (class.is_interface() || !class.is_concrete())
                     && has_concrete_descendant(&parser.ctx, *class_idx, &package_class_set)
                     && abstract_family_has_no_external_container(
                         &parser.ctx,
@@ -290,7 +304,7 @@ fn has_concrete_descendant(
         }
 
         let class = &ctx.classes()[*candidate];
-        if class.is_concrete() {
+        if is_instantiable_class(class) {
             return true;
         }
 
@@ -314,7 +328,7 @@ fn concrete_descendants_in_package(
         }
 
         let class = &ctx.classes()[*candidate];
-        if class.is_concrete() {
+        if is_instantiable_class(class) {
             result.insert(candidate);
         }
 
@@ -425,6 +439,7 @@ mod tests {
     }
 
     fn generate_modules_from_parser(parser: &EcoreParser) -> (String, String) {
+        println!("{:?}", parser.ctx.packs().len());
         let pack = parser
             .ctx
             .packs()
@@ -446,10 +461,27 @@ mod tests {
         generate_modules_from_parser(&parser)
     }
 
+    fn generate_modules_from_str(ecore: &str) -> (String, String) {
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        generate_modules_from_parser(&parser)
+    }
+
+    #[test]
+    fn unique_ordered_many_attribute_uses_graph_list() {
+        let (classifiers, _references) =
+            generate_modules_from_file("../examples/pet_metamodels/kitchen_sink.ecore");
+
+        assert!(
+            classifiers.contains("unique_list:__classifiers::GraphLog<__classifiers::List<i16>>")
+        );
+        assert!(!classifiers.contains("__classifiers::ListLog"));
+    }
+
     #[test]
     fn concrete_superclass_with_subclasses_emits_family_union() {
-        let (classifiers, _references) =
-            generate_modules_from_file("../examples/concrete_inherits_concrete.ecore");
+        let (classifiers, _references) = generate_modules_from_file(
+            "../examples/pet_metamodels/concrete_inherits_concrete.ecore",
+        );
 
         assert!(classifiers.contains("__classifiers::record!(A{"));
         assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(B,BLog));"));
@@ -457,8 +489,9 @@ mod tests {
 
     #[test]
     fn containment_typed_by_concrete_superclass_uses_family_log() {
-        let (classifiers, _references) =
-            generate_modules_from_file("../examples/concrete_polymorphic_targets.ecore");
+        let (classifiers, _references) = generate_modules_from_file(
+            "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
+        );
 
         assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));"));
         assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog)|C(C,CLog));"));
@@ -467,12 +500,41 @@ mod tests {
 
     #[test]
     fn non_containment_reference_typed_by_concrete_superclass_expands_to_family() {
-        let (_classifiers, references) =
-            generate_modules_from_file("../examples/concrete_polymorphic_targets.ecore");
+        let (_classifiers, references) = generate_modules_from_file(
+            "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
+        );
 
         assert!(references.contains("DTargetEdge[0,1]"));
         assert!(references.contains("DToA:DId->AId(DTargetEdge)"));
         assert!(references.contains("DToB:DId->BId(DTargetEdge)"));
         assert!(references.contains("DToC:DId->CId(DTargetEdge)"));
+    }
+
+    #[test]
+    fn multiple_inheritance() {
+        let (classifiers, _references) =
+            generate_modules_from_file("../examples/pet_metamodels/multiple_inheritance.ecore");
+
+        println!("classifiers: {}", classifiers);
+
+        assert!(classifiers.contains("AKind=C(C,CLog)"));
+        assert!(classifiers.contains("BKind=C(C,CLog)"));
+    }
+
+    #[test]
+    fn interface_is_generated_like_abstract_class() {
+        let ecore = include_str!("../../examples/pet_metamodels/kitchen_sink.ecore").replace(
+            r#"name="Abstract" abstract="true""#,
+            r#"name="Abstract" interface="true""#,
+        );
+
+        let (classifiers, references) = generate_modules_from_str(&ecore);
+
+        assert!(classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog));"));
+        assert!(classifiers.contains("__classifiers::record!(Abstract{"));
+        assert!(classifiers.contains(
+            "name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>"
+        ));
+        assert!(references.contains("BazFooEdge[1,1]"));
     }
 }

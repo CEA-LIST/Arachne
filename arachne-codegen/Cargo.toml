@@ -17,6 +17,6 @@ heck = "0.5.0"
 log = "0.4.29"
 owo-colors = "4"
 xml-builder = "0.5.4"
-moirai-protocol = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.4" }
-moirai-crdt = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.4" }
-moirai-macros = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.4" }
+moirai-protocol = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.5" }
+moirai-crdt = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.5" }
+moirai-macros = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.5" }

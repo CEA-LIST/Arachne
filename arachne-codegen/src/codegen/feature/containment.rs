@@ -15,12 +15,14 @@ use crate::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
             to_crdt::ToCrdt,
         },
-        feature::bounds::{BoundKind, normalize_bounds},
+        feature::{
+            bounds::{BoundKind, normalize_bounds},
+            typed_element::unsupported_feature_properties,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
-        warnings::Warning,
     },
 };
 
@@ -55,44 +57,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.reference.bounds, &self.reference.name);
 
-        if let Some(changeable) = self.reference.changeable
-            && !changeable
-        {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "changeable".into(),
-                value: "false".into(),
-            })
-        }
-
-        if let Some(transient) = self.reference.transient {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "transient".into(),
-                value: transient.to_string(),
-            })
-        }
-        if let Some(volatile) = self.reference.volatile {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "volatile".into(),
-                value: volatile.to_string(),
-            })
-        }
-        if let Some(derived) = self.reference.derived {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
-        if let Some(derived) = self.reference.unsettable {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
+        unsupported_feature_properties(self.reference, &mut warnings);
 
         let target_class = self
             .ctx
@@ -266,9 +231,9 @@ impl<'a> ContainmentGenerator<'a> {
                         )
                     }
                     Primitive::List => (
-                        quote! { #path::EventGraph<#path::List<char>> },
+                        quote! { #path::GraphLog<#path::List<char>> },
                         vec![
-                            Import::Log(Log::EventGraph),
+                            Import::Log(Log::Graph),
                             Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
                         ],
                     ),

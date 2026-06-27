@@ -94,9 +94,8 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::Version),
             Import::Protocol(Protocol::Event),
             Import::Protocol(Protocol::QueryOperation),
-            Import::Protocol(Protocol::ObjectPath),
             Import::Protocol(Protocol::SinkEffect),
-            Import::Protocol(Protocol::SinkOwnership),
+            Import::Protocol(Protocol::EffectContext),
             Import::Protocol(Protocol::Interner),
             Import::Protocol(Protocol::InternalizeOp),
             Import::Protocol(Protocol::SinkCollector),
@@ -137,6 +136,62 @@ impl<'a> PackageGenerator<'a> {
             pub enum #package_ident {
                 #(#root_variants),*
                 #reference_variants
+            }
+        }
+    }
+
+    fn generate_package_rejection_enum(&self) -> TokenStream {
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
+        let reference_log_ty = quote! { #path::VecLog<#path::ReferenceManager<#path::FairPolicy>> };
+
+        let root_variants = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let log_ty = self.root_log_ident(root);
+            quote! {
+                #variant(<#path::#log_ty as #path::IsLog>::Rejection)
+            }
+        });
+        let root_display_arms = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let label = variant.to_string();
+            quote! {
+                Self::#variant(error) => write!(f, "{}: {}", #label, error)
+            }
+        });
+        let reference_variants = if self.has_references() {
+            quote! {
+                AddReference(<#reference_log_ty as #path::IsLog>::Rejection),
+                RemoveReference(<#reference_log_ty as #path::IsLog>::Rejection),
+            }
+        } else {
+            quote! {}
+        };
+        let reference_display_arms = if self.has_references() {
+            quote! {
+                Self::AddReference(error) => write!(f, "AddReference: {}", error),
+                Self::RemoveReference(error) => write!(f, "RemoveReference: {}", error),
+            }
+        } else {
+            quote! {}
+        };
+
+        quote! {
+            #[derive(Debug)]
+            pub enum #package_rejection_name {
+                #(#root_variants,)*
+                #reference_variants
+            }
+
+            impl std::fmt::Display for #package_rejection_name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    match self {
+                        #(#root_display_arms,)*
+                        #reference_display_arms
+                    }
+                }
             }
         }
     }
@@ -226,11 +281,17 @@ impl<'a> PackageGenerator<'a> {
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let package_ident = type_ident(package_name);
         let package_value_name = type_ident_with_suffix(package_name, "Value");
+        let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
 
         let enabled_root_arms = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             let field = self.root_field_ident(root);
-            quote! { #package_ident::#variant(o) => self.#field.is_enabled(o) }
+            quote! {
+                #package_ident::#variant(o) => self
+                    .#field
+                    .is_enabled(o)
+                    .map_err(#package_rejection_name::#variant)
+            }
         });
         let stabilize_roots = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
@@ -244,15 +305,22 @@ impl<'a> PackageGenerator<'a> {
             let field = self.root_field_ident(root);
             quote! { self.#field.is_default() }
         });
+        let reference_default_check = if self.has_references() {
+            quote! { self.reference_manager_log.is_default() }
+        } else {
+            quote! { true }
+        };
 
         let reference_is_enabled = if self.has_references() {
             quote! {
                 #package_ident::AddReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone())),
+                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone()))
+                    .map_err(#package_rejection_name::AddReference),
                 #package_ident::RemoveReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone())),
+                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone()))
+                    .map_err(#package_rejection_name::RemoveReference),
             }
         } else {
             quote! {}
@@ -271,41 +339,41 @@ impl<'a> PackageGenerator<'a> {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
             let field_stringify = value_ident(self.root_class_name(root)).to_string();
-            if self.has_references() {
-                quote! { #package_ident::#variant(o) =>
-                #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink, #path::SinkOwnership::Owned),
-                }
-            } else {
-                quote! {
-                    #package_ident::#variant(o) => self.#log_field.effect(
-                        #path::Event::unfold(event.clone(), o),
-                        __package::ObjectPath::new(#package_name),
-                        &mut __package::SinkCollector::new(),
-                        #path::SinkOwnership::Owned
-                    ),
+            quote! {
+                #package_ident::#variant(o) => {
+                    let child_event = #path::Event::unfold(event.clone(), o);
+                    ctx.with_field(#field_stringify, |ctx| {
+                        self.#log_field.effect(child_event, ctx);
+                    });
                 }
             }
         });
 
+        // Package generation ignores the parent EffectContext and always creates a new root context
+        // This is because the package log is the top-level log and should not be nested within another context.
+
         let effect = if self.has_references() {
             quote! {
-            let mut sink = #path::SinkCollector::new();
-                match event.op().clone() {
-                    #(#root_variants)*
-                    #package_ident::AddReference(o) =>
-                        self.reference_manager_log.effect(
-                            #path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
-                            __package::ObjectPath::new(#package_name),
-                            &mut __package::SinkCollector::new(),
-                            #path::SinkOwnership::Owned
-                        ),
-                    #package_ident::RemoveReference(o) =>
-                        self.reference_manager_log.effect(
-                            #path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
-                            __package::ObjectPath::new(#package_name),
-                            &mut __package::SinkCollector::new(),
-                            #path::SinkOwnership::Owned
-                        ),
+                let mut sink = #path::SinkCollector::new();
+                {
+                    let mut ctx = #path::EffectContext::root(#package_name, Some(&mut sink));
+                    match event.op().clone() {
+                        #(#root_variants)*
+                        #package_ident::AddReference(o) => {
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                #path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
+                                &mut ctx
+                            );
+                        }
+                        #package_ident::RemoveReference(o) => {
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                #path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
+                                &mut ctx
+                            );
+                        }
+                    }
                 }
                 for sink in sink.into_sinks() {
                     match sink.effect() {
@@ -313,23 +381,22 @@ impl<'a> PackageGenerator<'a> {
                             let vertex_ops = #path::instance_from_path(sink.path())
                                 .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
                             if let Some(o) = vertex_ops {
+                                let mut ctx = #path::EffectContext::silent();
                                 self.reference_manager_log.effect(
                                     #path::Event::unfold(event.clone(), o),
-                                    __package::ObjectPath::new(#package_name),
-                                    &mut __package::SinkCollector::new(),
-                                    #path::SinkOwnership::Owned
+                                    &mut ctx
                                 );
                             }
                         }
                         #path::SinkEffect::Delete => {
-                            self.reference_manager_log.effect(__package::Event::unfold(
-                                event.clone(),
-                                __package::ReferenceManager::DeleteSubtree {
-                                    prefix: sink.path().clone(),
-                                }),
-                                __package::ObjectPath::new(#package_name),
-                                &mut __package::SinkCollector::new(),
-                                #path::SinkOwnership::Owned
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                __package::Event::unfold(
+                                    event.clone(),
+                                    __package::ReferenceManager::DeleteSubtree {
+                                        prefix: sink.path().clone(),
+                                    }),
+                                &mut ctx
                             );
                         }
                     }
@@ -337,6 +404,7 @@ impl<'a> PackageGenerator<'a> {
             }
         } else {
             quote! {
+                let mut ctx = #path::EffectContext::root(#package_name, None);
                 match event.op().clone() {
                     #(#root_variants)*
                 }
@@ -347,15 +415,16 @@ impl<'a> PackageGenerator<'a> {
             impl #path::IsLog for #package_log_name {
                 type Value = #package_value_name;
                 type Op = #package_ident;
+                type Rejection = #package_rejection_name;
 
-                fn is_enabled(&self, op: &Self::Op) -> bool {
+                fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
                     match op {
                         #(#enabled_root_arms,)*
                         #reference_is_enabled
                     }
                 }
 
-                fn effect(&mut self, event: #path::Event<Self::Op>, _path: #path::ObjectPath, _sink: &mut #path::SinkCollector, _ownership: #path::SinkOwnership) {
+                fn effect(&mut self, event: #path::Event<Self::Op>, _ctx: &mut #path::EffectContext<'_>) {
                     #effect
                 }
 
@@ -370,7 +439,7 @@ impl<'a> PackageGenerator<'a> {
                 }
 
                 fn is_default(&self) -> bool {
-                    true #(&& #default_checks)*
+                    #reference_default_check #(&& #default_checks)*
                 }
             }
         }
@@ -445,26 +514,16 @@ impl<'a> PackageGenerator<'a> {
 impl<'a> Generate for PackageGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
         let package_enum = self.generate_package_enum();
+        let package_rejection = self.generate_package_rejection_enum();
         let package_value = self.generate_package_value_struct();
         let package_log = self.generate_package_log_struct();
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
         let translate_ids = self.translate_ids_impl();
 
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let ref_manager_log = if self.has_references() {
-            quote! {
-                pub type ReferenceManagerLog = #path::POLog<#path::ReferenceManager<#path::FairPolicy>, #path::ReferenceManagerState<#path::FairPolicy>>;
-            }
-        } else {
-            quote! {}
-        };
-
         let tokens = quote! {
-            #ref_manager_log
-
             #package_enum
+            #package_rejection
             #package_value
             #package_log
             #is_log_impl

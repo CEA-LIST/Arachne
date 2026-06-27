@@ -3,8 +3,6 @@ use log::warn;
 /// Represents unsupported features encountered during code generation
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Warning {
-    /// EClass is an interface, not a concrete class
-    InterfaceNotSupported(String),
     /// Unsupported bounds were normalized to the nearest supported mapping
     UnsupportedAttributeBounds {
         attribute: String,
@@ -36,12 +34,6 @@ impl Warning {
     /// Return a human-readable warning message
     pub fn message(&self) -> String {
         match self {
-            Warning::InterfaceNotSupported(name) => {
-                format!(
-                    "`EClass` `{}` is an interface and is not supported in v1. It will be skipped.",
-                    name
-                )
-            }
             Warning::UnsupportedAttributeBounds {
                 attribute,
                 bounds,

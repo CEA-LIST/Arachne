@@ -20,7 +20,7 @@
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="boundsninf" lowerBound="5" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="boundsnm" lowerBound="5" upperBound="10" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="simpleList" unique="false" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
-        <eStructuralFeatures xsi:type="ecore:EAttribute" name="uniqueList" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="uniqueList" unique="true" ordered="true" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="bag" ordered="false" unique="false" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
         <eStructuralFeatures xsi:type="ecore:EAttribute" name="set" ordered="false" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
     </eClassifiers>

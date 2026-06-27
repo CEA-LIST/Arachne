@@ -6,6 +6,7 @@ use crate::{
         annotation::uw_map_spec,
         classifier::{
             classifier_ident, containment_target_ident, has_subclasses, inherited_field_ident,
+            is_instantiable_class,
         },
         cycles::{BoxingStrategy, CycleAnalysis},
         ident::value_ident,
@@ -82,7 +83,7 @@ pub fn find_creation_paths(
     };
 
     if is_polymorphic_class(&ctx.classes()[*root_class])
-        && !ctx.classes()[*root_class].is_concrete()
+        && !is_instantiable_class(&ctx.classes()[*root_class])
     {
         explore_polymorphic_class(&env, root_class, &mut state, false);
     } else {
@@ -332,7 +333,7 @@ fn explore_polymorphic_class(
     let class = &env.ctx.classes()[*class_idx];
     let union_name = containment_target_ident(env.ctx, class).to_string();
 
-    if class.is_concrete() && has_subclasses(class) {
+    if is_instantiable_class(class) && has_subclasses(class) {
         state.current_steps.push(PathStep::Variant {
             union_name: union_name.clone(),
             variant_name: classifier_ident(env.ctx, class).to_string(),

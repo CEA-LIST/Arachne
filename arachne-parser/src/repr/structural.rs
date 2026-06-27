@@ -27,10 +27,10 @@ impl Typ {
     }
 
     pub fn parse_bounds(self, lbound: Option<&str>, ubound: Option<&str>) -> Res<Bounds> {
+        // If the lower bound is not specified, we default to 0.
         let lbound = match (lbound, self) {
             (Some(lbound), _) => lbound,
-            (None, Self::EReference) => "0",
-            (None, Self::EAttribute) => "1",
+            (None, _) => "0",
         };
         Bounds::from_str(Some(lbound), ubound)
     }

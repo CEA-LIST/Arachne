@@ -1,6 +1,6 @@
 # Arachne
 
-**Arachne** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSMLs) defined with Ecore metamodels into Conflict-free Replicated Data Types (CRDTs), leveraging the Moirai library.
+**Arachne** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSMLs) defined with Ecore metamodels into Conflict-free Replicated Data Types (CRDTs), leveraging the [Moirai library](https://github.com/CEA-LIST/Moirai).
 
 _Note: Arachne does not aim to support the full Ecore language at this stage; instead, it focuses on the essential features needed to express practical metamodels. Read [Supported features](./arachne-codegen/README.md) for more information._
 

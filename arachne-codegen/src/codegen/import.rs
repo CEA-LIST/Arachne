@@ -126,7 +126,7 @@ impl ToUseStatement for Crdt {
 #[derive(Clone, Debug)]
 pub enum Log {
     Vec,
-    EventGraph,
+    Graph,
     PartiallyOrdered,
 }
 
@@ -134,7 +134,7 @@ impl ToUseStatement for Log {
     fn path(&self) -> String {
         match self {
             Log::Vec => format!("{}::state::po_log::VecLog", PROTOCOL_PREFIX),
-            Log::EventGraph => format!("{}::state::event_graph::EventGraph", PROTOCOL_PREFIX),
+            Log::Graph => format!("{}::state::graph_log::GraphLog", PROTOCOL_PREFIX),
             Log::PartiallyOrdered => format!("{}::state::po_log::POLog", PROTOCOL_PREFIX),
         }
     }
@@ -174,7 +174,7 @@ pub enum Protocol {
     Sink,
     SinkEffect,
     SinkCollector,
-    SinkOwnership,
+    EffectContext,
     PathSegment,
     ObjectPath,
     Interner,
@@ -199,7 +199,9 @@ impl ToUseStatement for Protocol {
             Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
             Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
-            Protocol::SinkOwnership => format!("{}::state::sink::SinkOwnership", PROTOCOL_PREFIX),
+            Protocol::EffectContext => {
+                format!("{}::state::effect_context::EffectContext", PROTOCOL_PREFIX)
+            }
             Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
             Protocol::PathSegment => format!(
                 "{}::state::object_path::PathSegment::{{Field, ListElement, MapEntry, Variant}}",

@@ -14,12 +14,14 @@ use crate::{
             crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
             to_crdt::ToCrdt,
         },
-        feature::bounds::{BoundKind, normalize_bounds},
+        feature::{
+            bounds::{BoundKind, normalize_bounds},
+            typed_element::unsupported_feature_properties,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
-        warnings::Warning,
     },
 };
 
@@ -43,44 +45,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);
 
-        if let Some(changeable) = self.attribute.changeable
-            && !changeable
-        {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "changeable".into(),
-                value: "false".into(),
-            })
-        }
-
-        if let Some(transient) = self.attribute.transient {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "transient".into(),
-                value: transient.to_string(),
-            })
-        }
-        if let Some(volatile) = self.attribute.volatile {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "volatile".into(),
-                value: volatile.to_string(),
-            })
-        }
-        if let Some(derived) = self.attribute.derived {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
-        if let Some(derived) = self.attribute.unsettable {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
+        unsupported_feature_properties(self.attribute, &mut warnings);
 
         let name = value_ident(&self.attribute.name);
         let class_typ = self
@@ -138,19 +103,20 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 )
             }
             Primitive::List => {
-                // EString -> List<char>, uses EventGraph as log type
+                // EString -> List<char>, uses GraphLog as log type
                 let type_name = rust_ident(crdt.name());
                 (
-                    quote! { #path::EventGraph },
+                    quote! { #path::GraphLog },
                     quote! { #path::#type_name<char> },
-                    Import::Log(Log::EventGraph),
+                    Import::Log(Log::Graph),
                 )
             }
         };
 
         let (field_type, imports) = match (
             bound_kind,
-            self.attribute.unique.unwrap_or(false),
+            // Default to true if not specified, as per Ecore spec
+            self.attribute.unique.unwrap_or(true),
             self.attribute.ordered.unwrap_or(true),
         ) {
             (BoundKind::Single, _, _) => (
@@ -171,24 +137,20 @@ impl<'a> Generate for AttributeGenerator<'a> {
             (BoundKind::Many, false, true) => (
                 quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
                 vec![
-                    Import::Log(Log::EventGraph),
+                    Import::Log(Log::Graph),
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
                     Import::Crdt(Crdt::Nested(NestedCrdt::List)),
                 ],
             ),
             (BoundKind::Many, true, true) => {
-                // TODO: Unique list case
-                warnings.push(Warning::UnsupportedPropertyCombination {
-                    feature: self.attribute.name.clone(),
-                    properties: vec!["unique".into(), "ordered".into()],
-                    applied: vec!["ordered".into()],
-                });
+                let element_type = rust_typ
+                    .clone()
+                    .expect("Unique ordered attributes should have a Rust element type");
                 (
-                    quote! { #path::ListLog<#log_type<#crdt_inner>> },
+                    quote! { #path::GraphLog<#path::List<#element_type>> },
                     vec![
-                        Import::Log(Log::EventGraph),
-                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
-                        Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                        Import::Log(Log::Graph),
+                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
                     ],
                 )
             }

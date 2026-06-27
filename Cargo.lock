@@ -105,7 +105,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc-hash 2.1.2",
- "syn",
+ "syn 2.0.117",
  "thiserror",
  "xml-builder",
 ]
@@ -254,7 +254,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -371,6 +371,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "deepsize"
+version = "0.2.0"
+source = "git+https://github.com/leo-olivier/deepsize.git#2a68cc6ba42d22f55b82e0649fd1645031f20dcb"
+dependencies = [
+ "bimap",
+ "deepsize_derive",
+ "elsa",
+ "petgraph 0.8.3",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "deepsize_derive"
+version = "0.1.2"
+source = "git+https://github.com/leo-olivier/deepsize.git#2a68cc6ba42d22f55b82e0649fd1645031f20dcb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -389,7 +411,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -416,8 +438,7 @@ dependencies = [
 [[package]]
 name = "elsa"
 version = "1.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9abf33c656a7256451ebb7d0082c5a471820c31269e49d807c538c252352186e"
+source = "git+https://github.com/Manishearth/elsa?rev=91944aacda886a054a8e3ba9aa91c73ea04de96c#91944aacda886a054a8e3ba9aa91c73ea04de96c"
 dependencies = [
  "stable_deref_trait",
 ]
@@ -647,7 +668,7 @@ checksum = "e000de030ff8022ea1da3f466fbb0f3a809f5e51ed31f6dd931c35181ad8e6d7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -716,8 +737,9 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "moirai-crdt"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.4#c65be9826b1b6b032d7ac01baf2f70d66b6c282e"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
 dependencies = [
+ "deepsize",
  "moirai-fuzz",
  "moirai-macros",
  "moirai-protocol",
@@ -731,12 +753,13 @@ dependencies = [
 [[package]]
 name = "moirai-fuzz"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.4#c65be9826b1b6b032d7ac01baf2f70d66b6c282e"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
 dependencies = [
  "bimap",
  "chrono",
  "comfy-table",
  "daggy",
+ "deepsize",
  "env_logger",
  "fixedbitset 0.5.7",
  "indicatif",
@@ -754,8 +777,9 @@ dependencies = [
 [[package]]
 name = "moirai-macros"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.4#c65be9826b1b6b032d7ac01baf2f70d66b6c282e"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
 dependencies = [
+ "deepsize",
  "moirai-protocol",
  "paste",
  "rustc-hash 1.1.0",
@@ -764,11 +788,12 @@ dependencies = [
 [[package]]
 name = "moirai-protocol"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.4#c65be9826b1b6b032d7ac01baf2f70d66b6c282e"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
 dependencies = [
  "bimap",
+ "deepsize",
  "elsa",
- "petgraph 0.6.5",
+ "petgraph 0.8.3",
  "rustc-hash 2.1.2",
  "smallvec",
 ]
@@ -879,6 +904,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -924,7 +950,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1130,7 +1156,7 @@ checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1197,6 +1223,17 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
+version = "1.0.109"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e665b8803e7b1d2a727f4023456bbbbe74da67099c585258af0ad9c5013b9b99"
@@ -1223,7 +1260,7 @@ checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1366,7 +1403,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
  "wasm-bindgen-shared",
 ]
 
@@ -1498,7 +1535,7 @@ checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1509,7 +1546,7 @@ checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1673,7 +1710,7 @@ dependencies = [
  "heck",
  "indexmap",
  "prettyplease",
- "syn",
+ "syn 2.0.117",
  "wasm-metadata",
  "wit-bindgen-core",
  "wit-component",
@@ -1689,7 +1726,7 @@ dependencies = [
  "prettyplease",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
  "wit-bindgen-core",
  "wit-bindgen-rust",
 ]
@@ -1754,7 +1791,7 @@ checksum = "70e3cd084b1788766f53af483dd21f93881ff30d7320490ec3ef7526d203bad4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]

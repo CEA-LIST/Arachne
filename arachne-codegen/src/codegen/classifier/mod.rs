@@ -36,6 +36,10 @@ pub fn has_subclasses(class: &Class) -> bool {
     !class.sub().is_empty()
 }
 
+pub fn is_instantiable_class(class: &Class) -> bool {
+    class.is_concrete() && !class.is_interface() && !class.is_enum()
+}
+
 pub fn classifier_ident(ctx: &Ctx, class: &Class) -> Ident {
     classifier_type_ident(ctx, class)
 }
@@ -160,7 +164,7 @@ impl<'a> ClassGenerator<'a> {
     }
 
     fn is_uw_map_entry_helper(&self) -> bool {
-        if !self.class.is_concrete() {
+        if !is_instantiable_class(self.class) {
             return false;
         }
 
@@ -181,7 +185,7 @@ impl<'a> ClassGenerator<'a> {
     }
 
     fn generates_concrete_wrapper(&self, class: &Class) -> bool {
-        class.is_concrete()
+        is_instantiable_class(class)
             && transparent_field(class).is_none()
             && !ClassGenerator::new(class, self.ctx, self.cycle_analysis).is_uw_map_entry_helper()
     }
@@ -299,9 +303,9 @@ impl<'a> ClassGenerator<'a> {
                     }
                     Primitive::List => (
                         quote! { #path::List<char> },
-                        quote! { #path::EventGraph<#path::List<char>> },
+                        quote! { #path::GraphLog<#path::List<char>> },
                         vec![
-                            Import::Log(Log::EventGraph),
+                            Import::Log(Log::Graph),
                             Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
                         ],
                     ),
@@ -663,55 +667,6 @@ impl<'a> ClassGenerator<'a> {
         ))
     }
 
-    fn generate_interface(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
-        let name = classifier_ident(self.ctx, self.class);
-
-        let (_operation_tokens, operation_imports, operation_warnings) = fold_fragments(
-            self.class
-                .operations()
-                .iter()
-                .map(|op| OperationGenerator::new(op, self.class, self.ctx).generate())
-                .collect::<anyhow::Result<Vec<_>>>()?,
-        );
-        let attributes = self
-            .class
-            .structural()
-            .iter()
-            .map(|f| AttributeGenerator::new(f, self.ctx).generate())
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let (attribute_tokens, attribute_imports, attribute_warnings) =
-            attributes.into_iter().fold(
-                (Vec::new(), Vec::new(), Vec::new()),
-                |(mut toks, mut imps, mut warns), attr| {
-                    let (tokens, imports, warnings) = attr.into();
-                    toks.push(tokens);
-                    imps.extend(imports);
-                    warns.extend(warnings);
-                    (toks, imps, warns)
-                },
-            );
-
-        let tokens = quote! {
-            #path::record!(#name {
-                #(#attribute_tokens,)*
-            });
-        };
-
-        Ok(Fragment::new(
-            tokens,
-            [
-                vec![Import::Macros(Macros::Record)],
-                attribute_imports,
-                operation_imports,
-            ]
-            .concat(),
-            [attribute_warnings, operation_warnings].concat(),
-        ))
-    }
-
     // TODO: derive Ord from the literal values, and PartialEq/Eq from that
     fn generate_enum(&self) -> anyhow::Result<Fragment> {
         let name = classifier_ident(self.ctx, self.class);
@@ -750,17 +705,12 @@ impl Generate for ClassGenerator<'_> {
             return self.generate_enum();
         }
 
-        if self.class.is_interface() {
-            debug!("Generating interface: {}", self.class.name());
-            return self.generate_interface();
-        }
-
-        if self.class.is_abstract() {
-            debug!("Generating abstract class: {}", self.class.name());
+        if self.class.is_abstract() || self.class.is_interface() {
+            debug!("Generating abstract/interface class: {}", self.class.name());
             return self.generate_abstract_class();
         }
 
-        if self.class.is_concrete() {
+        if is_instantiable_class(self.class) {
             debug!("Generating concrete class: {}", self.class.name());
             return self.generate_concrete_class();
         }

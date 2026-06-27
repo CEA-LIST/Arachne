@@ -56,7 +56,7 @@ Generated Rust enums implement `Debug`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`
 | `EDouble`  | `Counter<f64>` or any `Register`                           |
 | `EBoolean` | `Enable-Wins Flag`, `Disable-Wins Flag`, or any `Register` |
 | `EChar`    | Any `Register`                                             |
-| `EString`  | `List<String>` or any `Register`                           |
+| `EString`  | `List<char>` or any `Register`                             |
 
 #### `EClass`
 
@@ -64,7 +64,7 @@ A (concrete) `EClass` is generated as a `record`.
 
 ##### Abstract class
 
-For abstract classes, the code generator does not produce an abstract type in the target language. Instead, it replaces abstract classes with a closed `union` type that represents all their concrete subclasses. This union type preserves subtyping by allowing any concrete subclass to be used wherever the abstract type is expected. Features defined in the abstract class are not inherited at runtime but are statically flattened into each concrete subclass during generation, so that each generated class explicitly contains all required properties.
+For abstract classes, the code generator does not produce an abstract type in the target language. Instead, it replaces abstract classes with a closed `union` type that represents all their concrete subclasses. This union type preserves subtyping by allowing any concrete subclass to be used wherever the abstract type is expected. Features defined in the abstract class are not inherited at runtime but are statically flattened as fields into each concrete subclass during generation (e.g., `abstract_super: AbstractLog`), so that each generated class explicitly contains all required properties.
 
 This approach eliminates runtime inheritance while preserving substitutability and structural reuse, and it is well suited to a closed-world setting where all concrete variants are known at generation time.
 
@@ -72,7 +72,7 @@ Orphan abstract classes, i.e., that are inherited by no concrete classes, are no
 
 ##### Interface
 
-Operations are not supported. See [Operations](#operations). Features are statically flattened into each concrete subclass that implement the interface during generation.
+Operations are not supported. See [Operations](#operations). Interface are generated like abstract classes.
 
 ### Typed elements
 
@@ -83,24 +83,26 @@ Operations are not supported. See [Operations](#operations). Features are static
 | `lowerbound` |                                                      | Yes.         | see [Bounds](#bounds)                                |
 | `upperbound` |                                                      | Yes.         | see [Bounds](#bounds)                                |
 
-| Ecore                                                 | CRDT                                                                                                      |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `ordered = true`, `unique = true`, `upperbound > 1`   | Theorethically it should be `UniqueList` CRDT, but we don't have such CRDT yet. It is a Sequence instead. |
-| `ordered = false`, `unique = false`, `upperbound > 1` | `Bag` (Of non-mutable elements!)                                                                          |
-| `ordered = true`, `unique = false`, `upperbound > 1`  | `List`                                                                                                    |
-| `ordered = false`, `unique = true`, `upperbound > 1`  | `Set` (Of non-mutable elements!)                                                                          |
+| Ecore                                                 | CRDT                                                                                                                             |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ordered = true`, `unique = true`, `upperbound > 1`   | Theorethically it should be `UniqueList` CRDT, but we don't have such CRDT yet. Uniqueness is ignored: it uses a `List` instead. |
+| `ordered = false`, `unique = false`, `upperbound > 1` | `Bag` (Of non-mutable elements!)                                                                                                 |
+| `ordered = true`, `unique = false`, `upperbound > 1`  | `List`                                                                                                                           |
+| `ordered = false`, `unique = true`, `upperbound > 1`  | `Set` (Of non-mutable elements!)                                                                                                 |
 
 #### Bounds
 
-| Ecore  | CRDT        |
-| ------ | ----------- |
-| `0..1` | `Option<T>` |
-| `1`    | `T`         |
-| `0..*` | `List<T>`   |
-| `1..*` | ?           |
-| `1..n` | ?           |
-| `n..*` | ?           |
-| `n..m` | ?           |
+Lower bounds different from 0 or 1 and upper bounds different from 1 or \* are not supported.
+
+| Ecore  | CRDT                 |
+| ------ | -------------------- |
+| `0..1` | `Option<T>`          |
+| `1`    | `T`                  |
+| `0..*` | `List<T>`            |
+| `1..*` | Normalized to `0..*` |
+| `1..n` | Normalized to `0..*` |
+| `n..*` | Normalized to `0..*` |
+| `n..m` | Normalized to `0..*` |
 
 ### Structural features
 
@@ -129,13 +131,13 @@ The code generator intentionally does not support Ecore operations at this stage
 - Third, the CRDT interface exposes a closed set of available updates. Extending this set is not a local change: it typically requires extending the CRDT's semantics. Supporting such extensions in generated code would therefore be complex and error-prone, and is precisely one of the reasons for developing a specialized code generator in the first place.
 - While adding new pure queries is conceptually simpler, queries in CRDTs are evaluated over a partially ordered set of updates to compute a deterministic value. For the same reasons as above, the generator should not require users to manually implement queries whose correctness depends on the CRDT's semantics.
 
-An exception is made for queries on values derived from the CRDT state. For example, a `read()` operation may project the CRDT state into a deterministic value (such as a Behavior Tree), and pure query operations can then be defined on this projected value. Since these queries operate on a stable, materialized representation and do not affect the CRDT's semantics, they can be supported safely.
+An exception is made for queries on values derived from the CRDT state. For example, a `read()` operation may project the CRDT state into a deterministic value (such as a Behavior Tree), and pure query operations can then be defined on this projected value. Since these queries operate on a stable, materialized representation and do not affect the CRDT's semantics, they could be supported safely in a future version.
 
 ### Management of References
 
 An important challenge in generating code from a metamodel into a composition of CRDTs is the management of references. The approach to CRDT composition and nesting proposed by _Bauwens et al._ is hierarchical: a parent CRDT can propagate its conflict-resolution policy to its children using a causal reset. However, references represent relationships between siblings in the hierarchy.
 
-An auxiliary, specialized _typed graph CRDT_, called the `ReferenceManager`, is responsible for registering references between classifiers. This CRDT encodes which classes may reference which other classes, the hierarchy between classes (which class is children of another) together with the associated multiplicity constraints (upper and lower bounds). When interpreting the state of the model, elements are first evaluated independently; the links between them are then established by reading and applying the state of the `ReferenceManager`.
+An auxiliary, specialized _typed graph CRDT_, called the `ReferenceManager`, is responsible for registering references between classifiers. This CRDT encodes which classes may reference which other classes, the hierarchy between classes (which class is children of another) together with the associated multiplicity constraints (only upper bounds). When interpreting the state of the model, elements are first evaluated independently; the links between them are then established by reading and applying the state of the `ReferenceManager`.
 
 ## Customizing the Code Generator Mapping
 
