@@ -18,13 +18,13 @@ This lack of support is particularly problematic for DSMLs that are used in dist
 
 Arachne addresses this problem by automatically generating local-first, decentralized, collaborative runtimes for modeling languages directly from their specifications. The generated runtimes are built on top of CRDTs, which provide a principled approach to achieving eventual consistency in distributed systems. By leveraging CRDTs, Arachne enables modelers to work collaboratively on models without the need for a central server or complex synchronization protocols.
 
-A metamodel is compiled into a composition of pure operation-based CRDTs that mirrors the structure of the metamodel. The generated runtimes support standard object-oriented metamodeling constructs, including objects, attributes, containment hierarchies, references, multiplicities, and subtyping.
+A metamodel is compiled into a composition of [pure operation-based CRDTs](https://arxiv.org/abs/1710.04469) that mirrors the structure of the metamodel. The generated runtimes support standard object-oriented metamodeling constructs, including objects, attributes, containment hierarchies, references, multiplicities, and subtyping.
 
 ![Approach overview](./images/approach_overview.png)
 
 ### Generated runtime capabilities
 
-The generated runtimes provide an API for creating, reading, updating, and deleting model elements. The generated runtimes also support serialization and deserialization of models, enabling modelers to persist their work and share it with others. However, we do not provide a graphical editor for the generated runtimes.
+The generated runtimes provide an API for creating, reading, updating, and deleting model elements through generated CRDT operations and read queries. Persistence, transport serialization, and graphical editing are outside the generated runtime and must be provided by the surrounding application.
 
 The generated runtimes implement a [Reliable Causal Broadcast (RCB) protocol](https://courses.edx.org/asset-v1:KTHx+ID2203.2x+2016T4+type@asset+block/Lecture_6_Causal_Broadcast.pdf), which ensures that operations are delivered in a causally consistent order, even in the presence of network partitions and failures. However, we do not provide a network layer for communicating changes between replicas over the network. Instead, we provide a simple API for sending and receiving operations, which can be integrated with any transport layer of the user's choice.
 
