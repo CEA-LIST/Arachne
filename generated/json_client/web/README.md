@@ -1,14 +1,39 @@
-# Experiment Editor Web Application
+# Q&A Knowledge Base Editor
 
-A collaborative web application for editing experiment data using the JSON CRDT backend.
+A collaborative web application for editing question-and-answer knowledge bases using the JSON CRDT backend.
+
+## Structure
+
+The editor supports knowledge bases with this structure:
+
+```json
+{
+  "version": 2,
+  "task_description": "Questions related to bicycles product details",
+  "created_by": "Your Name",
+  "domain": "cycling",
+  "seed_examples": [
+    {
+      "question": "What is the bike type?",
+      "answer": "Detailed answer here..."
+    }
+  ],
+  "document": {
+    "repo": "https://github.com/user/repo.git",
+    "commit": "abc1234",
+    "patterns_str": "file1.md, file2.md"
+  }
+}
+```
 
 ## Features
 
 - **Real-time collaborative editing** - Multiple users can edit the same document simultaneously
 - **Auto-refresh** - Automatically syncs changes from other users every 500ms
-- **Concurrent string editing** - Long text fields (description, notes) support concurrent edits with CRDT merge
+- **Concurrent text editing** - All text fields support concurrent edits with CRDT merge
+- **Dynamic Q&A pairs** - Add/remove question-answer pairs on the fly
 - **Visual feedback** - Highlights fields when they change from remote edits
-- **Auto-save** - Changes are automatically saved as you type (debounced)
+- **Auto-save** - Changes are automatically saved as you type
 - **Connection status** - Shows connection health and last sync time
 
 ## Quick Start
@@ -20,9 +45,16 @@ cd generated/json_crdt
 REPLICA_ID=a LISTEN_PORT=9001 HTTP_PORT=8081 cargo run --example network_node
 ```
 
-### 2. Open the web application
+### 2. Initialize from JSON (optional)
 
-From the repository root folder
+```bash
+cd generated/json_client/scripts
+python3 init_from_json.py ../sample_knowledge.json --url http://localhost:8081
+```
+
+### 3. Open the web application
+
+From the repository root folder:
 
 ```bash
 cd generated/json_client
@@ -31,7 +63,7 @@ python3 -m http.server 8080
 
 Then open in your browser:
 ```
-http://localhost:8080/experiment_editor.html
+http://localhost:8080/web/experiment_editor.html
 ```
 
 **Important**: If the API is on port 8081, you may encounter CORS issues. 
@@ -40,11 +72,12 @@ http://localhost:8080/experiment_editor.html
 
 ### Fields
 
-- **Experiment ID**: Unique identifier for the experiment
 - **Version**: Integer version number
-- **Timestamp**: ISO 8601 timestamp (e.g., `2026-05-11T10:30:00Z`)
-- **Description**: Long-form text, supports concurrent editing
-- **Notes**: Extended documentation, supports concurrent editing
+- **Task Description**: Overview of the knowledge domain (supports concurrent editing)
+- **Created By**: Author name
+- **Domain**: Knowledge domain category
+- **Q&A Pairs**: Dynamic list of question-answer pairs (add/remove as needed)
+- **Document Reference**: Git repository, commit hash, and file patterns
 
 ### Operations
 

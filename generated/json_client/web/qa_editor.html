@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative edition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .connection-panel {
+            background: #e8f4fd;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #bee5eb;
+        }
+
+        .connection-panel label {
+            color: #004085;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .connection-panel input {
+            background: white;
+            padding: 10px;
+            border: 1px solid #b8daff;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .connection-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .connection-controls input {
+            flex: 1;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #6c757d;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connecting {
+            background: #ffc107;
+        }
+
+        .status-dot.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sync-mode {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        textarea.large {
+            min-height: 150px;
+        }
+
+        .field-meta {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #c3e6cb;
+        }
+
+        /* Animation for value updates */
+        @keyframes highlight {
+            0% { background-color: #fff3cd; }
+            100% { background-color: white; }
+        }
+
+        .updated {
+            animation: highlight 1s ease;
+        }
+
+        #lastSync {
+            font-size: 12px;
+            color: #999;
+        }
+
+        /* Q&A Pair Styling */
+        .qa-pair {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .qa-pair-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .qa-pair-title {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 16px;
+        }
+
+        .btn-remove {
+            background: #dc3545;
+            color: white;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-remove:hover {
+            background: #c82333;
+        }
+
+        hr {
+            margin: 30px 0;
+            border: none;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+            font-size: 22px;
+        }
+
+        .btn-simulate {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-simulate:hover {
+            background: #138496;
+        }
+
+        .btn-simulate.active {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        .sim-indicator {
+            display: inline-block;
+            font-size: 12px;
+            color: #ffc107;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Detune Q&A Knowledge Base Editor</h1>
+        
+        <div class="connection-panel">
+            <label for="nodeUrl">Node API URL</label>
+            <div class="connection-controls">
+                <input type="text" id="nodeUrl" placeholder="http://localhost:8081" value="http://localhost:8081">
+                <button type="button" class="btn-primary" id="connectBtn">🔌 Connect</button>
+            </div>
+            <div class="field-meta">Enter the HTTP API URL of the JSON CRDT node (e.g., http://localhost:8081)</div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Not connected</span>
+            </div>
+            <div class="sync-mode">
+                <label for="autoSync">Auto-refresh</label>
+                <label class="switch">
+                    <input type="checkbox" id="autoSync" checked>
+                    <span class="slider"></span>
+                </label>
+                <span id="lastSync">Last sync: never</span>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <form id="knowledgeForm">
+            <div class="form-group">
+                <label for="version">Version</label>
+                <input type="number" id="version" name="version" placeholder="2" min="1">
+                <div class="field-meta">Knowledge base version number</div>
+            </div>
+
+            <div class="form-group">
+                <label for="task_description">
+                    Task Description
+                    <span class="sim-indicator" id="simIndicator" style="display: none;">● SIMULATED EDITS ACTIVE</span>
+                </label>
+                <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                    <button type="button" class="btn-simulate" id="simulateBtn" style="padding: 8px 16px; font-size: 13px;">🤖 Simulate Concurrent Edit</button>
+                </div>
+                <textarea id="task_description" name="task_description" 
+                    placeholder="Questions related to medical domain"></textarea>
+                <div class="field-meta">Overview of the knowledge domain (supports concurrent editing)</div>
+            </div>
+
+            <div class="form-group">
+                <label for="created_by">Created By</label>
+                <input type="text" id="created_by" name="created_by" placeholder="Your Name">
+                <div class="field-meta">Author name</div>
+            </div>
+
+            <div class="form-group">
+                <label for="domain">Domain</label>
+                <input type="text" id="domain" name="domain" placeholder="medical">
+                <div class="field-meta">Knowledge domain category</div>
+            </div>
+
+            <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+
+            <h2 style="margin-bottom: 20px; color: #667eea;">Question & Answer Pairs</h2>
+            <div id="qaContainer"></div>
+            <button type="button" class="btn-primary" id="addQaBtn" style="margin-bottom: 20px;">➕ Add Q&A Pair</button>
+
+            <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+
+            <h2 style="margin-bottom: 20px; color: #667eea;">Document Reference</h2>
+            
+            <div class="form-group">
+                <label for="doc_repo">Repository URL</label>
+                <input type="text" id="doc_repo" name="doc_repo" placeholder="https://github.com/source_repo.git">
+                <div class="field-meta">Git repository URL</div>
+            </div>
+
+            <div class="form-group">
+                <label for="doc_commit">Commit Hash</label>
+                <input type="text" id="doc_commit" name="doc_commit" placeholder="1eda115">
+                <div class="field-meta">Git commit reference</div>
+            </div>
+
+            <div class="form-group">
+                <label for="doc_patterns">File Patterns (comma-separated)</label>
+                <textarea id="doc_patterns" name="doc_patterns" 
+                    placeholder="file1.md, file2.md, file3.md"></textarea>
+                <div class="field-meta">Document file patterns to include</div>
+            </div>
+
+            <div class="buttons">
+                <button type="button" class="btn-primary" id="refreshBtn">🔄 Refresh Now</button>
+                <button type="button" class="btn-primary" id="exportBtn">💾 Export JSON</button>
+                <button type="button" class="btn-secondary" id="clearBtn">🗑️ Clear All</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Configuration constants
+        const CONFIG = {
+            REFRESH_INTERVAL: 500, // 500ms for faster updates
+            TYPING_THRESHOLD_MS: 500, // Time window to detect active typing
+            CONNECTION_TIMEOUT_MS: 5000, // Timeout for connection attempts
+            OPERATION_TIMEOUT_MS: 3000, // Timeout for CRDT operations
+            SIMULATION_MIN_INTERVAL_MS: 500, // Min interval between simulated edits
+            SIMULATION_MAX_INTERVAL_MS: 1500, // Max interval between simulated edits
+            SIMULATION_WORDS: ['CONCURRENT', 'EDITING', 'SIMULATION', 'COLLABORATIVE', 'REALTIME', 'DISTRIBUTED']
+        };
+        
+        let API_BASE = '';
+        let isConnected = false;
+        let currentState = {};
+        let refreshTimer = null;
+        let lastSyncTime = null;
+        let isUpdating = false;
+        let lastEditTime = {}; // Track last edit time per field
+        let lastKnownValues = {}; // Track the last known value we sent to server
+        let qaCount = 0; // Track number of Q&A pairs
+        let simulationTimer = null; // Timer for simulation
+        let isSimulating = false; // Simulation state
+        let simulationWord = ''; // Word being typed in simulation
+        let simulationCharIndex = 0; // Current character position in word
+        let simulationStartPos = 0; // Starting position in text
+
+        // Field configurations
+        const fields = {
+            version: { type: 'number', path: ['version'] },
+            task_description: { type: 'string', path: ['task_description'] },
+            created_by: { type: 'string', path: ['created_by'] },
+            domain: { type: 'string', path: ['domain'] },
+            doc_repo: { type: 'string', path: ['document', 'repo'] },
+            doc_commit: { type: 'string', path: ['document', 'commit'] },
+            doc_patterns: { type: 'string', path: ['document', 'patterns_str'] } // We'll serialize as comma-separated
+        };
+
+        // Generate QA field config dynamically
+        function getQaFieldId(index, field) {
+            return `qa_${index}_${field}`;
+        }
+
+        function getQaFieldConfig(index, field) {
+            return {
+                type: 'string',
+                path: ['seed_examples', index, field]
+            };
+        }
+
+        // Helper to create CRDT operation for initializing an empty string field in an array
+        function createArrayStringFieldOp(arrayName, index, fieldName, content) {
+            return {
+                JsonKind: {
+                    Object: {
+                        Update: [arrayName, {
+                            Array: {
+                                Update: {
+                                    pos: index,
+                                    op: {
+                                        Object: {
+                                            Update: [fieldName, {
+                                                String: content === '' 
+                                                    ? { Delete: { pos: 0 } }
+                                                    : { Insert: { content, pos: 0 } }
+                                            }]
+                                        }
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }
+            };
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('autoSync').addEventListener('change', (e) => {
+                if (e.target.checked && isConnected) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            });
+
+            // Immediate sync on every keystroke for string fields
+            ['task_description', 'created_by', 'domain', 'doc_repo', 'doc_commit', 'doc_patterns'].forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    input.addEventListener('input', () => {
+                        lastEditTime[fieldId] = Date.now();
+                        if (isConnected) {
+                            syncTextField(fieldId);
+                        }
+                    });
+                }
+            });
+
+            // Version is a number: sync on change or Enter
+            const versionInput = document.getElementById('version');
+            versionInput.addEventListener('input', () => {
+                lastEditTime['version'] = Date.now();
+            });
+            versionInput.addEventListener('change', () => {
+                if (isConnected) syncField('version');
+            });
+            versionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && isConnected) syncField('version');
+            });
+
+            document.getElementById('refreshBtn').addEventListener('click', refreshState);
+            document.getElementById('exportBtn').addEventListener('click', exportJSON);
+            document.getElementById('simulateBtn').addEventListener('click', toggleSimulation);
+            document.getElementById('clearBtn').addEventListener('click', clearAll);
+            document.getElementById('connectBtn').addEventListener('click', handleConnect);
+            document.getElementById('addQaBtn').addEventListener('click', addQaPair);
+            
+            // Allow Enter key in URL field to connect
+            document.getElementById('nodeUrl').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleConnect();
+                }
+            });
+        }
+
+        // Add a new Q&A pair
+        async function addQaPair() {
+            const container = document.getElementById('qaContainer');
+            const index = qaCount++;
+            
+            const qaDiv = document.createElement('div');
+            qaDiv.className = 'qa-pair';
+            qaDiv.id = `qa-pair-${index}`;
+            qaDiv.innerHTML = `
+                <div class="qa-pair-header">
+                    <div class="qa-pair-title">Q&A Pair #${index + 1}</div>
+                    <button type="button" class="btn-remove" onclick="removeQaPair(${index})">🗑️ Remove</button>
+                </div>
+                <div class="form-group">
+                    <label for="qa_${index}_question">Question</label>
+                    <textarea id="qa_${index}_question" name="qa_${index}_question" 
+                        placeholder="What is the treatment description?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="qa_${index}_answer">Answer</label>
+                    <textarea id="qa_${index}_answer" name="qa_${index}_answer" class="large"
+                        placeholder="Detailed answer with multiple lines..."></textarea>
+                </div>
+            `;
+            
+            container.appendChild(qaDiv);
+            
+            // Setup event listeners for the new fields
+            ['question', 'answer'].forEach(field => {
+                const fieldId = getQaFieldId(index, field);
+                const input = document.getElementById(fieldId);
+                input.addEventListener('input', () => {
+                    lastEditTime[fieldId] = Date.now();
+                    if (isConnected) {
+                        syncTextFieldWithPath(fieldId, ['seed_examples', index, field]);
+                    }
+                });
+                
+                // Initialize lastKnownValues for new fields
+                lastKnownValues[fieldId] = '';
+            });
+            
+            // If connected, create the array element on the server
+            if (isConnected) {
+                // Insert an object with empty question and answer fields
+                // Create placeholder with space, then delete to initialize empty strings
+                await postOperation(createArrayStringFieldOp('seed_examples', index, 'question', ' '), false);
+                await postOperation(createArrayStringFieldOp('seed_examples', index, 'question', ''), false);
+                await postOperation(createArrayStringFieldOp('seed_examples', index, 'answer', ' '), false);
+                await postOperation(createArrayStringFieldOp('seed_examples', index, 'answer', ''), false);
+            }
+        }
+
+        // Remove a Q&A pair
+        function removeQaPair(index) {
+            if (!confirm('Remove this Q&A pair?')) return;
+            
+            const qaDiv = document.getElementById(`qa-pair-${index}`);
+            if (qaDiv) {
+                qaDiv.remove();
+                
+                // If connected, need to delete from server
+                if (isConnected) {
+                    // Delete the array element
+                    const payload = {
+                        JsonKind: {
+                            Object: {
+                                Update: ['seed_examples', {
+                                    Array: {
+                                        Delete: { pos: index }
+                                    }
+                                }]
+                            }
+                        }
+                    };
+                    postOperation(payload, true);
+                }
+            }
+        }
+
+        // Handle connection
+        async function handleConnect() {
+            const urlInput = document.getElementById('nodeUrl');
+            let url = urlInput.value.trim();
+            
+            if (!url) {
+                showError('Please enter a valid node URL');
+                return;
+            }
+
+            // Add http:// if no protocol specified
+            if (!url.match(/^https?:\/\//)) {
+                url = 'http://' + url;
+                urlInput.value = url;
+            }
+
+            // Remove trailing slash
+            url = url.replace(/\/$/, '');
+
+            updateStatus('Connecting...', false, true);
+            stopAutoRefresh();
+            stopSimulation(); // Stop any running simulation
+
+            try {
+                // Test connection with health check
+                const response = await fetch(`${url}/api/health`, { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(CONFIG.CONNECTION_TIMEOUT_MS)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                // Connection successful
+                API_BASE = url;
+                isConnected = true;
+                localStorage.setItem('nodeUrl', url);
+                
+                updateStatus(`Connected to ${url}`, false, false, true);
+                showSuccess(`Successfully connected to ${url}`);
+                
+                // Initialize lastKnownValues to empty for all fields
+                for (const fieldId of Object.keys(fields)) {
+                    if (fields[fieldId].type === 'string') {
+                        lastKnownValues[fieldId] = '';
+                    }
+                }
+                
+                // Load initial state
+                await refreshState();
+                
+                // Start auto-refresh if enabled
+                if (document.getElementById('autoSync').checked) {
+                    startAutoRefresh();
+                }
+            } catch (error) {
+                isConnected = false;
+                API_BASE = '';
+                updateStatus('Connection failed', true);
+                showError(`Failed to connect to ${url}: ${error.message}`);
+            }
+        }
+
+        // Refresh state from server
+        async function refreshState() {
+            if (isUpdating || !isConnected || !API_BASE) return;
+            isUpdating = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/state`, { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(CONFIG.OPERATION_TIMEOUT_MS)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const rawState = await response.json();
+                
+                // The root state is wrapped in "json", so unwrap that first
+                const jsonWrapped = rawState.json || rawState;
+                const decoded = decodeState(jsonWrapped);
+                
+                console.log('Refreshed state:', decoded);
+                
+                // Preserve values for focused fields that were edited recently (within 2 seconds)
+                const preservedValues = {};
+                const now = Date.now();
+                for (const [fieldId, config] of Object.entries(fields)) {
+                    const input = document.getElementById(fieldId);
+                    const timeSinceEdit = now - (lastEditTime[fieldId] || 0);
+                    
+                    // Only preserve if focused AND edited within last 2 seconds
+                    if (document.activeElement === input && timeSinceEdit < 2000) {
+                        // Save the current value for actively editing fields
+                        let value = currentState;
+                        for (const key of config.path) {
+                            value = value?.[key];
+                        }
+                        preservedValues[fieldId] = { path: config.path, value: value };
+                        console.log(`Preserving ${fieldId} (edited ${timeSinceEdit}ms ago)`);
+                    }
+                }
+                
+                // Update current state with server data
+                currentState = decoded;
+                
+                // Restore preserved values for focused fields
+                for (const [fieldId, preserved] of Object.entries(preservedValues)) {
+                    if (preserved.value !== undefined) {
+                        let target = currentState;
+                        for (let i = 0; i < preserved.path.length - 1; i++) {
+                            if (!target[preserved.path[i]]) target[preserved.path[i]] = {};
+                            target = target[preserved.path[i]];
+                        }
+                        target[preserved.path[preserved.path.length - 1]] = preserved.value;
+                    }
+                }
+                
+                updateForm(decoded);
+                
+                lastSyncTime = new Date();
+                updateStatus(`Connected`, false, false, true);
+                updateSyncTime();
+            } catch (error) {
+                console.error('Refresh error:', error);
+                updateStatus('Sync error: ' + error.message, true);
+            } finally {
+                isUpdating = false;
+            }
+        }
+
+        // Decode CRDT state to plain values
+        function decodeState(state) {
+            if (!state || typeof state !== 'object') return state;
+            
+            // Handle Value wrapper
+            if ('Value' in state) {
+                return decodeState(state.Value);
+            }
+            
+            // Handle Object wrapper
+            if ('Object' in state) {
+                const result = {};
+                const obj = state.Object;
+                for (const key in obj) {
+                    result[key] = decodeState(obj[key]);
+                }
+                return result;
+            }
+            
+            // Handle Array wrapper
+            if ('Array' in state) {
+                return state.Array.map(decodeState);
+            }
+            
+            // Handle String as array of characters
+            if ('String' in state) {
+                if (Array.isArray(state.String)) {
+                    return state.String.join('');
+                }
+                return state.String;
+            }
+            
+            // Handle Number
+            if ('Number' in state) {
+                // Convert to integer if it's a whole number
+                const num = state.Number;
+                return Number.isInteger(num) ? Math.floor(num) : num;
+            }
+            
+            // Handle Boolean
+            if ('Boolean' in state) {
+                return state.Boolean;
+            }
+            
+            // Recursively decode plain objects (no wrapper keys)
+            const result = {};
+            for (const key in state) {
+                result[key] = decodeState(state[key]);
+            }
+            return result;
+        }
+
+        // Update form with decoded state
+        function updateForm(state) {
+            console.log('updateForm called with:', state);
+            
+            // Update simple fields
+            for (const [fieldId, config] of Object.entries(fields)) {
+                const input = document.getElementById(fieldId);
+                if (!input) continue;
+                
+                // Navigate through the path array
+                let value = state;
+                for (const key of config.path) {
+                    value = value?.[key];
+                }
+                
+                const now = Date.now();
+                const timeSinceEdit = now - (lastEditTime[fieldId] || 0);
+                const hasFocus = document.activeElement === input;
+                const isActivelyTyping = hasFocus && timeSinceEdit < CONFIG.TYPING_THRESHOLD_MS;
+                
+                console.log(`Field ${fieldId}: current="${input.value}", new="${value}", focused=${hasFocus}, typing=${isActivelyTyping}`);
+                
+                if (!isActivelyTyping) {
+                    if (config.type === 'string' && typeof value === 'string') {
+                        if (input.value !== value) {
+                            console.log(`Updating ${fieldId} from "${input.value}" to "${value}"`);
+                            
+                            // Preserve cursor position if field has focus
+                            let cursorStart = null;
+                            let cursorEnd = null;
+                            if (hasFocus && input.selectionStart !== undefined) {
+                                cursorStart = input.selectionStart;
+                                cursorEnd = input.selectionEnd;
+                            }
+                            
+                            input.value = value;
+                            lastKnownValues[fieldId] = value;
+                            
+                            // Restore cursor position
+                            if (cursorStart !== null) {
+                                input.setSelectionRange(cursorStart, cursorEnd);
+                            }
+                        }
+                    } else if (config.type === 'number' && typeof value === 'number') {
+                        const numValue = Number.isInteger(value) ? value : Math.floor(value);
+                        if (input.value !== String(numValue)) {
+                            console.log(`Updating ${fieldId} from "${input.value}" to "${numValue}"`);
+                            input.value = numValue;
+                        }
+                    }
+                }
+            }
+            
+            // Update Q&A pairs
+            const seedExamples = state.seed_examples || [];
+            const container = document.getElementById('qaContainer');
+            
+            // Clear and rebuild Q&A pairs if the count changed
+            if (seedExamples.length !== qaCount) {
+                container.innerHTML = '';
+                qaCount = 0;
+                
+                seedExamples.forEach((qa, index) => {
+                    const qaDiv = document.createElement('div');
+                    qaDiv.className = 'qa-pair';
+                    qaDiv.id = `qa-pair-${index}`;
+                    qaDiv.innerHTML = `
+                        <div class="qa-pair-header">
+                            <div class="qa-pair-title">Q&A Pair #${index + 1}</div>
+                            <button type="button" class="btn-remove" onclick="removeQaPair(${index})">🗑️ Remove</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="qa_${index}_question">Question</label>
+                            <textarea id="qa_${index}_question" name="qa_${index}_question" 
+                                placeholder="What is the treatment description?"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <la el for="qa_${index}_answer">Answer</label>
+                            <textarea id="qa_${index}_answer" name="qa_${index}_answer" class="large"
+                                placeholder="Detailed answer with multiple lines..."></textarea>
+                        </div>
+                    `;
+                    container.appendChild(qaDiv);
+                    
+                    // Setup event listeners
+                    ['question', 'answer'].forEach(field => {
+                        const fieldId = getQaFieldId(index, field);
+                        const input = document.getElementById(fieldId);
+                        input.addEventListener('input', () => {
+                            lastEditTime[fieldId] = Date.now();
+                            if (isConnected) {
+                                syncTextFieldWithPath(fieldId, ['seed_examples', index, field]);
+                            }
+                        });
+                    });
+                    
+                    qaCount++;
+                });
+            }
+            
+            // Update values of existing Q&A fields
+            seedExamples.forEach((qa, index) => {
+                ['question', 'answer'].forEach(field => {
+                    const fieldId = getQaFieldId(index, field);
+                    const input = document.getElementById(fieldId);
+                    if (!input) return;
+                    
+                    const value = qa[field] || '';
+                    const now = Date.now();
+                    const timeSinceEdit = now - (lastEditTime[fieldId] || 0);
+                    const hasFocus = document.activeElement === input;
+                    const isActivelyTyping = hasFocus && timeSinceEdit < CONFIG.TYPING_THRESHOLD_MS;
+                    
+                    if (!isActivelyTyping && input.value !== value) {
+                        // Preserve cursor position if field has focus
+                        let cursorStart = null;
+                        let cursorEnd = null;
+                        if (hasFocus && input.selectionStart !== undefined) {
+                            cursorStart = input.selectionStart;
+                            cursorEnd = input.selectionEnd;
+                        }
+                        
+                        input.value = value;
+                        lastKnownValues[fieldId] = value;
+                        
+                        // Restore cursor position
+                        if (cursorStart !== null) {
+                            input.setSelectionRange(cursorStart, cursorEnd);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Sync a simple field
+        async function syncField(fieldId) {
+            const config = fields[fieldId];
+            const input = document.getElementById(fieldId);
+            const value = input.value;
+
+            if (config.type === 'string') {
+                await syncTextField(fieldId);
+            } else if (config.type === 'number') {
+                const numValue = parseFloat(value) || 0;
+                
+                // Navigate through path to get current value
+                let currentValue = currentState;
+                for (const key of config.path) {
+                    currentValue = currentValue?.[key];
+                }
+                currentValue = currentValue || 0;
+                
+                const diff = numValue - currentValue;
+                
+                if (diff !== 0) {
+                    // Build nested operation for path
+                    const payload = buildNestedOperation(config.path, { Number: { Inc: diff } });
+                    await postOperation(payload, true); // Refresh for simple fields
+                    
+                    // Optimistically update currentState
+                    let target = currentState;
+                    for (let i = 0; i < config.path.length - 1; i++) {
+                        if (!target[config.path[i]]) target[config.path[i]] = {};
+                        target = target[config.path[i]];
+                    }
+                    target[config.path[config.path.length - 1]] = numValue;
+                }
+            }
+        }
+
+        // Sync a text field with diff calculation
+        async function syncTextField(fieldId) {
+            const config = fields[fieldId];
+            if (!config) return;
+            await syncTextFieldWithPath(fieldId, config.path);
+        }
+
+        // Sync a text field with a specific path
+        async function syncTextFieldWithPath(fieldId, path) {
+            const input = document.getElementById(fieldId);
+            if (!input) return;
+            
+            const newText = input.value;
+            const oldText = lastKnownValues[fieldId] || '';
+
+            if (newText === oldText) return;
+
+            console.log(`Syncing ${fieldId}: "${oldText}" -> "${newText}"`);
+
+            // Calculate minimal operations
+            const ops = calculateTextDiff(oldText, newText);
+            
+            for (const op of ops) {
+                const payload = buildNestedOperation(path, { String: op });
+                await postOperation(payload, false); // Don't auto-refresh
+            }
+            
+            // Update lastKnownValues to track what we sent
+            lastKnownValues[fieldId] = newText;
+            
+            // Also update currentState to prevent refresh conflicts
+            let target = currentState;
+            for (let i = 0; i < path.length - 1; i++) {
+                if (!target[path[i]]) target[path[i]] = {};
+                target = target[path[i]];
+            }
+            target[path[path.length - 1]] = newText;
+        }
+
+        // Build nested operation for a path (handles objects and arrays)
+        function buildNestedOperation(path, innerOp) {
+            if (path.length === 0) {
+                return { JsonKind: innerOp };
+            }
+            
+            let result = innerOp;
+            for (let i = path.length - 1; i >= 0; i--) {
+                const key = path[i];
+                
+                // Check if this is an array index (numeric) or object key (string)
+                if (typeof key === 'number') {
+                    // Array access - use Array Update operation
+                    result = {
+                        Array: {
+                            Update: { pos: key, op: result }
+                        }
+                    };
+                } else {
+                    // Object access - use Object Update operation
+                    result = {
+                        Object: {
+                            Update: [key, result]
+                        }
+                    };
+                }
+            }
+            
+            return { JsonKind: result };
+        }
+
+        // Calculate minimal diff operations for text
+        function calculateTextDiff(oldText, newText) {
+            console.log(`calculateTextDiff: "${oldText}" -> "${newText}"`);
+            const ops = [];
+            
+            // Find common prefix
+            let prefixLen = 0;
+            while (prefixLen < oldText.length && prefixLen < newText.length && 
+                   oldText[prefixLen] === newText[prefixLen]) {
+                prefixLen++;
+            }
+            
+            // Find common suffix
+            let suffixLen = 0;
+            while (suffixLen < (oldText.length - prefixLen) && 
+                   suffixLen < (newText.length - prefixLen) &&
+                   oldText[oldText.length - 1 - suffixLen] === newText[newText.length - 1 - suffixLen]) {
+                suffixLen++;
+            }
+            
+            const deleteStart = prefixLen;
+            const deleteEnd = oldText.length - suffixLen;
+            const deleteCount = deleteEnd - deleteStart;
+            
+            // Delete changed characters
+            if (deleteCount > 0) {
+                ops.push({ DeleteRange: { start: deleteStart, len: deleteCount } });
+                console.log(`  - DeleteRange at ${deleteStart}, len ${deleteCount}`);
+            }
+            
+            // Insert new characters
+            const insertText = newText.substring(prefixLen, newText.length - suffixLen);
+            for (let i = 0; i < insertText.length; i++) {
+                ops.push({ Insert: { content: insertText[i], pos: prefixLen + i } });
+                console.log(`  - Insert '${insertText[i]}' at pos ${prefixLen + i}`);
+            }
+            
+            console.log(`  Total ops: ${ops.length}`);
+            return ops;
+        }
+
+        // Post an operation to the server
+        async function postOperation(payload, shouldRefresh = true) {
+            if (!isConnected || !API_BASE) {
+                showError('Not connected to a node. Please connect first.');
+                return;
+            }
+
+            console.log('Posting operation:', JSON.stringify(payload, null, 2));
+
+            try {
+                const response = await fetch(`${API_BASE}/api/op`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: AbortSignal.timeout(CONFIG.OPERATION_TIMEOUT_MS)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Operation failed:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.text();
+                console.log('Operation successful:', result);
+                
+                // Only refresh if requested (for non-typing operations)
+                if (shouldRefresh) {
+                    setTimeout(refreshState, 100);
+                }
+            } catch (error) {
+                console.error('Operation error:', error);
+                showError('Failed to sync: ' + error.message);
+            }
+        }
+
+        // Clear all fields
+        async function clearAll() {
+            if (!confirm('Are you sure you want to clear all fields including all Q&A pairs? This will reset the entire document.')) return;
+            
+            // Clear simple fields
+            for (const config of Object.values(fields)) {
+                if (config.type === 'string') {
+                    let currentValue = currentState;
+                    for (const key of config.path) {
+                        currentValue = currentValue?.[key];
+                    }
+                    currentValue = currentValue || '';
+                    
+                    if (currentValue) {
+                        const payload = buildNestedOperation(
+                            config.path,
+                            { String: { DeleteRange: { start: 0, len: currentValue.length } } }
+                        );
+                        await postOperation(payload, false);
+                    }
+                } else if (config.type === 'number') {
+                    let currentValue = currentState;
+                    for (const key of config.path) {
+                        currentValue = currentValue?.[key];
+                    }
+                    currentValue = currentValue || 0;
+                    
+                    if (currentValue !== 0) {
+                        const payload = buildNestedOperation(
+                            config.path,
+                            { Number: { Inc: -currentValue } }
+                        );
+                        await postOperation(payload, false);
+                    }
+                }
+            }
+            
+            // Clear Q&A pairs from UI
+            const container = document.getElementById('qaContainer');
+            container.innerHTML = '';
+            qaCount = 0;
+            
+            setTimeout(refreshState, 500);
+        }
+
+        // Export current state as JSON file
+        function exportJSON() {
+            if (!isConnected) {
+                showError('Please connect to a server first to export data.');
+                return;
+            }
+
+            if (!currentState || Object.keys(currentState).length === 0) {
+                showError('No data to export. Please load or create some data first.');
+                return;
+            }
+
+            // Create a clean JSON object
+            const exportData = JSON.parse(JSON.stringify(currentState));
+            
+            // Generate filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const filename = `knowledge_base_${timestamp}.json`;
+            
+            // Create blob and download
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showSuccess(`Exported to ${filename}`);
+        }
+
+        // Toggle concurrent editing simulation
+        function toggleSimulation() {
+            if (!isConnected) {
+                showError('Please connect to a server first to start simulation.');
+                return;
+            }
+
+            const btn = document.getElementById('simulateBtn');
+            const indicator = document.getElementById('simIndicator');
+            
+            if (isSimulating) {
+                // Stop simulation
+                stopSimulation();
+                btn.classList.remove('active');
+                btn.textContent = '🤖 Simulate Concurrent Edit';
+                if (indicator) indicator.style.display = 'none';
+                showSuccess('Simulation stopped');
+            } else {
+                // Start simulation
+                startSimulation();
+                btn.classList.add('active');
+                btn.textContent = '⏸️ Stop Simulation';
+                if (indicator) indicator.style.display = 'inline-block';
+                showSuccess('Simulation started - typing words character by character');
+            }
+        }
+
+        // Start the simulation
+        function startSimulation() {
+            isSimulating = true;
+            
+            // Pick a random word to simulate typing
+            simulationWord = CONFIG.SIMULATION_WORDS[Math.floor(Math.random() * CONFIG.SIMULATION_WORDS.length)];
+            simulationCharIndex = 0;
+            
+            // Determine starting position
+            const input = document.getElementById('task_description');
+            const currentText = input ? input.value : '';
+            
+            // Start at end of current text, adding a space if needed
+            simulationStartPos = currentText.length;
+            if (currentText.length > 0 && !currentText.endsWith(' ')) {
+                simulationWord = ' ' + simulationWord;
+            }
+            
+            console.log(`[SIMULATION] Starting to type "${simulationWord}" at position ${simulationStartPos}`);
+            scheduleNextSimulatedEdit();
+        }
+
+        // Stop the simulation
+        function stopSimulation() {
+            isSimulating = false;
+            if (simulationTimer) {
+                clearTimeout(simulationTimer);
+                simulationTimer = null;
+            }
+            
+            // Reset UI
+            const btn = document.getElementById('simulateBtn');
+            const indicator = document.getElementById('simIndicator');
+            if (btn) {
+                btn.classList.remove('active');
+                btn.textContent = '🤖 Simulate Concurrent Edit';
+            }
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+
+        // Schedule the next simulated edit
+        function scheduleNextSimulatedEdit() {
+            if (!isSimulating) return;
+            
+            // Random interval for next character
+            const interval = CONFIG.SIMULATION_MIN_INTERVAL_MS + 
+                Math.random() * (CONFIG.SIMULATION_MAX_INTERVAL_MS - CONFIG.SIMULATION_MIN_INTERVAL_MS);
+            
+            simulationTimer = setTimeout(() => {
+                performSimulatedEdit();
+                scheduleNextSimulatedEdit();
+            }, interval);
+        }
+
+        // Perform a simulated edit on task_description
+        async function performSimulatedEdit() {
+            if (!isConnected || !isSimulating) return;
+            
+            const fieldId = 'task_description';
+            const input = document.getElementById(fieldId);
+            if (!input) return;
+            
+            // Check if we've finished typing the word
+            if (simulationCharIndex >= simulationWord.length) {
+                // Pick a new word and continue
+                simulationWord = ' ' + CONFIG.SIMULATION_WORDS[Math.floor(Math.random() * CONFIG.SIMULATION_WORDS.length)];
+                simulationCharIndex = 0;
+                
+                // Update starting position to current end
+                const currentText = input.value || '';
+                simulationStartPos = currentText.length;
+            }
+            
+            const currentText = input.value || '';
+            const char = simulationWord[simulationCharIndex];
+            const pos = simulationStartPos + simulationCharIndex;
+            
+            // Build operation to insert character
+            const payload = buildNestedOperation(
+                ['task_description'],
+                { String: { Insert: { content: char, pos: pos } } }
+            );
+            
+            // Post the operation (without blocking UI)
+            try {
+                await postOperation(payload, false);
+                
+                // Update our local tracking
+                const newText = currentText.slice(0, pos) + char + currentText.slice(pos);
+                lastKnownValues[fieldId] = newText;
+                
+                // Move to next character
+                simulationCharIndex++;
+            } catch (error) {
+                console.error('[SIMULATION] Failed to insert character:', error);
+            }
+        }
+
+        // Make removeQaPair globally accessible
+        window.removeQaPair = removeQaPair;
+
+        // Auto-refresh management
+        function startAutoRefresh() {
+            if (refreshTimer || !isConnected) return;
+            console.log('Starting auto-refresh with interval:', CONFIG.REFRESH_INTERVAL);
+            refreshTimer = setInterval(refreshState, CONFIG.REFRESH_INTERVAL);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                console.log('Stopping auto-refresh');
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        // Update status display
+        function updateStatus(text, isError, isConnecting = false, isConnected = false) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.classList.toggle('error', isError);
+            dot.classList.toggle('connecting', isConnecting);
+            dot.classList.toggle('connected', isConnected);
+        }
+
+        function updateSyncTime() {
+            if (lastSyncTime) {
+                const elapsed = Math.floor((new Date() - lastSyncTime) / 1000);
+                document.getElementById('lastSync').textContent = 
+                    `Last sync: ${elapsed}s ago`;
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="error-message">${message}</div>`;
+            setTimeout(() => { container.innerHTML = ''; }, 5000);
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="success-message">${message}</div>`;
+            setTimeout(() => { container.innerHTML = ''; }, 3000);
+        }
+
+        // Update sync time every second
+        setInterval(updateSyncTime, 1000);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            
+            // Try to restore last connection from localStorage
+            const savedUrl = localStorage.getItem('nodeUrl');
+            if (savedUrl) {
+                document.getElementById('nodeUrl').value = savedUrl;
+            }
+        });
+    </script>
+</body>
+</html>

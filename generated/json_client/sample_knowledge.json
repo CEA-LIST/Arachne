@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "task_description": "Questions related to bicycles product details",
+  "created_by": "Ramon Wartala",
+  "domain": "cycling",
+  "seed_examples": [
+    {
+      "question": "What is the \"YETI SB140 29\" LR C2 GX\" type of bike?",
+      "answer": "When you need more than just a trail bike to conquer the terrain, you'll want to reach for an all-mountain bike.\nAll-mountain bikes have longer travel than a trail bike and are able to descend much easier while\nstill being able to climb.\nThe Yeti SB140 29\" LR C2 GX Bike is built to handle trails that are untamed and unrelenting.\nThe frame uses C-Series carbon fiber and has 140mm of travel on the rear and 160mm of travel on the front.\nThe frame features a threaded bottom bracket, high-clearance downtube, dual-density downtube protection,\nfully enclosed internal cable routing, long dropper post compatibility, and Boost spacing."
+    },
+    {
+      "question": "What is the \"Santa Cruz Nomad 6 CS\" type of bike?",
+      "answer": "For riders who hunt for the biggest terrain, the Santa Cruz Nomad 6 is the single-crown king.\nThe MX-wheeled, long-travel Nomad 6 makes the most challenging descents attainable.\nUsing Santa Cruz's durable C-level carbon, the Nomad 6 C is built to last, with much of\nthe performance found on Santa Cruz's top-end CC frames.\nThe Nomad features 170mm of VPP™ rear travel, tuned to increase sensitivity and\nimprove traction with increased anti-squat,\nand is built around a 170mm single-crown fork to tackle the biggest terrain.\nWith size-specific carbon optimization and proportional geometry,\nevery Nomad frame is designed for that individual size,\nimproving the quality of the ride for every rider."
+    },
+    {
+      "question": "What is the \"Cannondale CAAD13 Disc 105\" type of bike?",
+      "answer": "Carbon frames don't get to have all the fun in a race. You can always get an\nultra-lightweight aluminum frame to dominate the criteriums.\nThe Cannondale CAAD13 Disc 105 Bike is the speediest, smoothest,\nbest handling, and finest performing aluminum race bike on the planet.\nThe SmartForm C1 Premium Alloy is the lightest,\nmost sophisticated aluminum construction available.\nThe frame has highly truncated airfoil tube shapes that offer the same weight,\nand equal or better stiffness, than round tubes, but can reduce drag by up to 30%.\nA full carbon fork up front comes with a 12x100 Speed Release thru-axle and internal cable routing.\nThe frame features internal cable routing, clearance for up to 30mm tires, and stealth fender mounts."
+    },
+    {
+      "question": "What do you know about the \"Specialized Vado 3.0 IGH\" bike?",
+      "answer": "Whether you're commuting to work by bike, going out for a quick spin, or you're riding\nto get some morning coffee, you'll want a comfortable bike that you can cruise on.\nE-bikes are a great way to remove many of the barriers that keep people from experiencing the joys of riding.\nThe Specialized Vado 3.0 IGH Bike is the vehicle for everything from daily\ncommutes to fast workouts to longer-than-planned adventures.\nThe Vado comes with an E5 aluminum frame and an SR Suntour MobieA32 fork with 80mm of travel.\nThe frame features a bottom bracket motor mount, a fully integrated and lockable\ndowntube battery, internal cable routing, and a rear rack.\nIt also features a Lezyne Ebike Mini STVZO E65 210 Lumen light front light,\na Spanninga Commuter Glow XE 12V rear light, and a simple bell."
+    },
+    {
+      "question": "What can you tell me about the \"Marin Fairfax E E-Bike\"?",
+      "answer": "Whether you're commuting to work by bike, riding your local bike paths, or just going out for\na ride with some friends to your local coffee shop, you'll love riding an e-bike.\nE-bikes are designed to give riders an extra boost of power so they can conquer those\nsteeper hills and longer rides. With Marin Fairfax E E-Bike brings the power to scoot you along\nwith 40Nm of torque from the rear hub, quietly and seamlessly adding a boost to your pedaling.\nIt has a Series 2 Fitness 6061 aluminum frame and 6061 aluminum fork.\nThe frame features internal cable routing, an integrated kickstand, fender and rack\nmounts, and two water bottle cage mounts.\nThe Bafang 250W rear hub motor provides up to 20 MPH of boost\nand the internal 340Wh battery will keep you going for many miles."
+    }
+  ],
+  "document": {
+    "repo": "https://github.com/rawar/bike_knowledge.git",
+    "commit": "1eda115",
+    "patterns_str": "Yeti-SB140-LRC2-GX-29-Bike-2024.md, SANTA-CRUZ-NOMAD-6-C-S-BIKE.md, Cannondale-CAAD13-Disc-105-Bike.md, Specialized-Vado-3-0-IGH-20MPH-E-Bike-2022.md"
+  }
+}
