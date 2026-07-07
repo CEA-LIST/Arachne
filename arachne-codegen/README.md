@@ -26,7 +26,7 @@ The schema language is the metalanguage understood by the code generator. It cor
 
 The Arachne recognized metalanguage:
 
-![Supported Ecore features](../images/metalanguage.jpg)
+![Supported Ecore features](../images/metalanguage.png)
 
 ## Mapping Reference
 
