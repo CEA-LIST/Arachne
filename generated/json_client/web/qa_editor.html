@@ -490,6 +490,31 @@
             };
         }
 
+        // Helper to create CRDT operation for inserting a new object with a string field into an array
+        // initialContent must be a single character (not empty string)
+        function createArrayInsertOp(arrayName, index, fieldName, initialContent) {
+            return {
+                JsonKind: {
+                    Object: {
+                        Update: [arrayName, {
+                            Array: {
+                                Insert: {
+                                    pos: index,
+                                    op: {
+                                        Object: {
+                                            Update: [fieldName, {
+                                                String: { Insert: { content: initialContent, pos: 0 } }
+                                            }]
+                                        }
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }
+            };
+        }
+
         // Helper to create CRDT operation for initializing an empty string field in an array
         function createArrayStringFieldOp(arrayName, index, fieldName, content) {
             return {
@@ -610,11 +635,16 @@
             
             // If connected, create the array element on the server
             if (isConnected) {
-                // Insert an object with empty question and answer fields
-                // Create placeholder with space, then delete to initialize empty strings
-                await postOperation(createArrayStringFieldOp('seed_examples', index, 'question', ' '), false);
+                // INSERT a new object with 'question' field (using space as placeholder)
+                await postOperation(createArrayInsertOp('seed_examples', index, 'question', ' '), false);
+                
+                // Delete the space to make 'question' empty
                 await postOperation(createArrayStringFieldOp('seed_examples', index, 'question', ''), false);
+                
+                // Initialize 'answer' field with space
                 await postOperation(createArrayStringFieldOp('seed_examples', index, 'answer', ' '), false);
+                
+                // Delete the space to make 'answer' empty
                 await postOperation(createArrayStringFieldOp('seed_examples', index, 'answer', ''), false);
             }
         }
@@ -852,12 +882,12 @@
                 const hasFocus = document.activeElement === input;
                 const isActivelyTyping = hasFocus && timeSinceEdit < CONFIG.TYPING_THRESHOLD_MS;
                 
-                console.log(`Field ${fieldId}: current="${input.value}", new="${value}", focused=${hasFocus}, typing=${isActivelyTyping}`);
+                // console.log(`Field ${fieldId}: current="${input.value}", new="${value}", focused=${hasFocus}, typing=${isActivelyTyping}`);
                 
                 if (!isActivelyTyping) {
                     if (config.type === 'string' && typeof value === 'string') {
                         if (input.value !== value) {
-                            console.log(`Updating ${fieldId} from "${input.value}" to "${value}"`);
+                            // console.log(`Updating ${fieldId} from "${input.value}" to "${value}"`);
                             
                             // Preserve cursor position if field has focus
                             let cursorStart = null;
@@ -1322,13 +1352,13 @@
             
             // Check if we've finished typing the word
             if (simulationCharIndex >= simulationWord.length) {
+                // Update position to after the word we just typed
+                simulationStartPos += simulationWord.length;
+                
                 // Pick a new word and continue
                 simulationWord = ' ' + CONFIG.SIMULATION_WORDS[Math.floor(Math.random() * CONFIG.SIMULATION_WORDS.length)];
                 simulationCharIndex = 0;
-                
-                // Update starting position to current end
-                const currentText = input.value || '';
-                simulationStartPos = currentText.length;
+                console.log(`[SIMULATION] Starting new word "${simulationWord}" at position ${simulationStartPos}`);
             }
             
             const currentText = input.value || '';
