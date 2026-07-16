@@ -1,0 +1,218 @@
+
++----------------------+---------+--------+
+| Metric               | Value   | Coverage |
++----------------------+---------+--------+
+| Total .ecore         | 1000    | 100.0% |
+| Parsed               | 477     |  47.7% |
+| Generated            | 414     |  41.4% |
+| Compiled             | 410     |  41.0% |
+| Gen / Parsed         | 414/477 |  86.8% |
+| Compiled / Generated | 414/414 | 100.0% |
+| Parse failures       | 523     |        |
+| Generation failures  | 63      |        |
+| Compile failures     | 4       |        |
+| Parse time           | 39.6s   |        |
+| Generation time      | 6086.9s |        |
+| Compile time         | 655.8s  |        |
+| Wall clock           | 6822.1s |        |
++----------------------+---------+--------+
+
+Parse failures
+- modelset/raw-data/repo-ecore-all/data/abreslav/astrans/ru.ifmo.rain.astrans.tests/testData/interpreter/testReadonlyFeatures/input.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav/astrans/ru.ifmo.rain.astrans.tests/testData/interpreter/testReadonlyFeatures/input.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBigDecimal`
+  failed to parse structural features
+  failed to parse class `A`
+  line 10, column 29
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="rr" eType="#//A" changeable="false"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/abreslav/astrans/ru.ifmo.rain.astrans.tests/testData/interpreter/testReadonlyFeatures/output.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav/astrans/ru.ifmo.rain.astrans.tests/testData/interpreter/testReadonlyFeatures/output.ecore: unsupported `eType` path `//BAS`
+  failed to parse structural features
+  failed to parse class `AAS`
+  line 4, column 100
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="c" eType="//BAS" containment="true"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/abreslav/grammatic/org.abreslav.grammatic.tester/model/test.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav/grammatic/org.abreslav.grammatic.tester/model/test.ecore: unexpected class content
+  failed to parse class `Tests`
+  line 7, column 5
+  current parser state:
+  | `<eTypeParameters name="T">`
+  | `      <eBounds eClassifier="#//AbstractTest"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/abreslav/java2ecore/org.abreslav.java2ecore.tests/model.expected/imported_model.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav/java2ecore/org.abreslav.java2ecore.tests/model.expected/imported_model.ecore: unsupported `eType` path `//Book`
+  failed to parse structural features
+  failed to parse class `Library`
+  line 4, column 99
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/abreslav/java2ecore/org.abreslav.java2ecore.tests/model.expected/use_registered_classes.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav/java2ecore/org.abreslav.java2ecore.tests/model.expected/use_registered_classes.ecore: Missing attribute `eType` in structural feature `e`
+  failed to parse structural features
+  failed to parse class `A`
+  line 4, column 63
+  current parser state:
+  | ``
+  | `      <eType xsi:type="ecore:EClass" href="http://www.eclipse.org/emf/2002/Ecore#//EClass"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/abreslav-from-google-code/abreslav/astrans/ru.ifmo.rain.astrans.interpreter.trace/model/trace.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/abreslav-from-google-code/abreslav/astrans/ru.ifmo.rain.astrans.interpreter.trace/model/trace.ecore: unsupported `eType` path `ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EClass`
+  failed to parse structural features
+  failed to parse class `ClassMapping`
+  line 15, column 151
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="image" lowerBound="1" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EClass"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/adalrsjr1/k8s-monitoring/storage-clients/model/target/classes/model/model.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/adalrsjr1/k8s-monitoring/storage-clients/model/target/classes/model/model.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBooleanObject`
+  failed to parse structural features
+  failed to parse class `Service`
+  line 22, column 150
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/adam-sse/RoboModel/model/robo.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/adam-sse/RoboModel/model/robo.ecore: unexpected package content
+  line 80, column 3
+  current parser state:
+  | `<eSubpackages name="command" nsURI="http://www.example.org/robo/command" nsPrefix="command">`
+  | `    <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/adaussy/emf.compare.acceptance.tests/tests/emf.compare.q7.tests/resources/diagram/class/ts010_tc018/left2.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/adaussy/emf.compare.acceptance.tests/tests/emf.compare.q7.tests/resources/diagram/class/ts010_tc018/left2.ecore: unexpected package attribute `xmi:id`
+  expected one of `name` `nsURI` `nsPrefix` `xmi:version` `xmlns:xmi` `xmlns:xsi` `xmlns:ecore`
+  line 3, column 68
+  current parser state:
+  | `name="model2" nsURI="http://model2/1.0" nsPrefix="model2">`
+  | `  <eClassifiers xsi:type="ecore:EClass" xmi:id="5" name="C"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/adautofbn/pascal-xtext/edu.ufcg.compiladores.pascal/model/generated/Pascal.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/adautofbn/pascal-xtext/edu.ufcg.compiladores.pascal/model/generated/Pascal.ecore: unsupported `eType` path `ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject`
+  failed to parse structural features
+  failed to parse class `var_block`
+  line 18, column 98
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+
+Generation failures
+- modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.build.etl.tests/src/org/eclipse/qvtd/build/etl/tests/HSV2HLS/HLSTree.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.build.etl.tests/src/org/eclipse/qvtd/build/etl/tests/HSV2HLS/HLSTree.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+  [INFO  arachne_codegen] Generating classifiers...
+  
+- modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.xtext.qvtcore.tests/src/org/eclipse/qvtd/xtext/qvtcore/tests/models/HLSTree.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.xtext.qvtcore.tests/src/org/eclipse/qvtd/xtext/qvtcore/tests/models/HLSTree.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+  [INFO  arachne_codegen] Generating classifiers...
+  
+- modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.xtext.qvtcore.tests/src/org/eclipse/qvtd/xtext/qvtcore/tests/models/HSVTree.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/adilinam/QVTdCaseStudy/org.eclipse.qvtd.xtext.qvtcore.tests/src/org/eclipse/qvtd/xtext/qvtcore/tests/models/HSVTree.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+  [INFO  arachne_codegen] Generating classifiers...
+  
+- modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.delphi/model/astm.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.delphi/model/astm.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00086 -p modelset-00086-d279b9e0
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.delphi/model/astm.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.plsql/model/astm.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.plsql/model/astm.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00087 -p modelset-00087-e996bde8
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/adolfosbh/cs2as/org.xtext.example.plsql/model/astm.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/aduninon/GeetingDSL/org.xtext.example.mydsl/ThingML.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/aduninon/GeetingDSL/org.xtext.example.mydsl/ThingML.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00088 -p modelset-00088-608c98fe
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/aduninon/GeetingDSL/org.xtext.example.mydsl/ThingML.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/ajperalt/xtext/org.example.expressions/bin/org/example/expressions/Expressions.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/ajperalt/xtext/org.example.expressions/bin/org/example/expressions/Expressions.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00098 -p modelset-00098-b1cc8e97
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/ajperalt/xtext/org.example.expressions/bin/org/example/expressions/Expressions.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/akosicki/org.eclipse.dltk.javascript/plugins/org.eclipse.dltk.javascript.core.manipulation/model/dom.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/akosicki/org.eclipse.dltk.javascript/plugins/org.eclipse.dltk.javascript.core.manipulation/model/dom.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00100 -p modelset-00100-8687c053
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/akosicki/org.eclipse.dltk.javascript/plugins/org.eclipse.dltk.javascript.core.manipulation/model/dom.ecore"
+  [WARN  ecore_rs::parser::raw] XML-level class literal redefinition for `literal` from `2` to `postfixD...
+- modelset/raw-data/repo-ecore-all/data/alexmstaff/TDT4250-Assignments/sudyProgrammeModel/TDT4250.studyProgrammeModel/model/programme.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/alexmstaff/TDT4250-Assignments/sudyProgrammeModel/TDT4250.studyProgrammeModel/model/programme.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [INFO  arachne_codegen] Generating classifiers...
+  
+  thread 'main' (54095) panicked at arachne-codegen/src/codegen/feature/attribute.rs:65:37:
+  Failed to parse type: credits
+- modelset/raw-data/repo-ecore-all/data/alfonsodelavega/epsilonFork/tests/org.eclipse.epsilon.egx.engine.test.acceptance/src/org/eclipse/epsilon/egx/engine/test/acceptance/ecore2dot/java.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/alfonsodelavega/epsilonFork/tests/org.eclipse.epsilon.egx.engine.test.acceptance/src/org/eclipse/epsilon/egx/engine/test/acceptance/ecore2dot/java.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-_xj1ix3e/generated-00120 -p modelset-00120-a5738137
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/alfonsodelavega/epsilonFork/tests/org.eclipse.epsilon.egx.engine.test.acceptance/src/org/eclipse/epsilon/egx/engine/test/acceptance/ecore2dot/java.ecore"
+  [WARN  eco...
+
+Compile failures
+- modelset/raw-data/repo-ecore-all/data/antoniogarmendia/WTurbinesModels/WT/patterns/StateMachine.ecore
+  Rust error: E0107: missing generics for struct `moirai_protocol::event::Event`
+  warning: unused import: `moirai_protocol::state::object_path::ObjectPath`
+    --> src/package.rs:14:13
+     |
+  14 |     pub use moirai_protocol::state::object_path::ObjectPath;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+- modelset/raw-data/repo-ecore-all/data/antoniogarmendia/WTurbinesModels/WT/patterns/StateMachineHyperedges.ecore
+  Rust error: E0107: missing generics for struct `moirai_protocol::event::Event`
+  warning: unused import: `moirai_protocol::state::object_path::ObjectPath`
+    --> src/package.rs:14:13
+     |
+  14 |     pub use moirai_protocol::state::object_path::ObjectPath;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+- modelset/raw-data/repo-ecore-all/data/antoniogarmendia/gallery-graphical-dsls-emfStencil/caex-environment/plugins/caex.caex30/model/patterns/StateMachineHyperedges.ecore
+  Rust error: E0107: missing generics for struct `moirai_protocol::event::Event`
+  warning: unused import: `moirai_protocol::state::object_path::ObjectPath`
+    --> src/package.rs:14:13
+     |
+  14 |     pub use moirai_protocol::state::object_path::ObjectPath;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+- modelset/raw-data/repo-ecore-all/data/antoniogarmendia/gallery-graphical-dsls-emfStencil/crala-environment/plugins/org.miso.cloud.robotic/patterns/StateMachine.ecore
+  Rust error: E0107: missing generics for struct `moirai_protocol::event::Event`
+  warning: unused import: `moirai_protocol::state::object_path::ObjectPath`
+    --> src/package.rs:14:13
+     |
+  14 |     pub use moirai_protocol::state::object_path::ObjectPath;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

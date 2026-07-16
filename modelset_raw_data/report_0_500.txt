@@ -1,0 +1,142 @@
+
++----------------------+---------+--------+
+| Metric               | Value   | Coverage |
++----------------------+---------+--------+
+| Total .ecore         | 500     | 100.0% |
+| Parsed               | 269     |  53.8% |
+| Generated            | 264     |  52.8% |
+| Compiled             | 264     |  52.8% |
+| Gen / Parsed         | 264/269 |  98.1% |
+| Compiled / Generated | 264/264 | 100.0% |
+| Parse failures       | 231     |        |
+| Generation failures  | 5       |        |
+| Compile failures     | 0       |        |
+| Parse time           | 17.1s   |        |
+| Generation time      | 766.8s  |        |
+| Compile time         | 296.7s  |        |
+| Wall clock           | 1104.9s |        |
++----------------------+---------+--------+
+
+Parse failures
+- modelset/raw-data/repo-ecore-all/data/187297/iot_framework/com.pfc.iot/model/iot.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/187297/iot_framework/com.pfc.iot/model/iot.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2003/XMLType#//AnySimpleType`
+  failed to parse structural features
+  failed to parse class `IfPort`
+  line 25, column 33
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EAttribute" name="operator" lowerBound="1"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlbiDode/Project/Albi-EMF/albi.bowling/model/bowling.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlbiDode/Project/Albi-EMF/albi.bowling/model/bowling.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EDate`
+  failed to parse structural features
+  failed to parse class `Player`
+  line 8, column 43
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EAttribute" name="height" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlbiDode/Project/QVT/TransQVT/MetaModel/TransitionQVT.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlbiDode/Project/QVT/TransQVT/MetaModel/TransitionQVT.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject`
+  failed to parse structural features
+  failed to parse class `A`
+  line 10, column 151
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlexAalbertsberg/model-driven-engineering/Tutorial/model/Tutorial.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlexAalbertsberg/model-driven-engineering/Tutorial/model/Tutorial.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBigInteger`
+  failed to parse structural features
+  failed to parse class `Book`
+  line 35, column 145
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="library" eType="#//Library"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlexAalbertsberg/model-driven-engineering/school/model/school.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlexAalbertsberg/model-driven-engineering/school/model/school.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBigInteger`
+  failed to parse structural features
+  failed to parse class `CourseResult`
+  line 59, column 144
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/Alexandra93/DT/dt.workflow.generator/src/metamodel/workflow.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/Alexandra93/DT/dt.workflow.generator/src/metamodel/workflow.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBooleanObject`
+  failed to parse structural features
+  failed to parse class `VariableDeclaration`
+  line 53, column 152
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/Alexandra93/DT/dt.workflow.model/model/workflow.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/Alexandra93/DT/dt.workflow.model/model/workflow.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBooleanObject`
+  failed to parse structural features
+  failed to parse class `VariableDeclaration`
+  line 53, column 152
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlexandreRio/WhileToLuaTranspiler/org.xtext.tl.mydsl/model/generated/MyDsl.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlexandreRio/WhileToLuaTranspiler/org.xtext.tl.mydsl/model/generated/MyDsl.ecore: unsupported `eType` path `ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject`
+  failed to parse structural features
+  failed to parse class `Eq`
+  line 83, column 29
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="exprEq2" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AlmazNasibullin/GitTestProject/org.eclipse.emf.examples.library/model/extlibrary.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AlmazNasibullin/GitTestProject/org.eclipse.emf.examples.library/model/extlibrary.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EDate`
+  failed to parse structural features
+  failed to parse class `Item`
+  line 71, column 80
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/AmmarHasan/EMF_Project_OCL_task7/model/sourceModel.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/AmmarHasan/EMF_Project_OCL_task7/model/sourceModel.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBigInteger`
+  failed to parse structural features
+  failed to parse class `Person`
+  line 10, column 157
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="likes" lowerBound="1" eType="#//Person"/>`
+  parsing failed
+
+Generation failures
+- modelset/raw-data/repo-ecore-all/data/ARM-software/cmsis-pack-eclipse/com.arm.cmsis.pack.dsq.engine/model/generated/DebugSeq.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/ARM-software/cmsis-pack-eclipse/com.arm.cmsis.pack.dsq.engine/model/generated/DebugSeq.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-3btihtmv/generated-00006 -p modelset-00006-d5e2132b
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/ARM-software/cmsis-pack-eclipse/com.arm.cmsis.pack.dsq.engine/model/generated/DebugSeq.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/AngeloFerrando/trace_expression_plugin_eclipse/it.unige.dibris.trace_expression_language/model/generated/TExp.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/AngeloFerrando/trace_expression_plugin_eclipse/it.unige.dibris.trace_expression_language/model/generated/TExp.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-3btihtmv/generated-00047 -p modelset-00047-c33bb08a
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/AngeloFerrando/trace_expression_plugin_eclipse/it.unige.dibris.trace_expression_language/model/generated/TExp.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/AresEkb/EMFTextTowerOfPisa/org.emftext.language.top/metamodel/top.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/AresEkb/EMFTextTowerOfPisa/org.emftext.language.top/metamodel/top.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-3btihtmv/generated-00057 -p modelset-00057-ddc20e70
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/AresEkb/EMFTextTowerOfPisa/org.emftext.language.top/metamodel/top.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/FAMILIAR-project/VM-language/fr.inria.lang.vm/model/generated/VM.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/FAMILIAR-project/VM-language/fr.inria.lang.vm/model/generated/VM.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-3btihtmv/generated-00212 -p modelset-00212-bbe9031b
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/FAMILIAR-project/VM-language/fr.inria.lang.vm/model/generated/VM.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/Fhma/MT_EOL/uk.ac.york.cs.emu.eol.examples.mutations.generator/metamodels/EOL_Expressions.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/Fhma/MT_EOL/uk.ac.york.cs.emu.eol.examples.mutations.generator/metamodels/EOL_Expressions.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-3btihtmv/generated-00232 -p modelset-00232-67cbb959
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/Fhma/MT_EOL/uk.ac.york.cs.emu.eol.examples.mutations.generator/metamodels/EOL_Expressions.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens

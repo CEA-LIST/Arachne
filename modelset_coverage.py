@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
+import json
 import os
 import re
 import signal
@@ -20,6 +22,7 @@ from typing import Sequence, TextIO
 DEFAULT_MODELSET = Path("./modelset").expanduser()
 DEFAULT_MAX_ERROR_CHARS = 4_000
 CARGO_CLEAN_TIMEOUT_S = 60
+DIAGNOSTIC_BUILD_TIMEOUT_S = 600
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 RUST_ERROR_RE = re.compile(r"^error(?:\[(E\d{4})\])?:\s*(.+)$")
 IGNORED_RUST_ERROR_PREFIXES = (
@@ -186,6 +189,16 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Number of discovered .ecore files to skip before processing",
     )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("modelset_coverage.csv"),
+        help=(
+            "Write per-model results to this CSV file with columns "
+            "name, parse, generate, compile, error "
+            "(default: modelset_coverage.csv)"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -292,7 +305,7 @@ def run_command(
 
 def build_cli(workspace_root: Path, max_output_chars: int) -> Path:
     outcome = run_command(
-        ["cargo", "build", "-q", "-p", "arachne-cli"],
+        ["cargo", "build", "--release", "-q", "-p", "arachne-cli"],
         cwd=workspace_root,
         timeout_s=600,
         max_output_chars=max_output_chars,
@@ -300,10 +313,149 @@ def build_cli(workspace_root: Path, max_output_chars: int) -> Path:
     if not outcome.ok:
         raise RuntimeError(f"failed to build arachne-cli:\n{outcome.error}")
 
-    binary = workspace_root / "target" / "debug" / ("arachne.exe" if os.name == "nt" else "arachne")
+    binary = workspace_root / "target" / "release" / ("arachne.exe" if os.name == "nt" else "arachne")
     if not binary.exists():
         raise RuntimeError(f"arachne-cli binary not found at {binary}")
     return binary
+
+
+def write_parse_diagnostic_project(project_dir: Path, parser_crate: Path) -> Path:
+    src_dir = project_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = project_dir / "Cargo.toml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "[package]",
+                'name = "arachne-parse-diagnostic"',
+                'version = "0.1.0"',
+                'edition = "2021"',
+                "",
+                "[dependencies]",
+                f"ecore_rs = {{ path = {json.dumps(str(parser_crate))} }}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    (src_dir / "main.rs").write_text(
+        """
+use std::{env, fs, process};
+
+use ecore_rs::ctx::Ctx;
+
+fn main() {
+    let Some(path) = env::args_os().nth(1) else {
+        eprintln!("missing .ecore path argument");
+        process::exit(2);
+    };
+
+    let path_display = path.to_string_lossy();
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!("failed to read {path_display}: {err}");
+            process::exit(1);
+        }
+    };
+
+    if let Err(err) = Ctx::parse(&content) {
+        eprintln!("failed to parse {path_display}: {err}");
+        process::exit(1);
+    }
+}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    return manifest_path
+
+
+def diagnostic_binary_path(shared_target_dir: Path) -> Path:
+    binary_name = (
+        "arachne-parse-diagnostic.exe"
+        if os.name == "nt"
+        else "arachne-parse-diagnostic"
+    )
+    return shared_target_dir / "release" / binary_name
+
+
+def ensure_parse_diagnostic_binary(
+    *,
+    workspace_root: Path,
+    temp_root: Path,
+    shared_target_dir: Path,
+    max_output_chars: int,
+) -> Path:
+    binary = diagnostic_binary_path(shared_target_dir)
+    if binary.exists():
+        return binary
+
+    manifest_path = write_parse_diagnostic_project(
+        temp_root / "parse-diagnostic",
+        workspace_root / "arachne-parser",
+    )
+    workspace_lockfile = workspace_root / "Cargo.lock"
+    if workspace_lockfile.exists():
+        shutil.copy2(workspace_lockfile, manifest_path.parent / "Cargo.lock")
+
+    env = os.environ.copy()
+    env["CARGO_TARGET_DIR"] = str(shared_target_dir)
+    outcome = run_command(
+        [
+            "cargo",
+            "build",
+            "--release",
+            "--quiet",
+            "--offline",
+            "--manifest-path",
+            str(manifest_path),
+        ],
+        cwd=workspace_root,
+        env=env,
+        timeout_s=DIAGNOSTIC_BUILD_TIMEOUT_S,
+        max_output_chars=max_output_chars,
+    )
+    if not outcome.ok:
+        raise RuntimeError(f"failed to build parse diagnostic runner:\n{outcome.error}")
+
+    if not binary.exists():
+        raise RuntimeError(f"parse diagnostic binary not found at {binary}")
+
+    return binary
+
+
+def should_diagnose_parse_failure(error: str | None) -> bool:
+    return not error or error.startswith("command exited with code ")
+
+
+def diagnose_parse_failure(
+    *,
+    ecore_path: Path,
+    workspace_root: Path,
+    temp_root: Path,
+    shared_target_dir: Path,
+    parse_diagnostic_binary: Path | None,
+    timeout_s: int,
+    max_output_chars: int,
+) -> tuple[Path | None, StepOutcome]:
+    if parse_diagnostic_binary is None:
+        parse_diagnostic_binary = ensure_parse_diagnostic_binary(
+            workspace_root=workspace_root,
+            temp_root=temp_root,
+            shared_target_dir=shared_target_dir,
+            max_output_chars=max_output_chars,
+        )
+
+    outcome = run_command(
+        [str(parse_diagnostic_binary), str(ecore_path)],
+        cwd=workspace_root,
+        timeout_s=timeout_s,
+        max_output_chars=max_output_chars,
+    )
+    return parse_diagnostic_binary, outcome
 
 
 def shorten_error(error: str, max_lines: int = 8, max_chars: int = 800) -> str:
@@ -314,10 +466,11 @@ def shorten_error(error: str, max_lines: int = 8, max_chars: int = 800) -> str:
     return trimmed
 
 
-def short_error_excerpt(error: str | None, max_chars: int = 100) -> str:
+def short_error_excerpt(error: str | None, max_chars: int = 200) -> str:
     if not error:
         return ""
-    compact = " ".join(error.strip().split())
+    # Remove everything before the first ":"
+    compact = " ".join(error.strip().split()).split(":", 1)[-1].strip()
     if len(compact) > max_chars:
         return compact[: max_chars - 3] + "..."
     return compact
@@ -424,6 +577,42 @@ def print_failures(title: str, failures: Sequence[tuple[Path, str]], limit: int)
         print(f"  {shorten_error(error).replace(chr(10), chr(10) + '  ')}")
 
 
+def outcome_ok(step: StepOutcome | None) -> bool:
+    return step.ok if step is not None else False
+
+
+def outcome_error(outcome: ModelOutcome) -> str:
+    errors = []
+    for stage, step in (
+        ("parse", outcome.parse),
+        ("generate", outcome.generate),
+        ("compile", outcome.compile),
+    ):
+        if step is not None and not step.ok:
+            errors.append(f"{stage}: {step.error or f'{stage} failed'}")
+    return "\n\n".join(errors)
+
+
+def write_csv_report(path: Path, outcomes: Sequence[ModelOutcome]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=["name", "parse", "generate", "compile", "error"],
+        )
+        writer.writeheader()
+        for outcome in outcomes:
+            writer.writerow(
+                {
+                    "name": str(outcome.path),
+                    "parse": str(outcome_ok(outcome.parse)).lower(),
+                    "generate": str(outcome_ok(outcome.generate)).lower(),
+                    "compile": str(outcome_ok(outcome.compile)).lower(),
+                    "error": outcome_error(outcome),
+                }
+            )
+
+
 def clean_generated_artifacts(
     *,
     project_dir: Path,
@@ -505,8 +694,10 @@ def main() -> int:
     print("")
 
     summary = Summary(failure_sample_limit=args.show_failures)
+    outcomes: list[ModelOutcome] = []
     started = time.perf_counter()
     cleanup_warning_printed = False
+    parse_diagnostic_binary: Path | None = None
 
     try:
         for index, ecore_path in enumerate(ecore_files, start=1):
@@ -524,8 +715,31 @@ def main() -> int:
                 max_output_chars=args.max_error_chars,
             )
             if not outcome.parse.ok:
+                if should_diagnose_parse_failure(outcome.parse.error):
+                    original_error = outcome.parse.error or "parse command failed"
+                    try:
+                        parse_diagnostic_binary, diagnostic = diagnose_parse_failure(
+                            ecore_path=ecore_path,
+                            workspace_root=workspace_root,
+                            temp_root=temp_root,
+                            shared_target_dir=shared_target_dir,
+                            parse_diagnostic_binary=parse_diagnostic_binary,
+                            timeout_s=args.parse_timeout,
+                            max_output_chars=args.max_error_chars,
+                        )
+                        outcome.parse.duration_s += diagnostic.duration_s
+                        if diagnostic.error:
+                            outcome.parse.error = diagnostic.error
+                        elif diagnostic.ok:
+                            outcome.parse.error = (
+                                "CLI parse failed, but direct parser diagnostic succeeded.\n"
+                                f"Original CLI error: {original_error}"
+                            )
+                    except RuntimeError as exc:
+                        outcome.parse.error = f"{original_error}\n{exc}"
                 print(f"  parse    : FAIL - {short_error_excerpt(outcome.parse.error)}")
                 summary.add(outcome)
+                outcomes.append(outcome)
                 continue
             print("  parse    : OK")
 
@@ -546,6 +760,7 @@ def main() -> int:
             if not outcome.generate.ok:
                 print(f"  generate : FAIL - {short_error_excerpt(outcome.generate.error)}")
                 summary.add(outcome)
+                outcomes.append(outcome)
                 if project_dir.exists() and not args.keep_failures:
                     shutil.rmtree(project_dir, ignore_errors=True)
                 continue
@@ -593,6 +808,7 @@ def main() -> int:
                     cleanup_warning_printed = True
 
             summary.add(outcome)
+            outcomes.append(outcome)
 
             if project_dir.exists() and (outcome.compile.ok or not args.keep_failures):
                 shutil.rmtree(project_dir, ignore_errors=True)
@@ -605,6 +821,10 @@ def main() -> int:
         print_failures("Compile failures", summary.compile_failures, args.show_failures)
         return 0
     finally:
+        if args.csv is not None:
+            csv_path = args.csv.expanduser().resolve()
+            write_csv_report(csv_path, outcomes)
+            print(f"\nCSV report   : {csv_path}")
         shutil.rmtree(temp_root, ignore_errors=True)
 
 

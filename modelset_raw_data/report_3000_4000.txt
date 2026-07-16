@@ -1,0 +1,190 @@
+
++----------------------+---------+--------+
+| Metric               | Value   | Coverage |
++----------------------+---------+--------+
+| Total .ecore         | 1000    | 100.0% |
+| Parsed               | 537     |  53.7% |
+| Generated            | 488     |  48.8% |
+| Compiled             | 487     |  48.7% |
+| Gen / Parsed         | 488/537 |  90.9% |
+| Compiled / Generated | 488/488 | 100.0% |
+| Parse failures       | 463     |        |
+| Generation failures  | 49      |        |
+| Compile failures     | 1       |        |
+| Parse time           | 34.8s   |        |
+| Generation time      | 3224.1s |        |
+| Compile time         | 735.6s  |        |
+| Wall clock           | 4040.4s |        |
++----------------------+---------+--------+
+
+Parse failures
+- modelset/raw-data/repo-ecore-all/data/jesusc/atl-tutorial/src/guigen.trafo.uml2gui/metamodels/wireframe.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/atl-tutorial/src/guigen.trafo.uml2gui/metamodels/wireframe.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//ELongObject`
+  failed to parse structural features
+  failed to parse class `Widget`
+  line 30, column 34
+  current parser state:
+  | ``
+  | `      <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/componetization/bento.componetization.atl.metrics/metamodels/Measure.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/componetization/bento.componetization.atl.metrics/metamodels/Measure.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject`
+  failed to parse structural features
+  failed to parse class `IntegerMeasure`
+  line 67, column 119
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/evaluation/bento.componetization.atl.examples/bin/paper/metrics/Metrics.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/evaluation/bento.componetization.atl.examples/bin/paper/metrics/Metrics.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EDoubleObject`
+  failed to parse structural features
+  failed to parse class `Metric`
+  line 13, column 161
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/evaluation/bento.componetization.atl.examples/tmp_/UML2_concept.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/evaluation/bento.componetization.atl.examples/tmp_/UML2_concept.ecore: unsupported `eType` path `ecore:EClass #//PackageableElement`
+  failed to parse structural features
+  failed to parse class `Package`
+  line 12, column 29
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.rev.oo2dot/reveng/original/KM3_modified.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.rev.oo2dot/reveng/original/KM3_modified.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EBooleanObject`
+  failed to parse structural features
+  failed to parse class `Class`
+  line 27, column 104
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="supertypes" ordered="false"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/gen/Test1_flattened.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/gen/Test1_flattened.ecore: unsupported `eType` path `//B`
+  failed to parse structural features
+  failed to parse class `A`
+  line 7, column 41
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/gen/Test2_flattened.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/gen/Test2_flattened.ecore: unsupported `eType` path `//B`
+  failed to parse structural features
+  failed to parse class `A`
+  line 6, column 41
+  current parser state:
+  | ``
+  | `  </eClassifiers>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/tests/Ecore.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/tests/Ecore.ecore: unexpected `eClassifiers` attribute `serializable`
+  line 274, column 27
+  current parser state:
+  | `/>`
+  | `  <eClassifiers xsi:type="ecore:EDataType" name="EDouble" instanceClassName="double">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/tests/Test2.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/examples/library/bento.trafolib.oorefactorings.bindings/tests/Test2.ecore: unexpected package content
+  line 10, column 3
+  current parser state:
+  | `<eSubpackages name="test2sub1" nsURI="http://test2sub" nsPrefix="test2sub">`
+  | `    <eClassifiers xsi:type="ecore:EClass" name="D"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/jesusc/bento/plugins/genericity.language.gbind/metamodel/gbind.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/jesusc/bento/plugins/genericity.language.gbind/metamodel/gbind.ecore: unexpected package content
+  line 4, column 3
+  current parser state:
+  | `<eSubpackages name="simpleocl" nsURI="http://soft.vub.ac.be/simpleocl/2011/SimpleOCL"`
+  | `      nsPrefix="simpleocl">`
+  parsing failed
+
+Generation failures
+- modelset/raw-data/repo-ecore-all/data/jlcanovas/gra2mol/examples/Grammar2Model.examples.Java2ASTMModel/files/metamodels/astm.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/jlcanovas/gra2mol/examples/Grammar2Model.examples.Java2ASTMModel/files/metamodels/astm.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00069 -p modelset-00069-4a9d54f6
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/jlcanovas/gra2mol/examples/Grammar2Model.examples.Java2ASTMModel/files/metamodels/astm.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/joergreichert/Cool/edu.stanford.compilers.cool/model/generated/Cool.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/joergreichert/Cool/edu.stanford.compilers.cool/model/generated/Cool.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00085 -p modelset-00085-707af9f5
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/joergreichert/Cool/edu.stanford.compilers.cool/model/generated/Cool.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/juanamari94/org.eclipse.xtext.example.iotdsl/model/generated/Iotdsl.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/juanamari94/org.eclipse.xtext.example.iotdsl/model/generated/Iotdsl.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00150 -p modelset-00150-bceaffe8
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/juanamari94/org.eclipse.xtext.example.iotdsl/model/generated/Iotdsl.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/kchristi-MrAleborg/ProjetIDM_StateMachine/StateMachine/metaModels/StateMachine.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/kchristi-MrAleborg/ProjetIDM_StateMachine/StateMachine/metaModels/StateMachine.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `SimplStateMachine` package
+- modelset/raw-data/repo-ecore-all/data/kiwi4boy/urml/ca.queensu.cs.mase.urml/src-gen/ca/queensu/cs/mase/Urml.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/kiwi4boy/urml/ca.queensu.cs.mase.urml/src-gen/ca/queensu/cs/mase/Urml.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00199 -p modelset-00199-a2090705
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/kiwi4boy/urml/ca.queensu.cs.mase.urml/src-gen/ca/queensu/cs/mase/Urml.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/krissrex/ntnu-tdt4250-study-emf/no.ntnu.tdt4250.oving1.model/model/studies.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/krissrex/ntnu-tdt4250-study-emf/no.ntnu.tdt4250.oving1.model/model/studies.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/leoCassiau/smallUML/SmallUML/model/smalluml.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/leoCassiau/smallUML/SmallUML/model/smalluml.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [INFO  arachne_codegen] Generating classifiers...
+  
+  thread 'main' (450403) panicked at arachne-codegen/src/codegen/feature/attribute.rs:65:37:
+  Failed to parse type: String
+- modelset/raw-data/repo-ecore-all/data/leonardox/compiladores-ufcg-2015-2-compilador-c/org.xtext.example.ansic/model/generated/Ansic.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/leonardox/compiladores-ufcg-2015-2-compilador-c/org.xtext.example.ansic/model/generated/Ansic.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00255 -p modelset-00255-c8614c1e
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/leonardox/compiladores-ufcg-2015-2-compilador-c/org.xtext.example.ansic/model/generated/Ansic.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/lmcalvs/modelSamples/ecoreModels/model/ExtendedPO.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/lmcalvs/modelSamples/ecoreModels/model/ExtendedPO.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/lolybc88/LinTra/EMF2LINDA/input/java.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/lolybc88/LinTra/EMF2LINDA/input/java.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-b3l8v7mw/generated-00299 -p modelset-00299-e8753b1c
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/lolybc88/LinTra/EMF2LINDA/input/java.ecore"
+  [WARN  ecore_rs::parser::raw] Structural feature `body` sets `ordered` while `upperBound=1`; this has no effect
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::ra...
+
+Compile failures
+- modelset/raw-data/repo-ecore-all/data/quasarresearchgroup/gesto/ecore_uml_model/JavaLibrary.ecore
+  Rust error: E0124: field `byte` is already declared; E0124: field `double` is already declared; E0124: field `short` is already declared
+  warning: unused import: `moirai_protocol::state::sink::SinkEffect`
+   --> src/package.rs:9:13
+    |
+  9 |     pub use moirai_protocol::state::sink::SinkEffect;
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

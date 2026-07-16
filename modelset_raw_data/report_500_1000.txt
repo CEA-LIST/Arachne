@@ -1,0 +1,171 @@
+
++----------------------+---------+--------+
+| Metric               | Value   | Coverage |
++----------------------+---------+--------+
+| Total .ecore         | 500     | 100.0% |
+| Parsed               | 234     |  46.8% |
+| Generated            | 207     |  41.4% |
+| Compiled             | 207     |  41.4% |
+| Gen / Parsed         | 207/234 |  88.5% |
+| Compiled / Generated | 207/207 | 100.0% |
+| Parse failures       | 266     |        |
+| Generation failures  | 27      |        |
+| Compile failures     | 0       |        |
+| Parse time           | 19.2s   |        |
+| Generation time      | 1627.0s |        |
+| Compile time         | 351.4s  |        |
+| Wall clock           | 2017.9s |        |
++----------------------+---------+--------+
+
+Parse failures
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/rif11a.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/rif11a.ecore: unexpected package content
+  line 6, column 3
+  current parser state:
+  | `<eSubpackages name="rif" nsURI="http://automotive-his.de/200706/rif/rif" nsPrefix="rif">`
+  | `    <eSubpackages name="ExchangeFile" nsURI="http://automotive-his.de/200706/rif/rif/ef"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/rif12.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/rif12.ecore: unexpected package content
+  line 6, column 3
+  current parser state:
+  | `<eSubpackages name="ExchangeFile" nsURI="http://automotive-his.de/200807/rif/ef"`
+  | `      nsPrefix="rif">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/timedAutomata.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/timedAutomata.ecore: unexpected package content
+  line 6, column 3
+  current parser state:
+  | `<eSubpackages name="base" nsURI="http://www.emftext.org/language/timedAutomata/base"`
+  | `      nsPrefix="base">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/uma.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM/validation-subjects/metamodels/uma.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2003/XMLType#//String`
+  failed to parse structural features
+  failed to parse class `ActivityDescription`
+  line 14, column 147
+  current parser state:
+  | ``
+  | `      <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/quality-models/qualityMetamodel.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/quality-models/qualityMetamodel.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject`
+  failed to parse structural features
+  failed to parse class `RangeValueType`
+  line 56, column 145
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EAttribute" name="max" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/tools/QualityMetamodel/model/qualityMetamodel.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/tools/QualityMetamodel/model/qualityMetamodel.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject`
+  failed to parse structural features
+  failed to parse class `RangeValueType`
+  line 54, column 145
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EAttribute" name="max" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EIntegerObject"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Altarica.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Altarica.ecore: unsupported `eType` path `ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject`
+  failed to parse structural features
+  failed to parse class `IfThenElse`
+  line 201, column 29
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="else" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/ClassMM.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/ClassMM.ecore: unexpected `eClassifiers` attribute `instanceClassName`
+  line 33, column 94
+  current parser state:
+  | `/>`
+  | `  <eClassifiers xsi:type="ecore:EDataType" name="Boolean" instanceClassName="java.lang.Boolean"/>`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Company.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Company.ecore: unknown builtit class URL `http://www.eclipse.org/emf/2002/Ecore#//EDate`
+  failed to parse structural features
+  failed to parse class `PurchaseOrder`
+  line 51, column 137
+  current parser state:
+  | ``
+  | `    <eStructuralFeatures xsi:type="ecore:EReference" name="supplier" lowerBound="1"`
+  parsing failed
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/DSML.ecore
+  failed to parse modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/DSML.ecore: unexpected package content
+  line 4, column 3
+  current parser state:
+  | `<eSubpackages name="web" nsURI="dsml.web" nsPrefix="dsml">`
+  | `    <eClassifiers xsi:type="ecore:EClass" name="Website">`
+  parsing failed
+
+Generation failures
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Alf.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Alf.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-wtmcu15i/generated-00011 -p modelset-00011-3e1c0b01
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/Alf.ecore"
+  [WARN  ecore_rs::parser::raw] XML-level class literal redefinition for `literal` from `1` to `false`
+  [WARN  ecore_rs::parser::raw] XML-level class literal redefinition for `literal` fr...
+- modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/SemanticDB.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/MDEGroup/QMM-COMLAN-data/validation-subjects/metamodels/SemanticDB.ecore"
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [INFO  arachne_codegen] Generating Rust tokens
+- modelset/raw-data/repo-ecore-all/data/MISO4202/mm-marketplace/java.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/MISO4202/mm-marketplace/java.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-wtmcu15i/generated-00063 -p modelset-00063-8ebd1749
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/MISO4202/mm-marketplace/java.ecore"
+  [WARN  ecore_rs::parser::raw] Structural feature `body` sets `ordered` while `upperBound=1`; this has no effect
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ecore_rs::parser::raw] `eOpposite` a...
+- modelset/raw-data/repo-ecore-all/data/Manre/automatizacion_2015/JavaEcore/model/java.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/Manre/automatizacion_2015/JavaEcore/model/java.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-wtmcu15i/generated-00090 -p modelset-00090-23754a41
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/Manre/automatizacion_2015/JavaEcore/model/java.ecore"
+  [WARN  ecore_rs::parser::raw] Structural feature `body` sets `ordered` while `upperBound=1`; this has no effect
+  [WARN  ecore_rs::parser::raw] `eOpposite` attributes are currently not supported, ignoring
+  [WARN  ...
+- modelset/raw-data/repo-ecore-all/data/MarkusGerhart/spray/examples/petrinet/org.eclipselabs.spray.examples.petrinet.domain/model/Petrinet.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/MarkusGerhart/spray/examples/petrinet/org.eclipselabs.spray.examples.petrinet.domain/model/Petrinet.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `PetrinetDSL` package
+- modelset/raw-data/repo-ecore-all/data/MaximeMillier/L3/COO/MetaModelStateMachine/model/metaModelStateMachine.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/MaximeMillier/L3/COO/MetaModelStateMachine/model/metaModelStateMachine.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `metaModelStateMachine` package
+- modelset/raw-data/repo-ecore-all/data/Mr-Wallet/BlorqueScript/org.example.blorquescript/model/generated/BlorqueScript.ecore
+  timeout after 120s: /arachne/target/debug/arachne generate modelset/raw-data/repo-ecore-all/data/Mr-Wallet/BlorqueScript/org.example.blorquescript/model/generated/BlorqueScript.ecore -o /var/folders/24/3kt9vzrj6qzd_r760kn9ybsm0000gn/T/arachne-modelset-wtmcu15i/generated-00143 -p modelset-00143-018fd63b
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/Mr-Wallet/BlorqueScript/org.example.blorquescript/model/generated/BlorqueScript.ecore"
+  [WARN  ecore_rs::parser::raw] XML-level class literal redefinition for `literal` from `1` to `string`
+  [WARN  ecore_rs::parser::raw] XML-level cl...
+- modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BContainment/TypeA.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BContainment/TypeA.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `TypeA` package
+- modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BContainment/TypeB.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BContainment/TypeB.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `TypeB` package
+- modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BHelper/TypeA.ecore
+  [INFO  arachne] Starting code generation
+  [INFO  arachne_codegen] Validating configuration
+  [INFO  arachne_codegen] Parsing ecore metamodel: "modelset/raw-data/repo-ecore-all/data/NMFCode/ATL2NMFS/resources/A2BHelper/TypeA.ecore"
+  [INFO  arachne_codegen] Generating Rust tokens
+  [ERROR arachne] Error: Failed to find a root class in `TypeA` package
