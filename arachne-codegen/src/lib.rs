@@ -242,12 +242,16 @@ pub fn generate_from_parser<'a>(
 
     info!("Generating package...");
     let generated_class_count = reachable_package_classes.len();
-    let package_gen =
-        PackageGenerator::new(&parser.ctx, pack.idx, top_level_roots, &reference_analysis);
+    let package_gen = PackageGenerator::new(
+        &parser.ctx,
+        pack.idx,
+        top_level_roots.clone(),
+        &reference_analysis,
+    );
     let fragment = package_gen.generate()?;
     package.register(fragment);
 
-    let read_as_ecore_gen = ReadAsEcoreGenerator::new(&parser.ctx, pack.idx);
+    let read_as_ecore_gen = ReadAsEcoreGenerator::new(&parser.ctx, pack.idx, top_level_roots);
     let fragment = read_as_ecore_gen.generate()?;
     package.register(fragment);
 
@@ -788,11 +792,25 @@ mod tests {
         assert!(package.contains("pubstructReadAsEcore;"));
         assert!(package.contains("impl__package::QueryOperationforReadAsEcore"));
         assert!(package.contains("impl__package::EvalNested<ReadAsEcore>forClassHierarchyLog"));
-        assert!(package.contains("XMLElement::new(\"ecore:EPackage\")"));
-        assert!(package.contains("package.add_attribute(\"name\",\"class_hierarchy\")"));
+        assert!(package.contains("XMLElement::new(\"xmi:XMI\")"));
         assert!(package.contains(
-            "package.add_attribute(\"nsURI\",\"http://www.example.org/class_hierarchy\")"
+            "document_root.add_attribute(\"xmlns:class_hierarchy\",\"http://www.example.org/class_hierarchy\")"
         ));
-        assert!(package.contains("package.add_attribute(\"nsPrefix\",\"class_hierarchy\")"));
+        assert!(package.contains("XMLElement::new(\"class_hierarchy:Package\")"));
+        assert!(!package.contains("XMLElement::new(\"ecore:EPackage\")"));
+    }
+
+    #[test]
+    fn read_as_ecore_dispatches_polymorphic_roots_to_concrete_eclasses() {
+        let package = generate_package_from_file("../examples/json.ecore");
+
+        assert!(package.contains("match&self.json_log.child"));
+        assert!(package.contains("crate::classifiers::JsonKindChild::Array(_)"));
+        assert!(package.contains("crate::classifiers::JsonKindChild::Object(_)"));
+        assert!(package.contains("XMLElement::new(\"json:Array\")"));
+        assert!(package.contains("XMLElement::new(\"json:Object\")"));
+        assert!(package.contains("XMLElement::new(\"json:String\")"));
+        assert!(package.contains("XMLElement::new(\"json:Number\")"));
+        assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
     }
 }

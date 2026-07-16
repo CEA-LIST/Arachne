@@ -1,8 +1,19 @@
 # Arachne
 
-**Arachne** is a Rust-based code generator that compiles Domain-Specific Modeling Languages (DSMLs) defined with Ecore metamodels into Conflict-free Replicated Data Types (CRDTs), leveraging the [Moirai library](https://github.com/CEA-LIST/Moirai).
+**Arachne** is a Rust code generator that compiles Domain-Specific Modeling
+Languages (DSMLs) defined by Ecore metamodels into Rust scaffold projects. A
+generated project implements the metamodel as a local-first replicated model
+API using Conflict-free Replicated Data Types (CRDTs) from the
+[Moirai library](https://github.com/CEA-LIST/Moirai).
 
-_Note: Arachne does not aim to support the full Ecore language at this stage; instead, it focuses on the essential features needed to express practical metamodels. Read [Supported features](./arachne-codegen/README.md) for more information._
+The generated source is the implementation of the input metamodel. It becomes
+part of a running modeling application after it is compiled and integrated
+with an application transport and user interface.
+
+> **Supported Ecore subset:** Arachne does not support the complete Ecore
+> metalanguage. See the
+> [mapping and supported features](./arachne-codegen/README.md) before using a
+> metamodel outside the supplied examples.
 
 ## Overview
 
@@ -16,17 +27,33 @@ This lack of support is particularly problematic for DSMLs that are used in dist
 
 ### Our approach
 
-Arachne addresses this problem by automatically generating local-first, decentralized, collaborative runtimes for modeling languages directly from their specifications. The generated runtimes are built on top of CRDTs, which provide a principled approach to achieving eventual consistency in distributed systems. By leveraging CRDTs, Arachne enables modelers to work collaboratively on models without the need for a central server or complex synchronization protocols.
+Arachne addresses this problem by automatically generating local-first,
+decentralized implementations of modeling languages from their metamodels.
+The generated implementations are built on CRDTs, which provide a principled
+approach to eventual consistency in distributed systems. When integrated into
+an application, they allow modelers to update local replicas independently and
+automatically reconcile those replicas without a centralized merge service.
 
-A metamodel is compiled into a composition of [pure operation-based CRDTs](https://arxiv.org/abs/1710.04469) that mirrors the structure of the metamodel. The generated runtimes support standard object-oriented metamodeling constructs, including objects, attributes, containment hierarchies, references, multiplicities, and subtyping.
+An Ecore metamodel is compiled into a composition of
+[pure operation-based CRDTs](https://arxiv.org/abs/1710.04469) that mirrors its
+structure. The generated code supports the documented subset of classifiers,
+attributes, containment hierarchies, references, multiplicities, and
+subtyping.
 
 ![Approach overview](./images/approach_overview.png)
 
-### Generated runtime capabilities
+### Generated implementation capabilities
 
-The generated runtimes provide an API for creating, reading, updating, and deleting model elements through generated CRDT operations and read queries. Persistence, transport serialization, and graphical editing are outside the generated runtime and must be provided by the surrounding application.
+The generated implementation provides an API for creating, reading, updating,
+and deleting model elements through CRDT update and read queries. Moirai
+provides the replication infrastructure, including causal event delivery.
+Persistence, network transport, and graphical editing are outside the generated
+project and must be provided by the surrounding application.
 
-The generated runtimes implement a [Reliable Causal Broadcast (RCB) protocol](https://courses.edx.org/asset-v1:KTHx+ID2203.2x+2016T4+type@asset+block/Lecture_6_Causal_Broadcast.pdf), which ensures that operations are delivered in a causally consistent order, even in the presence of network partitions and failures. However, we do not provide a network layer for communicating changes between replicas over the network. Instead, we provide a simple API for sending and receiving operations, which can be integrated with any transport layer of the user's choice.
+Moirai implements a
+[Reliable Causal Broadcast (RCB) protocol](https://courses.edx.org/asset-v1:KTHx+ID2203.2x+2016T4+type@asset+block/Lecture_6_Causal_Broadcast.pdf). Arachne does not generate a network
+layer. The generated send and receive API can be connected to a transport
+selected by the application developer.
 
 #### Usage example
 
@@ -51,62 +78,82 @@ let returned_value_b = replica_b.query(Read::new());
 assert_eq!(returned_value_a, returned_value_b);
 ```
 
-## Project Organization
+## Repository organization
 
-- `arachne-parser`: an Ecore-to-Rust parser, forked from `ecore.rs`. [Parser README](./arachne-parser/README.md).
-- `arachne-codegen`: core component that generates a composition of CRDTs from a parsed Ecore metamodel. [Codegen README](./arachne-codegen/README.md).
-- `arachne-cli`: Command Line Interface tool to run the generator on a given Ecore metamodel. [CLI README](./arachne-cli/README.md).
+- `arachne-parser`: Ecore parser, forked from `ecore.rs`.
+  See the [parser README](./arachne-parser/README.md).
+- `arachne-codegen`: mapping analysis and Rust code generation.
+  See the [codegen README](./arachne-codegen/README.md).
+- `arachne-cli`: command-line interface exposed as `arachne`.
+  See the [CLI README](./arachne-cli/README.md).
+- `examples`: input Ecore metamodels used to exercise the generator.
+- `modelset_coverage.py`: ModelSet parser, generation, and compilation
+  coverage runner.
+- `.devcontainer`: reproducible Linux development environment for Windows,
+  Linux, and macOS hosts.
+
+Canonical source repositories:
+
+- Arachne: <https://github.com/CEA-LIST/Arachne>
+- Moirai: <https://github.com/CEA-LIST/Moirai>
 
 ## Running the generator
 
-Rust must be installed on your machine: <https://rust-lang.org/tools/install>:
+From the repository root, build and run the CLI with Cargo. The `generate` command accepts an input `.ecore` file, an output directory, and
+an optional Cargo project name:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+arachne generate INPUT.ecore --output OUTPUT_DIRECTORY [--project-name NAME]
 ```
 
-To run the generator, use the following command:
+The generated directory is a Rust project containing `Cargo.toml` and the
+generated modules under `src/`. Inside the Dev Container, the `arachne` binary
+is already installed, so `arachne generate ...` can be used directly.
+
+### Generating the examples
+
+Generate the three metamodel examples:
 
 ```sh
-RUST_LOG=debug cargo run generate -vv -o <WHERE_TO_GENERATE_PROJECT> <PATH_TO_ECORE_METAMODEL>
+cargo run --locked --release -p arachne-cli -- generate examples/class_hierarchy.ecore --output generated/class-hierarchy --project-name class-hierarchy
+cargo run --locked --release -p arachne-cli -- generate examples/behavior_tree.ecore --output generated/behavior-tree --project-name behavior-tree
+cargo run --locked --release -p arachne-cli -- generate examples/json.ecore --output generated/json --project-name json-model
 ```
 
-## Testing the generator on ModelSet
-
-[ModelSet](https://github.com/modelset/modelset-dataset) is a dataset of +5,000 Ecore and UML models. We provide a simple Python script (`./modelset_coverage.py`) to automatically pass the models from ModelSet into Arachne to assess its capabilities. For each model, the script if 1. the model was correctly parsed, 2. the model was correctly generated by Arachne, and 3. the generated code compiles.
-
-_Note: because Arachne currently supports only a subset of Ecore, many models will fail to be parsed or generated. The script will report the number of models that were successfully processed. 1,500+ models over ~5,000 are successfully processed currently._
+Compile the generated projects:
 
 ```sh
-modelset_coverage.py <PATH_TO_MODELSET> <OPTIONAL_ARGS>
-
-# modelset_coverage.py [-h] [--parse-timeout PARSE_TIMEOUT] [--generate-timeout GENERATE_TIMEOUT] [--compile-timeout COMPILE_TIMEOUT] [--keep-failures] [--show-failures SHOW_FAILURES] [--max-error-chars MAX_ERROR_CHARS] [--skip-cargo-clean] [--limit LIMIT] [--offset OFFSET] [root]
+cargo check --manifest-path generated/class-hierarchy/Cargo.toml
+cargo check --manifest-path generated/behavior-tree/Cargo.toml
+cargo check --manifest-path generated/json/Cargo.toml
 ```
 
-### Examples
+## ModelSet coverage
 
-The repository contains a few example Ecore metamodels in the `examples` folder. You can run the generator on these examples as follows:
-
-[`class_hierarchy.ecore`](./examples/class_hierarchy.ecore) is a simplified UML metamodel that describes a class hierarchy with attributes, references, features, and inheritance.
+Download and extract
+[ModelSet v0.9.4](https://github.com/modelset/modelset-dataset/releases/tag/v0.9.4),
+then run a small sample:
 
 ```sh
-RUST_LOG=debug cargo run generate -vv -o ../class_hierarchy ./examples/class_hierarchy.ecore
+python3 modelset_coverage.py PATH_TO_MODELSET --limit 5 --csv modelset-results/modelset_coverage_smoke.csv
 ```
 
-![Class Hierarchy diagram](./images/class_hierarchy.png)
-
-[`behavior_tree.ecore`](./examples/behavior_tree.ecore) is the metamodel of a [Behavior Tree](https://www.behaviortree.dev/), a hierarchical model used in AI for decision-making and control flow.
+Run the complete dataset by omitting `--limit`. Be aware that the complete run can take a long time and requires a some gigabytes of disk space for the generated projects.
 
 ```sh
-RUST_LOG=debug cargo run generate -vv -o ../behavior_tree ./examples/behavior_tree.ecore
+python3 modelset_coverage.py PATH_TO_MODELSET --csv modelset-results/modelset_coverage_reproduced.csv
 ```
 
-![Behavior Tree diagram](./images/behavior_tree.jpg)
+On Windows, `py -3` can be used instead of `python3`. The script builds Arachne
+in release mode and records whether each metamodel can be parsed, generated,
+and compiled. Unsupported metamodels are expected and are reported in the
+`error` column.
 
-Finally, [`json.ecore`](./examples/json.ecore) is a metamodel that describes the structure of [JSON data](https://www.json.org/json-en.html).
+Reference results are available in the
+[coverage report](./modelset-results/MODELSET_COVERAGE_REPORT.md) and the
+[per-model CSV](./modelset-results/modelset_coverage.csv).
 
-```sh
-RUST_LOG=debug cargo run generate -vv -o ../json ./examples/json.ecore
-```
+## License
 
-![JSON diagram](./images/json.png)
+Arachne is distributed under the Apache License 2.0. See
+[`LICENSE`](./LICENSE).

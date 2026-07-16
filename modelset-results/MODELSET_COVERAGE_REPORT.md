@@ -1,5 +1,7 @@
 # ModelSet Coverage Report
 
+https://github.com/modelset/modelset-dataset/releases/tag/v0.9.4
+
 | Metric               | Value       | Rate   |
 | -------------------- | ----------- | ------ |
 | ModelSet files       | 5,475       | 100.0% |
