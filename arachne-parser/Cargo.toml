@@ -1,6 +1,6 @@
 [package]
 name = "ecore_rs"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     "Red Iron Team <red-iron@ocamlpro.com>",
     "Léo Olivier <leo.olivier@cea.fr>",
