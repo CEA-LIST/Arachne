@@ -43,4 +43,28 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
             value: unsettable.to_string(),
         })
     }
+
+    if let Some(default_value) = &feature.default_value {
+        warnings.push(Warning::UnsupportedFeatureProperty {
+            feature: feature.name.clone(),
+            property: "defaultValue".into(),
+            value: default_value.clone(),
+        })
+    }
+
+    if let Some(default_value_literal) = &feature.default_value_literal {
+        warnings.push(Warning::UnsupportedFeatureProperty {
+            feature: feature.name.clone(),
+            property: "defaultValueLiteral".into(),
+            value: default_value_literal.clone(),
+        })
+    }
+
+    if let Some(resolve_proxies) = feature.resolve_proxies {
+        warnings.push(Warning::UnsupportedFeatureProperty {
+            feature: feature.name.clone(),
+            property: "resolveProxies".into(),
+            value: resolve_proxies.to_string(),
+        })
+    }
 }

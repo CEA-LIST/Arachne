@@ -522,8 +522,15 @@ impl<'input> Parser<'input> {
 /// ## Class parsing
 impl<'input> Parser<'input> {
     pub fn class(&mut self, ctx: &mut PathCtx) -> Res<()> {
-        let (mut typ, mut name, mut inst_name, mut is_abstract, mut is_interface, mut sup_typs) =
-            (None, None, None, None, None, None);
+        let (
+            mut typ,
+            mut name,
+            mut inst_name,
+            mut instance_class_name,
+            mut is_abstract,
+            mut is_interface,
+            mut sup_typs,
+        ) = (None, None, None, None, None, None, None);
         // operations XML tags can be closed directly with `/>`, or have parameters and end with
         // `</eOperations>`; this flag indicates the former
         let mut early_done = false;
@@ -552,6 +559,15 @@ impl<'input> Parser<'input> {
                         val,
                     )?;
                     inst_name = Some(val)
+                }
+                ([], "instanceClassName") => {
+                    self.handle_redef(
+                        "class attribute",
+                        "instanceClassName",
+                        instance_class_name.as_ref(),
+                        val,
+                    )?;
+                    instance_class_name = Some(val)
                 }
                 ([], "interface") => {
                     // TODO: factor bool/int/... value parsing outta here
@@ -617,6 +633,9 @@ impl<'input> Parser<'input> {
 
         #[allow(unused_mut)]
         let mut class_ctx = ctx.enter_class(typ, name, inst_name, is_abstract, is_interface)?;
+        if let Some(instance_class_name) = instance_class_name {
+            class_ctx.set_instance_class_name(instance_class_name);
+        }
 
         if !early_done {
             // log::debug!("parsing content of class `{}`", class_ctx.current().name());
@@ -752,6 +771,10 @@ impl<'input> Parser<'input> {
                     self.handle_redef("class literal", "value", value.as_ref(), val)?;
                     value = Some(val);
                 }
+                "literal" => {
+                    self.handle_redef("class literal", "literal", value.as_ref(), val)?;
+                    value = Some(val);
+                }
                 _ => bail!(@unexpected("class literal attribute") key),
             }
             self.ws();
@@ -789,7 +812,8 @@ impl<'input> Parser<'input> {
     }
 
     pub fn class_parameter(&mut self, ctx: &mut ClassCtx) -> Res<repr::Param> {
-        let (mut name, mut lbound, mut ubound, mut typ) = (None, None, None, None);
+        let (mut name, mut lbound, mut ubound, mut typ, mut ordered, mut unique) =
+            (None, None, None, None, None, None);
         '_attributes: while !self.try_raw_tag("/>") {
             let (key, val) = self.xml_ident_attribute()?;
             match key {
@@ -809,6 +833,14 @@ impl<'input> Parser<'input> {
                     self.handle_redef("parameter type", "eType", typ.as_ref(), val)?;
                     typ = Some(val);
                 }
+                "ordered" => {
+                    self.handle_redef("parameter", "ordered", ordered.as_ref(), val)?;
+                    ordered = Some(val);
+                }
+                "unique" => {
+                    self.handle_redef("parameter", "unique", unique.as_ref(), val)?;
+                    unique = Some(val);
+                }
                 _ => {
                     bail!(@unexpected("parameter attribute key") key)
                 }
@@ -817,20 +849,27 @@ impl<'input> Parser<'input> {
         }
 
         let name = name.ok_or_else(|| error!(@unexpected("class parameter") "with no name"))?;
-        let typ = {
-            let etyp = typ.ok_or_else(
-                || error!(@unexpected(format!("class parameter `{name}`")) "with no type"),
-            )?;
-            ctx.resolve_etype(etyp)?
+        let typ = match typ {
+            Some(typ) => Some(ctx.resolve_etype(typ)?),
+            None => None,
         };
-        let bounds = repr::Bounds::from_str(lbound, ubound)
+        let bounds = repr::Bounds::from_typed_element_str(lbound, ubound)
             .context(|| format!("illegal bounds for parameter `{name}`"))?;
 
-        Ok(repr::Param::new(name, bounds, typ))
+        let mut parameter = repr::Param::new(name, bounds, typ);
+        if let Some(ordered) = ordered {
+            parameter.set_ordered(helpers::bool(ordered)?);
+        }
+        if let Some(unique) = unique {
+            parameter.set_unique(helpers::bool(unique)?);
+        }
+
+        Ok(parameter)
     }
 
     pub fn class_operation(&mut self, ctx: &mut ClassCtx) -> Res<repr::Operation> {
-        let (mut name, mut typ, mut lbound, mut ubound) = (None, None, None, None);
+        let (mut name, mut typ, mut lbound, mut ubound, mut ordered, mut unique) =
+            (None, None, None, None, None, None);
         // operations XML tags can be closed directly with `/>`, or have parameters and end with
         // `</eOperations>`; this flag indicates the former
         let mut early_done = false;
@@ -863,6 +902,14 @@ impl<'input> Parser<'input> {
                     self.handle_redef("operation upper bound", "upperBound", ubound.as_ref(), val)?;
                     ubound = Some(val);
                 }
+                "ordered" => {
+                    self.handle_redef("operation", "ordered", ordered.as_ref(), val)?;
+                    ordered = Some(val);
+                }
+                "unique" => {
+                    self.handle_redef("operation", "unique", unique.as_ref(), val)?;
+                    unique = Some(val);
+                }
                 _ => bail!(@unexpected("operation attribute") key),
             }
         }
@@ -875,19 +922,35 @@ impl<'input> Parser<'input> {
             None
         };
 
-        let bounds = repr::Bounds::from_str(lbound, ubound)
+        let bounds = repr::Bounds::from_typed_element_str(lbound, ubound)
             .context(|| format!("illegal bounds for operation `{name}`"))?;
 
         let mut operation = repr::Operation::new(name, typ, bounds);
+        if let Some(ordered) = ordered {
+            operation.set_ordered(helpers::bool(ordered)?);
+        }
+        if let Some(unique) = unique {
+            operation.set_unique(helpers::bool(unique)?);
+        }
 
         if !early_done {
             self.ws_and_comments();
 
             while !self.try_raw_tag("</eOperations>") {
-                self.tag("<eParameters")?;
-                self.ws();
-                let param = self.class_parameter(ctx)?;
-                operation.add_parameter(param);
+                if self.try_tag("<eAnnotations") {
+                    self.ws();
+                    let annot = self
+                        .annotation()
+                        .with_context("failed to parse operation annotation")?;
+                    operation.add_annotation(annot);
+                } else if self.try_tag("<eParameters") {
+                    self.ws();
+                    let param = self.class_parameter(ctx)?;
+                    operation.add_parameter(param);
+                } else {
+                    bail!("unexpected operation content")
+                }
+
                 self.ws_and_comments();
             }
         }
@@ -912,9 +975,12 @@ impl<'input> Parser<'input> {
             mut derived,
             mut unsettable,
             mut unique,
+            mut default_value,
+            mut default_value_literal,
+            mut resolve_proxies,
         ) = (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None,
+            None, None, None, None,
         );
 
         let mut early_done = false;
@@ -981,6 +1047,23 @@ impl<'input> Parser<'input> {
                 ([], "unsettable") => {
                     self.handle_redef("class", "unsettable", unsettable.as_ref(), val)?;
                     unsettable = Some(val);
+                }
+                ([], "defaultValue") => {
+                    self.handle_redef("class", "defaultValue", default_value.as_ref(), val)?;
+                    default_value = Some(val);
+                }
+                ([], "defaultValueLiteral") => {
+                    self.handle_redef(
+                        "class",
+                        "defaultValueLiteral",
+                        default_value_literal.as_ref(),
+                        val,
+                    )?;
+                    default_value_literal = Some(val);
+                }
+                ([], "resolveProxies") => {
+                    self.handle_redef("class", "resolveProxies", resolve_proxies.as_ref(), val)?;
+                    resolve_proxies = Some(val);
                 }
                 _ => bail!(@unexpected("structural feature attribute") key),
             }
@@ -1056,6 +1139,11 @@ impl<'input> Parser<'input> {
         if let Some(unique) = unique {
             structural.set_unique(helpers::bool(unique)?);
         }
+        if let Some(resolve_proxies) = resolve_proxies {
+            structural.set_resolve_proxies(helpers::bool(resolve_proxies)?);
+        }
+        structural.try_set_default_value(default_value);
+        structural.try_set_default_value_literal(default_value_literal);
         if opposite.is_some() {
             warn!("`eOpposite` attributes are currently not supported, ignoring")
         }

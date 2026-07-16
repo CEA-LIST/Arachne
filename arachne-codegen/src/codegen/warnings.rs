@@ -58,7 +58,7 @@ impl Warning {
             }
             Warning::AbstractWithNoSubclass(name) => {
                 format!(
-                    "Abstract class `{}` has no subclasses. It will be skipped.",
+                    "Abstract class `{}` has no concrete subclasses. It will be skipped.",
                     name
                 )
             }

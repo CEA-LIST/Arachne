@@ -107,7 +107,6 @@ dependencies = [
  "rustc-hash 2.1.2",
  "syn 2.0.117",
  "thiserror",
- "xml-builder",
 ]
 
 [[package]]
@@ -737,7 +736,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "moirai-crdt"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.6#43036949c30f2993e2d503acaa021b8a599f56a5"
 dependencies = [
  "deepsize",
  "moirai-fuzz",
@@ -753,7 +752,7 @@ dependencies = [
 [[package]]
 name = "moirai-fuzz"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.6#43036949c30f2993e2d503acaa021b8a599f56a5"
 dependencies = [
  "bimap",
  "chrono",
@@ -777,7 +776,7 @@ dependencies = [
 [[package]]
 name = "moirai-macros"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.6#43036949c30f2993e2d503acaa021b8a599f56a5"
 dependencies = [
  "deepsize",
  "moirai-protocol",
@@ -788,7 +787,7 @@ dependencies = [
 [[package]]
 name = "moirai-protocol"
 version = "0.1.0"
-source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.5#d95188ea7f2468f12f68856244e44f569ae724ae"
+source = "git+https://github.com/CEA-LIST/Moirai.git?tag=v0.6#43036949c30f2993e2d503acaa021b8a599f56a5"
 dependencies = [
  "bimap",
  "deepsize",
@@ -1767,12 +1766,6 @@ dependencies = [
  "unicode-xid",
  "wasmparser",
 ]
-
-[[package]]
-name = "xml-builder"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c023e38161c176b6ed516e2c398acd755cd19983661eff519b811c01646e10f"
 
 [[package]]
 name = "zerocopy"

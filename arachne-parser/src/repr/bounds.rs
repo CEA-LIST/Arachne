@@ -89,6 +89,13 @@ impl Bounds {
         Self::new(lbound, ubound)
     }
 
+    /// Parses bounds inherited from Ecore's `ETypedElement`.
+    ///
+    /// Ecore defaults `lowerBound` to `0` and `upperBound` to `1`.
+    pub fn from_typed_element_str(lbound: Option<&str>, ubound: Option<&str>) -> Res<Self> {
+        Self::from_str(Some(lbound.unwrap_or("0")), ubound)
+    }
+
     pub fn get_exact(self) -> Option<usize> {
         if self.ubound == Some(self.lbound) {
             self.ubound

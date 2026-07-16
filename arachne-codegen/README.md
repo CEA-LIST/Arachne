@@ -28,6 +28,14 @@ The Arachne recognized metalanguage:
 
 ![Supported Ecore features](../images/metalanguage.png)
 
+In addition to the metamodel above, we enforce the following constraints on a valid Ecore input:
+
+- `supertypes` expresses the inheritance. Multiple inheritance is allowed. The transitive closure of the inheritance hierarchy must be a strict partial order (i.e., cycles are not allowed).
+- The primitive data types supported are: integers, floating-point numbers, booleans, characters, and strings. Other primitive types are not supported (e.g., dates).
+- An abstract class must have at least one concrete subclass.
+
+Generics are not supported.
+
 ## Mapping Reference
 
 The generator accepts Ecore files as input, but it only supports a strict subset of the Ecore metalanguage. As a result, unsupported Ecore features may be ignored during code generation.
@@ -64,6 +72,10 @@ For a required single-valued `EAttribute`, the default primitive mapping is:
 
 Optional attributes wrap the CRDT log in `OptionLog`; multi-valued attributes use the collection mapping described in [Typed elements](#typed-elements). The `datatype` annotation can override some primitive mappings; see [`urn:arachne:semantics`](#urnarachnesemantics).
 
+The following Java language types are not supported: `EJavaObject`, `EJavaClass`, `EBooleanObject`, `EByteObject`, `ECharacterObject`, `EDoubleObject`, `EFloatObject`, `EIntegerObject`, `ELongObject`, `EShortObject`, `EByteObject`.
+
+The following external types are not supported: `EDate`, `EBigDecimal`, `EBigInteger`, `EResource`, `EResourceSet`, `EFeatureMap`, `EFeatureMapEntry`, `EEnumerator`, `EList`, `ETreeIterator`.
+
 #### `EClass`
 
 A (concrete) `EClass` is generated as a `record`.
@@ -81,6 +93,10 @@ Orphan abstract classes, meaning abstract classes with no instantiable subclasse
 ##### Interface
 
 Operations are not supported (see [Operations](#operations)). Interfaces are generated like abstract classes.
+
+The supported metalanguage does not contain an explicit interface construct because there is no difference with abstract classes (multiple inheritance is allowed and operations are not supported).
+
+If the input Ecore metamodel contains an `EInterface`, it is treated as an abstract class.
 
 ### Typed elements
 
@@ -120,14 +136,16 @@ Non-containment reference bounds are not normalized by this helper. Their parsed
 
 ### Structural features
 
-| Ecore          | Meaning                                                                          | Implemented? | Notes                                                  |
-| -------------- | -------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------ |
-| `changeable`   | If `false`, then the feature is immutable.                                       | No.          | Ignored with a warning when explicitly set to `false`. |
-| `volatile`     | If `true`, the value is computed on access and never stored.                     | No.          | Ignored with a warning when present.                   |
-| `derived`      | If `true`, the value is computed from other features.                            | No.          | Ignored with a warning when present.                   |
-| `transient`    | If `true`, the value is not serialized.                                          | No.          | Ignored with a warning when present.                   |
-| `unsettable`   | If `true`, the feature distinguishes between "unset" and "set to default value". | No.          | Ignored with a warning when present.                   |
-| `defaultValue` | The feature has a default value.                                                 | No.          | Not currently parsed into the generated mapping.       |
+| Ecore                 | Description                                                                      | Implemented? | Notes                                                  |
+| --------------------- | -------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------ |
+| `changeable`          | If `false`, then the feature is immutable.                                       | No.          | Ignored with a warning when explicitly set to `false`. |
+| `volatile`            | If `true`, the value is computed on access and never stored.                     | No.          | Ignored with a warning when present.                   |
+| `derived`             | If `true`, the value is computed from other features.                            | No.          | Ignored with a warning when present.                   |
+| `transient`           | If `true`, the value is not serialized.                                          | No.          | Ignored with a warning when present.                   |
+| `unsettable`          | If `true`, the feature distinguishes between "unset" and "set to default value". | No.          | Ignored with a warning when present.                   |
+| `defaultValue`        | The feature has a default value.                                                 | No.          | Parsed and ignored with a warning when present.        |
+| `defaultValueLiteral` | The feature has a serialized default value literal.                              | No.          | Parsed and ignored with a warning when present.        |
+| `resolveProxies`      | If `true`, proxy references are resolved on access.                              | No.          | Parsed and ignored with a warning when present.        |
 
 #### Reference
 
@@ -265,8 +283,8 @@ Keeping track of the current state of the code generator, here is a list of feat
 - [x] Transparent representation annotations
 - [x] Reference manager
 - [ ] Multiple EPackages
-- [ ] Fuzzer impl
-- [ ] Parser: defaultValue, defaultValueLiteral, generic type panic, resolveProxies
-- [ ] _unexpected `cfg` condition value: `test_utils`_: decide whose feature flag controls the generated code
+- [ ] Automatic generation of the fuzzer implementation for generated CRDTs
+- [ ] Parser: generic type panic
+- [x] _unexpected `cfg` condition value: `test_utils`_: decide whose feature flag controls the generated code
 - [x] Reserved Rust keywords
 - [x] Macro generated struct names clash with user-defined metamodel constructs

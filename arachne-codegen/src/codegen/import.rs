@@ -179,6 +179,7 @@ pub enum Protocol {
     ObjectPath,
     Interner,
     InternalizeOp,
+    BoxedLog,
 }
 
 impl ToUseStatement for Protocol {
@@ -209,10 +210,14 @@ impl ToUseStatement for Protocol {
             ),
             Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
-            Protocol::Interner => format!("{}::utils::intern_str::Interner", PROTOCOL_PREFIX),
+            Protocol::Interner => format!("{}::broadcast::internalizer::Interner", PROTOCOL_PREFIX),
             Protocol::InternalizeOp => {
-                format!("{}::utils::intern_str::InternalizeOp", PROTOCOL_PREFIX)
+                format!(
+                    "{}::broadcast::internalizer::InternalizeOp",
+                    PROTOCOL_PREFIX
+                )
             }
+            Protocol::BoxedLog => format!("{}::state::log::BoxedLog", PROTOCOL_PREFIX),
         }
     }
 }

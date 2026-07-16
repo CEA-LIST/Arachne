@@ -62,7 +62,14 @@ pub struct Structural {
     pub unsettable: Option<bool>,
     /// Indicates whether the feature value is unique. Default is true.
     pub unique: Option<bool>,
+    /// Raw Ecore default value, if explicitly specified.
+    pub default_value: Option<String>,
+    /// Raw Ecore default value literal, if explicitly specified.
+    pub default_value_literal: Option<String>,
+    /// Annotations associated with the feature.
     pub annotations: Annots,
+    /// Indicates whether the feature value should resolve proxies.
+    pub resolve_proxies: Option<bool>,
 }
 impl Structural {
     pub fn new(name: impl Into<String>, kind: Typ, typ: idx::Class, bounds: Bounds) -> Self {
@@ -81,7 +88,10 @@ impl Structural {
             derived: None,
             unsettable: None,
             unique: None,
+            default_value: None,
+            default_value_literal: None,
             annotations: Annots::with_capacity(2),
+            resolve_proxies: None,
         }
     }
 
@@ -106,7 +116,10 @@ impl Structural {
             derived: None,
             unsettable: None,
             unique: None,
+            default_value: None,
+            default_value_literal: None,
             annotations: Annots::with_capacity(2),
+            resolve_proxies: None,
         }
     }
 
@@ -180,6 +193,30 @@ impl Structural {
     pub fn try_set_unsettable(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_unsettable(flag)
+        }
+    }
+    pub fn set_resolve_proxies(&mut self, flag: bool) {
+        self.resolve_proxies = Some(flag);
+    }
+    pub fn try_set_resolve_proxies(&mut self, flag: Option<bool>) {
+        if let Some(flag) = flag {
+            self.set_resolve_proxies(flag)
+        }
+    }
+    pub fn set_default_value(&mut self, value: impl Into<String>) {
+        self.default_value = Some(value.into());
+    }
+    pub fn try_set_default_value(&mut self, value: Option<impl Into<String>>) {
+        if let Some(value) = value {
+            self.set_default_value(value)
+        }
+    }
+    pub fn set_default_value_literal(&mut self, value: impl Into<String>) {
+        self.default_value_literal = Some(value.into());
+    }
+    pub fn try_set_default_value_literal(&mut self, value: Option<impl Into<String>>) {
+        if let Some(value) = value {
+            self.set_default_value_literal(value)
         }
     }
     pub fn annotations(&self) -> &Annots {

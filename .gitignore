@@ -1,3 +1,5 @@
 /target
 *.output/
 .DS_Store
+__MACOSX/
+__pycache__/

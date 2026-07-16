@@ -9,7 +9,7 @@ use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         annotation::{DatatypeOverride, datatype_override, uw_map_spec},
-        classifier::containment_target_log_ident,
+        classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
@@ -22,7 +22,7 @@ use crate::{
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         ident::{classifier_type_ident, rust_ident, value_ident},
-        import::{Import, Log},
+        import::{Import, Log, Protocol},
     },
 };
 
@@ -64,13 +64,16 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             .classes()
             .get(*self.reference.typ.unwrap())
             .unwrap();
+        if is_uninhabited_polymorphic_class(self.ctx, target_class) {
+            return Ok(Fragment::new(TokenStream::new(), vec![], warnings));
+        }
 
         let name = value_ident(&self.reference.name);
         let target_type = containment_target_log_ident(self.ctx, target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
-        let boxed_target_type = quote! { Box<#target_type> };
+        let boxed_target_type = quote! { #path::BoxedLog<#target_type> };
 
         if let Some(spec) = uw_map_spec(self.reference) {
             anyhow::ensure!(
@@ -136,7 +139,10 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 if boxing_strategy == BoxingStrategy::NoBox {
                     (quote! { #target_type }, vec![])
                 } else {
-                    (boxed_target_type.clone(), vec![])
+                    (
+                        boxed_target_type.clone(),
+                        vec![Import::Protocol(Protocol::BoxedLog)],
+                    )
                 }
             }
             BoundKind::Optional => (
@@ -145,7 +151,14 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::OptionLog<#boxed_target_type> }
                 },
-                vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
+                } else {
+                    vec![
+                        Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
+                        Import::Protocol(Protocol::BoxedLog),
+                    ]
+                },
             ),
             BoundKind::Many => (
                 if boxing_strategy == BoxingStrategy::NoBox {
@@ -153,7 +166,14 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::NestedListLog<#boxed_target_type> }
                 },
-                vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))]
+                } else {
+                    vec![
+                        Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                        Import::Protocol(Protocol::BoxedLog),
+                    ]
+                },
             ),
         };
 
@@ -246,6 +266,12 @@ impl<'a> ContainmentGenerator<'a> {
                     "UWMap value feature cannot be a non-containment reference"
                 );
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
+                anyhow::ensure!(
+                    !is_uninhabited_polymorphic_class(self.ctx, value_class),
+                    "UWMap value feature `{}` targets abstract class `{}` with no concrete subclasses",
+                    value_feature.name,
+                    value_class.name()
+                );
                 let value_log = containment_target_log_ident(self.ctx, value_class);
                 let boxing_strategy = self
                     .cycle_analysis
@@ -253,9 +279,14 @@ impl<'a> ContainmentGenerator<'a> {
                 let log_ty = if boxing_strategy == BoxingStrategy::NoBox {
                     quote! { #value_log }
                 } else {
-                    quote! { Box<#value_log> }
+                    quote! { #path::BoxedLog<#value_log> }
                 };
-                Ok((log_ty, Vec::new()))
+                let imports = if boxing_strategy == BoxingStrategy::NoBox {
+                    Vec::new()
+                } else {
+                    vec![Import::Protocol(Protocol::BoxedLog)]
+                };
+                Ok((log_ty, imports))
             }
         }
     }

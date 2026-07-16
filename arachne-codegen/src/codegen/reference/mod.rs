@@ -13,15 +13,9 @@ use crate::{
         cycles::CycleAnalysis,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
-        ident::{
-            classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident,
-            value_ident,
-        },
+        ident::{classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident},
         import::{Import, Macros, Protocol},
-        reference::{
-            analysis::{ReferenceAnalysis, analyze_references},
-            containment::{PathStep, find_creation_paths},
-        },
+        reference::analysis::{ReferenceAnalysis, analyze_references},
     },
     utils::hash::HashMap,
 };
@@ -30,23 +24,16 @@ use crate::{
 pub struct ReferenceGenerator<'a> {
     ctx: &'a Ctx,
     pack_classes: Vec<idx::Class>,
-    root_class_indices: Vec<idx::Class>,
-    cycle_analysis: &'a CycleAnalysis,
 }
 
 impl<'a> ReferenceGenerator<'a> {
     pub fn new(
         ctx: &'a Ctx,
         pack_classes: Vec<idx::Class>,
-        root_class_indices: Vec<idx::Class>,
-        cycle_analysis: &'a CycleAnalysis,
+        _root_class_indices: Vec<idx::Class>,
+        _cycle_analysis: &'a CycleAnalysis,
     ) -> Self {
-        Self {
-            ctx,
-            pack_classes,
-            root_class_indices,
-            cycle_analysis,
-        }
+        Self { ctx, pack_classes }
     }
 }
 
@@ -59,8 +46,8 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 
-        debug!("Generating instance_from_path...");
-        let instance_from_path = self.generate_instance_from_path(&analysis);
+        debug!("Generating instance_from_sink_kind...");
+        let instance_from_sink_kind = self.generate_instance_from_sink_kind(&analysis);
         debug!("Generating edge structs...");
         let edge_structs = self.generate_edge_structs(&analysis);
         debug!("Generating typed graph...");
@@ -86,7 +73,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         };
 
         let tokens = quote! {
-            #instance_from_path
+            #instance_from_sink_kind
             #instance_path
 
             #edge_structs
@@ -97,7 +84,6 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         let imports = vec![
             Import::Macros(Macros::TypedGraph),
             Import::Protocol(Protocol::ObjectPath),
-            Import::Protocol(Protocol::PathSegment),
         ];
 
         Ok(Fragment::new(tokens, imports, vec![]))
@@ -105,83 +91,30 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    fn shortest_discriminating_suffixes(
-        &self,
-        full_paths: &[(idx::Class, Vec<PathPatternSegment>)],
-    ) -> Vec<(idx::Class, Vec<PathPatternSegment>)> {
-        let mut result = Vec::new();
-
-        for (i, (vertex_class, full_path)) in full_paths.iter().enumerate() {
-            let mut chosen = full_path.clone();
-
-            for suffix_len in 1..=full_path.len() {
-                let suffix = full_path[full_path.len() - suffix_len..].to_vec();
-                let ambiguous =
-                    full_paths
-                        .iter()
-                        .enumerate()
-                        .any(|(j, (other_class, other_path))| {
-                            i != j
-                                && other_class != vertex_class
-                                && other_path.len() >= suffix_len
-                                && other_path[other_path.len() - suffix_len..] == suffix
-                        });
-
-                if !ambiguous {
-                    chosen = suffix;
-                    break;
-                }
-            }
-
-            if !result.iter().any(|(existing_class, existing_suffix)| {
-                existing_class == vertex_class && existing_suffix == &chosen
-            }) {
-                result.push((*vertex_class, chosen));
-            }
-        }
-
-        result
-    }
-
-    fn generate_instance_from_path(&self, analysis: &ReferenceAnalysis) -> TokenStream {
+    fn generate_instance_from_sink_kind(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
 
-        let mut full_paths = Vec::<(idx::Class, Vec<PathPatternSegment>)>::new();
         let mut arms = Vec::new();
 
-        for &root_idx in &self.root_class_indices {
-            let root_field = value_ident(self.ctx.classes()[*root_idx].name()).to_string();
-
-            for containment_path in
-                find_creation_paths(self.ctx, root_idx, analysis, self.cycle_analysis)
-            {
-                let vertex_class = &self.ctx.classes()[*containment_path.vertex_class];
-                let mut seg_patterns = vec![PathPatternSegment::Field(root_field.clone())];
-                seg_patterns.extend(containment_path.steps.iter().map(PathPatternSegment::from));
-                full_paths.push((vertex_class.idx, seg_patterns));
-            }
-        }
-
-        for (vertex_class, seg_patterns) in self.shortest_discriminating_suffixes(&full_paths) {
+        for &vertex_class in &analysis.referenceable_classes {
             let vertex_class = &self.ctx.classes()[*vertex_class];
+            let kind = classifier_type_ident(self.ctx, vertex_class).to_string();
             let id_ty = classifier_type_ident_with_suffix(self.ctx, vertex_class, "Id");
             let variant = classifier_type_ident_with_suffix(self.ctx, vertex_class, "Id");
-            let seg_patterns = seg_patterns.iter().map(|segment| segment.to_tokens(&path));
 
             arms.push(quote! {
-                [.., #(#seg_patterns),*] => {
-                    Some(Instance::#variant(#id_ty(path.clone())))
-                }
+                #kind => Some(Instance::#variant(#id_ty(path.clone())))
             });
         }
 
         quote! {
-            pub fn instance_from_path(path: &#path::ObjectPath) -> Option<Instance> {
-                let segs = path.segments();
-
-                match segs {
+            pub fn instance_from_sink_kind(
+                kind: &str,
+                path: &#path::ObjectPath,
+            ) -> Option<Instance> {
+                match kind {
                     #(#arms,)*
                     _ => None,
                 }
@@ -331,36 +264,6 @@ impl<'a> ReferenceGenerator<'a> {
                     #(#connections),*
                 }
             }
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum PathPatternSegment {
-    Field(String),
-    Variant(String),
-    ListElement,
-    MapEntry,
-}
-
-impl PathPatternSegment {
-    fn to_tokens(&self, path: &syn::Path) -> TokenStream {
-        match self {
-            Self::Field(name) => quote! { #path::Field(#name) },
-            Self::Variant(name) => quote! { #path::Variant(#name) },
-            Self::ListElement => quote! { #path::ListElement(_) },
-            Self::MapEntry => quote! { #path::MapEntry(_) },
-        }
-    }
-}
-
-impl From<&PathStep> for PathPatternSegment {
-    fn from(step: &PathStep) -> Self {
-        match step {
-            PathStep::Field { variant_name, .. } => Self::Field(variant_name.to_lowercase()),
-            PathStep::Variant { variant_name, .. } => Self::Variant(variant_name.to_lowercase()),
-            PathStep::ListElement => Self::ListElement,
-            PathStep::MapEntry => Self::MapEntry,
         }
     }
 }

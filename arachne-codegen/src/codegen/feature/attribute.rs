@@ -137,7 +137,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             (BoundKind::Many, false, true) => (
                 quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
                 vec![
-                    Import::Log(Log::Graph),
+                    log_import,
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
                     Import::Crdt(Crdt::Nested(NestedCrdt::List)),
                 ],
@@ -168,9 +168,12 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 let set_name = rust_ident(set_typ.name());
                 (
                     quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
-                    vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
-                        Collection::Set(set_typ),
-                    )))],
+                    vec![
+                        Import::Log(Log::Vec),
+                        Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(Collection::Set(
+                            set_typ,
+                        )))),
+                    ],
                 )
             }
         };

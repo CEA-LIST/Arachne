@@ -5,8 +5,9 @@ use crate::{
     codegen::{
         annotation::uw_map_spec,
         classifier::{
-            classifier_ident, containment_target_ident, has_subclasses, inherited_field_ident,
-            is_instantiable_class,
+            classifier_ident, containment_target_ident, has_codegen_polymorphic_family,
+            has_codegen_subclasses, inherited_field_ident, is_instantiable_class,
+            is_uninhabited_polymorphic_class,
         },
         cycles::{BoxingStrategy, CycleAnalysis},
         ident::value_ident,
@@ -21,6 +22,7 @@ pub enum PathStep {
     /// A record field access emitted as `path.field("...")`.
     Field {
         class_name: String,
+        field_name: String,
         variant_name: String,
         is_boxed: bool,
     },
@@ -82,7 +84,7 @@ pub fn find_creation_paths(
         result: Vec::new(),
     };
 
-    if is_polymorphic_class(&ctx.classes()[*root_class])
+    if has_codegen_polymorphic_family(ctx, &ctx.classes()[*root_class])
         && !is_instantiable_class(&ctx.classes()[*root_class])
     {
         explore_polymorphic_class(&env, root_class, &mut state, false);
@@ -126,6 +128,10 @@ fn find_paths_recursive(
         };
 
         let target_class = &env.ctx.classes()[*target_idx];
+        if is_uninhabited_polymorphic_class(env.ctx, target_class) {
+            continue;
+        }
+
         let field_ident = value_ident(&feature.name).to_string();
         let variant_name = field_ident.to_upper_camel_case();
         let is_many = feature.bounds.ubound != Some(1);
@@ -144,6 +150,7 @@ fn find_paths_recursive(
         // Push the field step
         state.current_steps.push(PathStep::Field {
             class_name: class.name().to_string(),
+            field_name: field_ident.clone(),
             variant_name: variant_name.clone(),
             is_boxed,
         });
@@ -156,7 +163,7 @@ fn find_paths_recursive(
                 state.current_steps.push(PathStep::ListElement);
             }
 
-            if is_polymorphic_class(target_class) {
+            if has_codegen_polymorphic_family(env.ctx, target_class) {
                 explore_polymorphic_class(env, target_idx, state, passed_through_box || is_boxed);
             } else {
                 find_paths_recursive(env, target_idx, state, passed_through_box || is_boxed);
@@ -165,7 +172,7 @@ fn find_paths_recursive(
             state.current_steps.pop();
         } else {
             let new_passed = passed_through_box || is_boxed;
-            if is_polymorphic_class(target_class) {
+            if has_codegen_polymorphic_family(env.ctx, target_class) {
                 explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
@@ -184,6 +191,7 @@ fn find_paths_recursive(
 
         state.current_steps.push(PathStep::Field {
             class_name: class.name().to_string(),
+            field_name: field_ident.clone(),
             variant_name: field_variant_name,
             is_boxed: false,
         });
@@ -222,6 +230,10 @@ fn find_feat_paths_recursive(
         };
 
         let target_class = &env.ctx.classes()[*target_idx];
+        if is_uninhabited_polymorphic_class(env.ctx, target_class) {
+            continue;
+        }
+
         let field_ident = value_ident(&feature.name).to_string();
         let variant_name = field_ident.to_upper_camel_case();
         let is_many = feature.bounds.ubound != Some(1);
@@ -237,6 +249,7 @@ fn find_feat_paths_recursive(
 
         state.current_steps.push(PathStep::Field {
             class_name: feat_class_name,
+            field_name: field_ident.clone(),
             variant_name: variant_name.clone(),
             is_boxed,
         });
@@ -250,7 +263,7 @@ fn find_feat_paths_recursive(
             }
 
             let new_passed = passed_through_box || is_boxed;
-            if is_polymorphic_class(target_class) {
+            if has_codegen_polymorphic_family(env.ctx, target_class) {
                 explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
@@ -259,7 +272,7 @@ fn find_feat_paths_recursive(
             state.current_steps.pop();
         } else {
             let new_passed = passed_through_box || is_boxed;
-            if is_polymorphic_class(target_class) {
+            if has_codegen_polymorphic_family(env.ctx, target_class) {
                 explore_polymorphic_class(env, target_idx, state, new_passed);
             } else {
                 find_paths_recursive(env, target_idx, state, new_passed);
@@ -284,6 +297,7 @@ fn find_feat_paths_recursive(
 
         state.current_steps.push(PathStep::Field {
             class_name: field_class_name,
+            field_name: field_snake.clone(),
             variant_name: field_variant_name,
             is_boxed: false,
         });
@@ -333,7 +347,7 @@ fn explore_polymorphic_class(
     let class = &env.ctx.classes()[*class_idx];
     let union_name = containment_target_ident(env.ctx, class).to_string();
 
-    if is_instantiable_class(class) && has_subclasses(class) {
+    if is_instantiable_class(class) && has_codegen_subclasses(env.ctx, class) {
         state.current_steps.push(PathStep::Variant {
             union_name: union_name.clone(),
             variant_name: classifier_ident(env.ctx, class).to_string(),
@@ -344,13 +358,16 @@ fn explore_polymorphic_class(
 
     for sub_idx in class.sub() {
         let sub_class = &env.ctx.classes()[**sub_idx];
+        if is_uninhabited_polymorphic_class(env.ctx, sub_class) {
+            continue;
+        }
 
         state.current_steps.push(PathStep::Variant {
             union_name: union_name.clone(),
             variant_name: classifier_ident(env.ctx, sub_class).to_string(),
         });
 
-        if is_polymorphic_class(sub_class) {
+        if has_codegen_polymorphic_family(env.ctx, sub_class) {
             explore_polymorphic_class(env, *sub_idx, state, passed_through_box);
         } else {
             find_paths_recursive(env, *sub_idx, state, passed_through_box);
@@ -360,8 +377,4 @@ fn explore_polymorphic_class(
     }
 
     state.visited_polymorphic_families.remove(&class_idx);
-}
-
-fn is_polymorphic_class(class: &ecore_rs::repr::Class) -> bool {
-    class.is_abstract() || class.is_interface() || has_subclasses(class)
 }

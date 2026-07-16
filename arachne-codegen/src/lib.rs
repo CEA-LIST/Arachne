@@ -21,6 +21,7 @@ use crate::{
         generate::Generate,
         generator::Generator,
         package::PackageGenerator,
+        read_as_ecore::ReadAsEcoreGenerator,
         reference::{ReferenceGenerator, analysis::analyze_references},
     },
     utils::topo::topological_sort,
@@ -241,14 +242,13 @@ pub fn generate_from_parser<'a>(
 
     info!("Generating package...");
     let generated_class_count = reachable_package_classes.len();
-    let package_gen = PackageGenerator::new(
-        &parser.ctx,
-        pack.idx,
-        reachable_package_classes,
-        top_level_roots,
-        &reference_analysis,
-    );
+    let package_gen =
+        PackageGenerator::new(&parser.ctx, pack.idx, top_level_roots, &reference_analysis);
     let fragment = package_gen.generate()?;
+    package.register(fragment);
+
+    let read_as_ecore_gen = ReadAsEcoreGenerator::new(&parser.ctx, pack.idx);
+    let fragment = read_as_ecore_gen.generate()?;
     package.register(fragment);
 
     Ok((classifiers, references, package, generated_class_count))
@@ -467,9 +467,7 @@ mod tests {
         generate_modules_from_parser(&parser)
     }
 
-    fn generate_package_from_file(path: impl AsRef<Path>) -> String {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
-        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+    fn generate_package_from_parser(parser: &EcoreParser) -> String {
         let pack = parser
             .ctx
             .packs()
@@ -480,6 +478,17 @@ mod tests {
             generate_from_parser(&parser, pack).expect("generation should succeed");
 
         normalize(package.build())
+    }
+
+    fn generate_package_from_file(path: impl AsRef<Path>) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+        generate_package_from_parser(&parser)
+    }
+
+    fn generate_package_from_str(ecore: &str) -> String {
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        generate_package_from_parser(&parser)
     }
 
     #[test]
@@ -494,6 +503,36 @@ mod tests {
     }
 
     #[test]
+    fn vec_log_attributes_import_vec_log() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="visibilities" unique="false" upperBound="-1" eType="#//Visibility"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="ids" ordered="false" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EEnum" name="Visibility">
+        <eLiterals name="Final"/>
+        <eLiterals name="Initial" value="1"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains("pubusemoirai_protocol::state::po_log::VecLog;"));
+        assert!(classifiers.contains(
+            "visibilities:__classifiers::NestedListLog<__classifiers::VecLog<__classifiers::MVRegister<Visibility>>>"
+        ));
+        assert!(classifiers.contains("ids:__classifiers::VecLog<__classifiers::AWSet<i32>>"));
+    }
+
+    #[test]
     fn concrete_superclass_with_subclasses_emits_family_union() {
         let (classifiers, _references) = generate_modules_from_file(
             "../examples/pet_metamodels/concrete_inherits_concrete.ecore",
@@ -501,6 +540,40 @@ mod tests {
 
         assert!(classifiers.contains("__classifiers::record!(A{"));
         assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(B,BLog));"));
+    }
+
+    #[test]
+    fn model_enum_does_not_collide_with_polymorphic_kind() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="typeslibrary"
+    nsURI="http://example.org/typeslibrary"
+    nsPrefix="typeslibrary">
+    <eClassifiers xsi:type="ecore:EClass" name="TypesLibrary" abstract="true">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="kind" eType="#//TypesLibraryKind"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="NativeTypesLibrary" eSuperTypes="#//TypesLibrary"/>
+    <eClassifiers xsi:type="ecore:EClass" name="UserDefinedTypesLibrary" eSuperTypes="#//TypesLibrary"/>
+    <eClassifiers xsi:type="ecore:EEnum" name="TypesLibraryKind">
+        <eLiterals name="LogicalTypes"/>
+        <eLiterals name="PhysicalTypes" value="1"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains(
+            "__classifiers::union!(TypesLibraryKind=NativeTypesLibrary(NativeTypesLibrary,NativeTypesLibraryLog)|UserDefinedTypesLibrary(UserDefinedTypesLibrary,UserDefinedTypesLibraryLog));"
+        ));
+        assert!(classifiers.contains("pubenumTypesLibraryKindModel{"));
+        assert!(classifiers.contains(
+            "kind:__classifiers::OptionLog<__classifiers::VecLog<__classifiers::MVRegister<TypesLibraryKindModel>>>"
+        ));
+        assert!(!classifiers.contains("pubenumTypesLibraryKind{"));
     }
 
     #[test]
@@ -515,6 +588,72 @@ mod tests {
     }
 
     #[test]
+    fn recursive_containment_uses_boxed_log() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="root" eType="#//Select" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Select">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="union" eType="#//Union" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Union">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="select" eType="#//Select" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains("pubusemoirai_protocol::state::log::BoxedLog;"));
+        assert!(classifiers.contains(
+            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>,}"
+        ));
+        assert!(!classifiers.contains("OptionLog<Box<UnionLog>>"));
+    }
+
+    #[test]
+    fn parallel_recursive_containment_edges_are_all_boxed() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="rules" upperBound="-1" eType="#//FollowBy" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="FollowBy">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="leftSide" eType="#//TerminalExpression" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="rightSide" upperBound="-1" eType="#//TerminalExpression" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="TerminalExpression">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="everyExpression" eType="#//FollowBy" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="betweenParenthesis" eType="#//FollowBy" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains(
+            "left_side:__classifiers::OptionLog<__classifiers::BoxedLog<TerminalExpressionLog>>"
+        ));
+        assert!(classifiers.contains(
+            "right_side:__classifiers::NestedListLog<__classifiers::BoxedLog<TerminalExpressionLog>>"
+        ));
+        assert!(classifiers.contains("every_expression:__classifiers::OptionLog<FollowByLog>"));
+    }
+
+    #[test]
     fn non_containment_reference_typed_by_concrete_superclass_expands_to_family() {
         let (_classifiers, references) = generate_modules_from_file(
             "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
@@ -524,6 +663,19 @@ mod tests {
         assert!(references.contains("DToA:DId->AId(DTargetEdge)"));
         assert!(references.contains("DToB:DId->BId(DTargetEdge)"));
         assert!(references.contains("DToC:DId->CId(DTargetEdge)"));
+    }
+
+    #[test]
+    fn reference_vertex_matchers_use_sink_kind() {
+        let (_classifiers, references) = generate_modules_from_file("../examples/conference.ecore");
+
+        assert!(references.contains("instance_from_sink_kind"));
+        assert!(references.contains("\"Session\""));
+        assert!(references.contains("Instance::SessionId"));
+        assert!(references.contains("\"Person\""));
+        assert!(references.contains("Instance::PersonId"));
+        assert!(!references.contains("pub fn instance_from_path"));
+        assert!(!references.contains("__references::Field(\"track_super\")"));
     }
 
     #[test]
@@ -555,11 +707,92 @@ mod tests {
     }
 
     #[test]
+    fn abstract_classes_without_concrete_descendants_are_removed_from_generated_code() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="NamedElement">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="constraints" upperBound="-1" eType="#//Constraint" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Parameter" abstract="true" eSuperTypes="#//NamedElement">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="kind" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Constraint" abstract="true">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="body" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Method" eSuperTypes="#//NamedElement">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="parameters" upperBound="-1" eType="#//Parameter" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="methods" upperBound="-1" eType="#//Method" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(!classifiers.contains("ParameterKind"));
+        assert!(!classifiers.contains("ConstraintKind"));
+        assert!(!classifiers.contains("parameters:"));
+        assert!(!classifiers.contains("constraints:"));
+        assert!(
+            classifiers
+                .contains("__classifiers::record!(Method{named_element_super:NamedElementLog,});")
+        );
+        assert!(classifiers.contains("__classifiers::record!(NamedElement{});"));
+    }
+
+    #[test]
+    fn reference_side_effects_use_event_disambiguators() {
+        let package = generate_package_from_file("../examples/conference.ecore");
+
+        assert!(package.contains("letmutreference_effect_disambiguator=0u32;"));
+        assert!(package.contains("sink.kind().and_then"));
+        assert!(package.contains("instance_from_sink_kind(kind,sink.path())"));
+        assert!(package.contains("reference_effect_disambiguator+=1;"));
+        assert!(package.contains("__package::ProtocolEvent::unfold_with_disambiguator"));
+    }
+
+    #[test]
+    fn root_classifier_named_event_does_not_collide_with_protocol_event() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="stateMachine"
+    nsURI="http://example.org/state-machine"
+    nsPrefix="stateMachine">
+    <eClassifiers xsi:type="ecore:EClass" name="Event"/>
+</ecore:EPackage>
+"##;
+
+        let package = generate_package_from_str(ecore);
+
+        assert!(package.contains("pubusemoirai_protocol::event::EventasProtocolEvent;"));
+        assert!(package.contains("Event(crate::classifiers::Event)"));
+        assert!(package.contains("event:__package::ProtocolEvent<Self::Op>"));
+        assert!(package.contains("__package::ProtocolEvent::unfold(event.clone(),o)"));
+        assert!(!package.contains("Event(__package::Event)"));
+    }
+
+    #[test]
     fn package_generates_read_as_ecore_query() {
         let package = generate_package_from_file("../examples/class_hierarchy.ecore");
 
         assert!(package.contains("pubstructReadAsEcore;"));
         assert!(package.contains("impl__package::QueryOperationforReadAsEcore"));
         assert!(package.contains("impl__package::EvalNested<ReadAsEcore>forClassHierarchyLog"));
+        assert!(package.contains("XMLElement::new(\"ecore:EPackage\")"));
+        assert!(package.contains("package.add_attribute(\"name\",\"class_hierarchy\")"));
+        assert!(package.contains(
+            "package.add_attribute(\"nsURI\",\"http://www.example.org/class_hierarchy\")"
+        ));
+        assert!(package.contains("package.add_attribute(\"nsPrefix\",\"class_hierarchy\")"));
     }
 }

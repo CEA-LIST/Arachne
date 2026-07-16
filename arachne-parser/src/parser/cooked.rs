@@ -349,6 +349,7 @@ impl<'a> ECoreWalker<'a> {
         let mut r#abstract = None;
         let mut e_super_types = Vec::new();
         let mut instance_type_name = None;
+        let mut instance_class_name = None;
         let mut interface = None;
         let mut class = loop {
             let tkn = self.next_token()?;
@@ -374,6 +375,14 @@ impl<'a> ECoreWalker<'a> {
                     ..
                 } if prefix.is_empty() && local == "instanceTypeName" => {
                     instance_type_name = Some(value.as_str())
+                }
+                Token::Attribute {
+                    prefix,
+                    local,
+                    value,
+                    ..
+                } if prefix.is_empty() && local == "instanceClassName" => {
+                    instance_class_name = Some(value.as_str())
                 }
                 Token::Attribute {
                     prefix,
@@ -417,6 +426,9 @@ impl<'a> ECoreWalker<'a> {
                             inner,
                             textpos: self.stream().gen_text_pos(),
                         })?;
+                    if let Some(instance_class_name) = instance_class_name {
+                        class.set_instance_class_name(instance_class_name);
+                    }
                     for estp in e_super_types {
                         let estp =
                             class

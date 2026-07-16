@@ -23,7 +23,7 @@ use crate::{
             classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident,
             value_ident_with_suffix,
         },
-        import::{Import, Log, Macros},
+        import::{Import, Log, Macros, Protocol},
         operation::OperationGenerator,
         warnings::Warning,
     },
@@ -40,6 +40,32 @@ pub fn is_instantiable_class(class: &Class) -> bool {
     class.is_concrete() && !class.is_interface() && !class.is_enum()
 }
 
+pub fn has_instantiable_descendant(ctx: &Ctx, class: &Class) -> bool {
+    class.sub().iter().any(|idx| {
+        let subclass = &ctx.classes()[**idx];
+        is_instantiable_class(subclass) || has_instantiable_descendant(ctx, subclass)
+    })
+}
+
+pub fn is_uninhabited_polymorphic_class(ctx: &Ctx, class: &Class) -> bool {
+    (class.is_abstract() || class.is_interface()) && !has_instantiable_descendant(ctx, class)
+}
+
+pub fn has_codegen_subclasses(ctx: &Ctx, class: &Class) -> bool {
+    class.sub().iter().any(|idx| {
+        let subclass = &ctx.classes()[**idx];
+        !is_uninhabited_polymorphic_class(ctx, subclass)
+    })
+}
+
+pub fn has_codegen_polymorphic_family(ctx: &Ctx, class: &Class) -> bool {
+    if class.is_abstract() || class.is_interface() {
+        !is_uninhabited_polymorphic_class(ctx, class)
+    } else {
+        has_codegen_subclasses(ctx, class)
+    }
+}
+
 pub fn classifier_ident(ctx: &Ctx, class: &Class) -> Ident {
     classifier_type_ident(ctx, class)
 }
@@ -49,7 +75,7 @@ pub fn classifier_log_ident(ctx: &Ctx, class: &Class) -> Ident {
 }
 
 pub fn polymorphic_kind_ident(ctx: &Ctx, class: &Class) -> Ident {
-    if class.is_abstract() || class.is_interface() || has_subclasses(class) {
+    if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, POLYMORPHIC_KIND_SUFFIX)
     } else {
         classifier_ident(ctx, class)
@@ -57,7 +83,7 @@ pub fn polymorphic_kind_ident(ctx: &Ctx, class: &Class) -> Ident {
 }
 
 pub fn polymorphic_kind_log_ident(ctx: &Ctx, class: &Class) -> Ident {
-    if class.is_abstract() || class.is_interface() || has_subclasses(class) {
+    if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, &format!("{POLYMORPHIC_KIND_SUFFIX}Log"))
     } else {
         classifier_log_ident(ctx, class)
@@ -109,15 +135,24 @@ impl<'a> ClassGenerator<'a> {
                         attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
                     }
                     ecore_rs::repr::structural::Typ::EReference if f.containment => {
-                        refs.push(
-                            ContainmentGenerator::new(
-                                f,
-                                self.class.idx,
-                                self.ctx,
-                                self.cycle_analysis,
-                            )
-                            .generate()?,
-                        );
+                        let target_is_uninhabited = if let Some(target_idx) = f.typ {
+                            let target = &self.ctx.classes()[*target_idx];
+                            is_uninhabited_polymorphic_class(self.ctx, target)
+                        } else {
+                            false
+                        };
+
+                        if !target_is_uninhabited {
+                            refs.push(
+                                ContainmentGenerator::new(
+                                    f,
+                                    self.class.idx,
+                                    self.ctx,
+                                    self.cycle_analysis,
+                                )
+                                .generate()?,
+                            );
+                        }
                     }
                     _ => {
                         // Non-containment references are handled through the Typed Graph, so we can skip them here.
@@ -129,7 +164,9 @@ impl<'a> ClassGenerator<'a> {
     }
 
     /// Compute inherited field names and types from superclasses
-    fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>) {
+    fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>, Vec<Import>) {
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
         let inherited = self
             .class
             .sup()
@@ -142,6 +179,7 @@ impl<'a> ClassGenerator<'a> {
             .map(|class| inherited_field_ident(class))
             .collect::<Vec<_>>();
 
+        let mut imports = Vec::new();
         let field_types = inherited
             .iter()
             .map(|class| {
@@ -153,14 +191,15 @@ impl<'a> ClassGenerator<'a> {
                     .boxing_strategy(self.class.idx, &field_ident.to_string())
                     == crate::codegen::cycles::BoxingStrategy::DirectReference
                 {
-                    quote! { Box<#base_type> }
+                    imports.push(Import::Protocol(Protocol::BoxedLog));
+                    quote! { #path::BoxedLog<#base_type> }
                 } else {
                     base_type
                 }
             })
             .collect::<Vec<_>>();
 
-        (field_names, field_types)
+        (field_names, field_types, imports)
     }
 
     fn is_uw_map_entry_helper(&self) -> bool {
@@ -336,6 +375,12 @@ impl<'a> ClassGenerator<'a> {
                     "Transparent field must be a containment reference"
                 );
                 let target_class = self.ctx.classes().get(*field.typ.unwrap()).unwrap();
+                anyhow::ensure!(
+                    !is_uninhabited_polymorphic_class(self.ctx, target_class),
+                    "Transparent containment field `{}` targets abstract class `{}` with no concrete subclasses",
+                    field.name,
+                    target_class.name()
+                );
                 let target_name = containment_target_ident(self.ctx, target_class);
                 let target_log = containment_target_log_ident(self.ctx, target_class);
                 let boxing_strategy = self
@@ -414,8 +459,8 @@ impl<'a> ClassGenerator<'a> {
                         } else {
                             (
                                 quote! { Box<#target_name> },
-                                quote! { Box<#target_log> },
-                                vec![],
+                                quote! { #path::BoxedLog<#target_log> },
+                                vec![Import::Protocol(Protocol::BoxedLog)],
                             )
                         }
                     }
@@ -430,12 +475,21 @@ impl<'a> ClassGenerator<'a> {
                             if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
                                 quote! { #target_log }
                             } else {
-                                quote! { Box<#target_log> }
+                                quote! { #path::BoxedLog<#target_log> }
+                            };
+                        let imports =
+                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
+                                vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
+                            } else {
+                                vec![
+                                    Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
+                                    Import::Protocol(Protocol::BoxedLog),
+                                ]
                             };
                         (
                             quote! { Option<#inner_payload> },
                             quote! { #path::OptionLog<#inner_log> },
-                            vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
+                            imports,
                         )
                     }
                     crate::codegen::feature::bounds::BoundKind::Many => {
@@ -449,15 +503,25 @@ impl<'a> ClassGenerator<'a> {
                             if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
                                 quote! { #target_log }
                             } else {
-                                quote! { Box<#target_log> }
+                                quote! { #path::BoxedLog<#target_log> }
+                            };
+                        let imports =
+                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
+                                vec![
+                                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                                    Import::Custom("moirai_crdt::list::nested_list::NestedList"),
+                                ]
+                            } else {
+                                vec![
+                                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                                    Import::Custom("moirai_crdt::list::nested_list::NestedList"),
+                                    Import::Protocol(Protocol::BoxedLog),
+                                ]
                             };
                         (
                             quote! { #path::NestedList<#inner_payload> },
                             quote! { #path::NestedListLog<#inner_log> },
-                            vec![
-                                Import::Crdt(Crdt::Nested(NestedCrdt::List)),
-                                Import::Custom("moirai_crdt::list::nested_list::NestedList"),
-                            ],
+                            imports,
                         )
                     }
                 };
@@ -473,10 +537,7 @@ impl<'a> ClassGenerator<'a> {
         let name = classifier_ident(self.ctx, self.class);
 
         // Check if the class has a subclass
-        let is_inherited = !self.class.sub().is_empty();
-
-        // If no subclass, raise a warning and skip generation
-        if !is_inherited {
+        if is_uninhabited_polymorphic_class(self.ctx, self.class) {
             let warning = Warning::AbstractWithNoSubclass(self.class.name().to_string());
             return Ok(Fragment::new(quote! {}, vec![], vec![warning]));
         }
@@ -491,7 +552,8 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
+        let (inherited_field_names, inherited_field_types, inherited_imports) =
+            self.inherited_fields();
         let should_emit_feat = !inherited_field_names.is_empty()
             || !attribute_tokens.is_empty()
             || !reference_tokens.is_empty()
@@ -504,6 +566,10 @@ impl<'a> ClassGenerator<'a> {
         let mut union_warnings = Vec::new();
         for idx in self.class.sub() {
             let subclass = &self.ctx.classes()[**idx];
+            if is_uninhabited_polymorphic_class(self.ctx, subclass) {
+                continue;
+            }
+
             if let Some(TransparentVariantSpec {
                 variant_name,
                 payload_ty,
@@ -555,6 +621,7 @@ impl<'a> ClassGenerator<'a> {
                     Import::Macros(Macros::Union),
                 ],
                 union_imports,
+                inherited_imports,
                 attribute_imports,
                 reference_imports,
                 operation_imports,
@@ -589,51 +656,58 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (inherited_field_names, inherited_field_types) = self.inherited_fields();
+        let (inherited_field_names, inherited_field_types, inherited_imports) =
+            self.inherited_fields();
         let family_name = polymorphic_kind_ident(self.ctx, self.class);
         let family_log = classifier_log_ident(self.ctx, self.class);
-        let (family_tokens, family_imports, family_warnings) = if has_subclasses(self.class) {
-            let self_variant = quote! { #name(#name, #family_log) };
-            let mut union_aliases = Vec::new();
-            let mut union_variants = vec![self_variant];
-            let mut union_imports = Vec::new();
-            let mut union_warnings = Vec::new();
+        let (family_tokens, family_imports, family_warnings) =
+            if has_codegen_subclasses(self.ctx, self.class) {
+                let self_variant = quote! { #name(#name, #family_log) };
+                let mut union_aliases = Vec::new();
+                let mut union_variants = vec![self_variant];
+                let mut union_imports = Vec::new();
+                let mut union_warnings = Vec::new();
 
-            for idx in self.class.sub() {
-                let subclass = &self.ctx.classes()[**idx];
-                if let Some(TransparentVariantSpec {
-                    variant_name,
-                    payload_ty,
-                    log_ty,
-                    imports,
-                    warnings,
-                }) = self.transparent_variant_spec(subclass)?
-                {
-                    let payload_alias = rust_ident(format!("{}{}Value", family_name, variant_name));
-                    let log_alias = rust_ident(format!("{}{}Log", family_name, variant_name));
-                    union_aliases.push(quote! {
-                        type #payload_alias = #payload_ty;
-                        type #log_alias = #log_ty;
-                    });
-                    union_variants.push(quote! { #variant_name(#payload_alias, #log_alias) });
-                    union_imports.extend(imports);
-                    union_warnings.extend(warnings);
-                } else {
-                    let variant_name = classifier_ident(self.ctx, subclass);
-                    let payload_name = containment_target_ident(self.ctx, subclass);
-                    let log_name = containment_target_log_ident(self.ctx, subclass);
-                    union_variants.push(quote! { #variant_name(#payload_name, #log_name) });
+                for idx in self.class.sub() {
+                    let subclass = &self.ctx.classes()[**idx];
+                    if is_uninhabited_polymorphic_class(self.ctx, subclass) {
+                        continue;
+                    }
+
+                    if let Some(TransparentVariantSpec {
+                        variant_name,
+                        payload_ty,
+                        log_ty,
+                        imports,
+                        warnings,
+                    }) = self.transparent_variant_spec(subclass)?
+                    {
+                        let payload_alias =
+                            rust_ident(format!("{}{}Value", family_name, variant_name));
+                        let log_alias = rust_ident(format!("{}{}Log", family_name, variant_name));
+                        union_aliases.push(quote! {
+                            type #payload_alias = #payload_ty;
+                            type #log_alias = #log_ty;
+                        });
+                        union_variants.push(quote! { #variant_name(#payload_alias, #log_alias) });
+                        union_imports.extend(imports);
+                        union_warnings.extend(warnings);
+                    } else {
+                        let variant_name = classifier_ident(self.ctx, subclass);
+                        let payload_name = containment_target_ident(self.ctx, subclass);
+                        let log_name = containment_target_log_ident(self.ctx, subclass);
+                        union_variants.push(quote! { #variant_name(#payload_name, #log_name) });
+                    }
                 }
-            }
 
-            let tokens = quote! {
-                #(#union_aliases)*
-                #path::union!(#family_name = #(#union_variants)|*);
+                let tokens = quote! {
+                    #(#union_aliases)*
+                    #path::union!(#family_name = #(#union_variants)|*);
+                };
+                (tokens, union_imports, union_warnings)
+            } else {
+                (quote! {}, Vec::new(), Vec::new())
             };
-            (tokens, union_imports, union_warnings)
-        } else {
-            (quote! {}, Vec::new(), Vec::new())
-        };
 
         let tokens = quote! {
             #path::record!(#name {
@@ -649,9 +723,11 @@ impl<'a> ClassGenerator<'a> {
             [
                 vec![
                     Import::Macros(Macros::Record),
+                    // TODO: Only include the union macro if there are subclasses
                     Import::Macros(Macros::Union),
                 ],
                 family_imports,
+                inherited_imports,
                 attribute_imports,
                 reference_imports,
                 operation_imports,

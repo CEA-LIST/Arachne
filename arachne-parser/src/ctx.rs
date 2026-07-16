@@ -876,6 +876,9 @@ impl<'a, 'b> ClassCtx<'a, 'b> {
     pub fn add_annotation(&mut self, annot: repr::Annot) {
         self.ctx[self.c_idx].add_annotation(annot)
     }
+    pub fn set_instance_class_name(&mut self, instance_class_name: impl Into<String>) {
+        self.ctx[self.c_idx].set_instance_class_name(instance_class_name)
+    }
     pub fn add_sup_class(&mut self, sup: idx::Class) {
         self.ctx.add_sup_class(sup, self.c_idx)
     }
@@ -894,5 +897,261 @@ impl<'a, 'b> ClassCtx<'a, 'b> {
     pub fn finalize(self) {
         // // not shrink-to-fit-ing since some stuff is postponed
         // self.ctx[self.c_idx].shrink_to_fit()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Ctx;
+
+    #[test]
+    fn parses_structural_feature_default_values() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            defaultValue="Untitled"
+            defaultValueLiteral="Untitled"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        let label = node
+            .structural()
+            .iter()
+            .find(|feature| feature.name == "label")
+            .expect("label feature should exist");
+
+        assert_eq!(label.default_value.as_deref(), Some("Untitled"));
+        assert_eq!(label.default_value_literal.as_deref(), Some("Untitled"));
+    }
+
+    #[test]
+    fn parses_reference_resolve_proxies() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eStructuralFeatures xsi:type="ecore:EReference"
+            name="target"
+            resolveProxies="false"
+            eType="#//Target"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Target"/>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        let target = node
+            .structural()
+            .iter()
+            .find(|feature| feature.name == "target")
+            .expect("target reference should exist");
+
+        assert_eq!(target.resolve_proxies, Some(false));
+    }
+
+    #[test]
+    fn parses_operation_annotations() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eOperations name="getSignals" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+                <details key="body" value="ArrayList&lt;SignalType> signals = new ArrayList&lt;SignalType>();&#xA;return signals;"/>
+            </eAnnotations>
+        </eOperations>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        let operation = node
+            .operations()
+            .iter()
+            .find(|operation| operation.name() == "getSignals")
+            .expect("operation should exist");
+        let annotation = operation
+            .annotations()
+            .iter()
+            .find(|annotation| annotation.source() == "http://www.eclipse.org/emf/2002/GenModel")
+            .expect("GenModel annotation should exist");
+
+        assert!(annotation
+            .details()
+            .get("body")
+            .is_some_and(|body| body.contains("ArrayList&lt;SignalType>")));
+    }
+
+    #[test]
+    fn parses_operation_and_parameter_typed_element_attributes() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eOperations name="collect"
+            ordered="false"
+            unique="false"
+            lowerBound="0"
+            upperBound="-1"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eParameters name="count"
+                ordered="true"
+                unique="false"
+                lowerBound="2"
+                upperBound="4"
+                eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        </eOperations>
+        <eOperations name="notify">
+            <eParameters name="value"/>
+        </eOperations>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+
+        let collect = node
+            .operations()
+            .iter()
+            .find(|operation| operation.name() == "collect")
+            .expect("collect operation should exist");
+        assert_eq!(collect.bounds().lbound, 0);
+        assert_eq!(collect.bounds().ubound, None);
+        assert_eq!(collect.ordered(), Some(false));
+        assert_eq!(collect.unique(), Some(false));
+        assert!(!collect.is_ordered());
+        assert!(!collect.is_unique());
+        assert_eq!(
+            ctx.class(collect.typ().expect("collect should have a type"))
+                .name(),
+            "EString"
+        );
+
+        let count = collect
+            .parameters()
+            .iter()
+            .find(|parameter| parameter.name() == "count")
+            .expect("count parameter should exist");
+        assert_eq!(count.bounds().lbound, 2);
+        assert_eq!(count.bounds().ubound, Some(4));
+        assert_eq!(count.ordered(), Some(true));
+        assert_eq!(count.unique(), Some(false));
+        assert!(count.is_ordered());
+        assert!(!count.is_unique());
+        assert_eq!(
+            ctx.class(count.typ().expect("count should have a type"))
+                .name(),
+            "EInt"
+        );
+
+        let notify = node
+            .operations()
+            .iter()
+            .find(|operation| operation.name() == "notify")
+            .expect("notify operation should exist");
+        assert_eq!(notify.bounds().lbound, 0);
+        assert_eq!(notify.bounds().ubound, Some(1));
+        assert_eq!(notify.typ(), None);
+        assert_eq!(notify.ordered(), None);
+        assert_eq!(notify.unique(), None);
+        assert!(notify.is_ordered());
+        assert!(notify.is_unique());
+
+        let value = notify
+            .parameters()
+            .iter()
+            .find(|parameter| parameter.name() == "value")
+            .expect("value parameter should exist");
+        assert_eq!(value.bounds().lbound, 0);
+        assert_eq!(value.bounds().ubound, Some(1));
+        assert_eq!(value.typ(), None);
+        assert_eq!(value.ordered(), None);
+        assert_eq!(value.unique(), None);
+        assert!(value.is_ordered());
+        assert!(value.is_unique());
+    }
+
+    #[test]
+    fn parses_classifier_instance_class_name() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EDataType"
+        name="Identifier"
+        instanceClassName="java.lang.String"
+        instanceTypeName="java.lang.CharSequence"/>
+    <eClassifiers xsi:type="ecore:EClass"
+        name="Node"
+        instanceClassName="org.example.Node"/>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let identifier = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Identifier")
+            .expect("Identifier classifier should exist");
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node classifier should exist");
+
+        assert_eq!(identifier.instance_class_name(), Some("java.lang.String"));
+        assert_eq!(identifier.inst_name(), Some("java.lang.CharSequence"));
+        assert_eq!(node.instance_class_name(), Some("org.example.Node"));
+        assert_eq!(node.inst_name(), None);
     }
 }

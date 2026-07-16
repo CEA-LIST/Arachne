@@ -9,14 +9,31 @@ use proc_macro2::Span;
 use syn::Ident;
 
 const RUST_KEYWORDS: &[&str] = &[
-    "as", "async", "await", "become", "box", "break", "const", "continue", "crate", "do", "dyn",
-    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
-    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
-    "self", "Self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
-    "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+    "as", "async", "await", "abstract", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "Self", "static", "struct", "super", "trait", "true", "try", "type",
+    "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
-const MACRO_GENERATED_TYPE_SUFFIXES: &[&str] =
-    &["Value", "Log", "Child", "ChildValue", "Container"];
+const MACRO_GENERATED_TYPE_SUFFIXES: &[&str] = &[
+    "Value",
+    "Log",
+    "Rejection",
+    "Variant",
+    "Child",
+    "ChildValue",
+    "Container",
+    "ChildValueRank",
+    "Kind",
+    "KindVariant",
+    "KindChild",
+    "KindChildValue",
+    "KindValue",
+    "KindContainer",
+    "KindLog",
+    "KindRejection",
+    "KindChildValueRank",
+];
 const CLASH_RESOLUTION_SUFFIXES: &str = "Model";
 
 pub fn rust_ident(name: impl AsRef<str>) -> Ident {

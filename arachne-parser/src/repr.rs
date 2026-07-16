@@ -245,18 +245,34 @@ impl ELit {
 pub struct Param {
     name: String,
     bounds: Bounds,
-    typ: idx::Class,
+    typ: Option<idx::Class>,
+    ordered: Option<bool>,
+    unique: Option<bool>,
 }
 
 pub type Params = Vec<Param>;
 
 impl Param {
-    pub fn new(name: impl Into<String>, bounds: impl Into<Bounds>, typ: idx::Class) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        bounds: impl Into<Bounds>,
+        typ: impl Into<Option<idx::Class>>,
+    ) -> Self {
         Self {
             name: name.into(),
             bounds: bounds.into(),
-            typ,
+            typ: typ.into(),
+            ordered: None,
+            unique: None,
         }
+    }
+
+    pub fn set_ordered(&mut self, ordered: bool) {
+        self.ordered = Some(ordered);
+    }
+
+    pub fn set_unique(&mut self, unique: bool) {
+        self.unique = Some(unique);
     }
 
     pub fn name(&self) -> &str {
@@ -265,8 +281,20 @@ impl Param {
     pub fn bounds(&self) -> &Bounds {
         &self.bounds
     }
-    pub fn typ(&self) -> idx::Class {
+    pub fn typ(&self) -> Option<idx::Class> {
         self.typ
+    }
+    pub fn ordered(&self) -> Option<bool> {
+        self.ordered
+    }
+    pub fn unique(&self) -> Option<bool> {
+        self.unique
+    }
+    pub fn is_ordered(&self) -> bool {
+        self.ordered.unwrap_or(true)
+    }
+    pub fn is_unique(&self) -> bool {
+        self.unique.unwrap_or(true)
     }
 }
 
@@ -275,7 +303,10 @@ pub struct Operation {
     name: String,
     typ: Option<idx::Class>,
     bounds: Bounds,
+    ordered: Option<bool>,
+    unique: Option<bool>,
     parameters: Params,
+    annotations: Annots,
 }
 
 pub type Operations = Vec<Operation>;
@@ -291,7 +322,10 @@ impl Operation {
             name: name.into(),
             typ,
             bounds,
+            ordered: None,
+            unique: None,
             parameters: Params::with_capacity(param_capa),
+            annotations: Annots::with_capacity(2),
         }
     }
     pub fn new(name: impl Into<String>, typ: Option<idx::Class>, bounds: Bounds) -> Self {
@@ -299,6 +333,15 @@ impl Operation {
     }
     pub fn add_parameter(&mut self, param: Param) {
         self.parameters.push(param)
+    }
+    pub fn add_annotation(&mut self, annot: Annot) {
+        self.annotations.push(annot)
+    }
+    pub fn set_ordered(&mut self, ordered: bool) {
+        self.ordered = Some(ordered);
+    }
+    pub fn set_unique(&mut self, unique: bool) {
+        self.unique = Some(unique);
     }
 
     pub fn name(&self) -> &str {
@@ -310,8 +353,23 @@ impl Operation {
     pub fn bounds(&self) -> &Bounds {
         &self.bounds
     }
+    pub fn ordered(&self) -> Option<bool> {
+        self.ordered
+    }
+    pub fn unique(&self) -> Option<bool> {
+        self.unique
+    }
+    pub fn is_ordered(&self) -> bool {
+        self.ordered.unwrap_or(true)
+    }
+    pub fn is_unique(&self) -> bool {
+        self.unique.unwrap_or(true)
+    }
     pub fn parameters(&self) -> &Params {
         &self.parameters
+    }
+    pub fn annotations(&self) -> &Annots {
+        &self.annotations
     }
 }
 
@@ -324,6 +382,7 @@ pub struct Class {
     typ: String,
     name: String,
     inst_name: Option<String>,
+    instance_class_name: Option<String>,
     literals: Vec<ELit>,
     annotations: Annots,
     sup: BTreeSet<idx::Class>,
@@ -365,6 +424,7 @@ impl Class {
             typ: typ.into(),
             name: name.into(),
             inst_name: inst_name.map(Into::into),
+            instance_class_name: None,
             concrete: !is_abstract.unwrap_or(false),
             is_interface: is_interface.unwrap_or(false),
             literals: ELits::with_capacity(7),
@@ -384,6 +444,7 @@ impl Class {
             typ: _,
             name: _,
             inst_name: _,
+            instance_class_name: _,
             concrete: _,
             is_interface: _,
             literals,
@@ -418,6 +479,13 @@ impl Class {
     #[inline]
     pub fn inst_name(&self) -> Option<&str> {
         self.inst_name.as_deref()
+    }
+    #[inline]
+    pub fn instance_class_name(&self) -> Option<&str> {
+        self.instance_class_name.as_deref()
+    }
+    pub fn set_instance_class_name(&mut self, instance_class_name: impl Into<String>) {
+        self.instance_class_name = Some(instance_class_name.into())
     }
     #[inline]
     pub fn is_enum(&self) -> bool {
