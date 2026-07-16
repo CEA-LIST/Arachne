@@ -1,9 +1,6 @@
 .git
+.DS_Store
 target
-**/target
-**/.DS_Store
-**/__pycache__
-modelset
-modelset_coverage*.csv
-modelset_coverage_report.txt
-report_*.txt
+generated
+__pycache__
+*.py[cod]
