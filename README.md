@@ -99,16 +99,51 @@ Canonical source repositories:
 
 ## Running the generator
 
-From the repository root, build and run the CLI with Cargo. The `generate` command accepts an input `.ecore` file, an output directory, and
-an optional Cargo project name:
+### Native execution
+
+The `generate` command accepts an input `.ecore` file, an output directory, and
+an optional Cargo project name. From a native checkout, invoke it through
+Cargo:
 
 ```sh
-arachne generate INPUT.ecore --output OUTPUT_DIRECTORY [--project-name NAME]
+cargo run --locked --release -p arachne-cli -- generate INPUT.ecore --output OUTPUT_DIRECTORY [--project-name NAME]
 ```
 
 The generated directory is a Rust project containing `Cargo.toml` and the
-generated modules under `src/`. Inside the Dev Container, the `arachne` binary
-is already installed, so `arachne generate ...` can be used directly.
+generated modules under `src/`. The shorter
+`arachne generate INPUT.ecore --output OUTPUT_DIRECTORY` form is available
+inside the Dev Container, where the `arachne` binary is installed on `PATH`.
+
+> Note: The default Rust toolchain on Windows requires the Visual Studio C++ Build Tools. Use the Dev
+> Container to avoid host-specific compiler setup.
+
+### Dev Container (Windows, Linux, and macOS)
+
+The repository includes a Linux Dev Container backed by Docker. Install and
+start Docker. On Windows, configure Docker Desktop to use its Linux-container (WSL 2) backend.
+Then use VS Code with the Dev Containers extension:
+
+1. Open the Arachne repository folder in VS Code.
+2. Run **Dev Containers: Reopen in Container** from the Command Palette.
+3. Open a terminal in the container and run:
+
+```sh
+arachne generate examples/class_hierarchy.ecore --output generated/class-hierarchy --project-name class-hierarchy
+cargo check --manifest-path generated/class-hierarchy/Cargo.toml
+```
+
+The repository is bind-mounted into the container, so the generated project is
+also available on the host under `generated/class-hierarchy`. The initial image
+build and compilation download Rust crates and therefore require internet
+access.
+
+The same workflow can be run without VS Code when the Dev Container CLI is
+installed:
+
+```sh
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . arachne generate examples/class_hierarchy.ecore --output generated/class-hierarchy --project-name class-hierarchy
+```
 
 ### Generating the examples
 
@@ -135,7 +170,7 @@ Download and extract
 then run a small sample:
 
 ```sh
-python3 modelset_coverage.py PATH_TO_MODELSET --limit 5 --csv modelset-results/modelset_coverage_smoke.csv
+python3 modelset_coverage.py PATH_TO_MODELSET --limit 5 --csv modelset-results/modelset_coverage_limit_5.csv
 ```
 
 Run the complete dataset by omitting `--limit`. Be aware that the complete run can take a long time and requires a some gigabytes of disk space for the generated projects.

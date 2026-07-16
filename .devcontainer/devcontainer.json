@@ -4,8 +4,6 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
-  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspaces/artifact,type=bind",
-  "workspaceFolder": "/workspaces/artifact/arachne",
   "customizations": {
     "vscode": {
       "extensions": [
