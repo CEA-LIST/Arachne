@@ -159,6 +159,13 @@ fn main() {{
     )
 }
 
+/// Rust toolchain the generated `Dockerfile` pins.
+///
+/// A concrete stable version, not a floating tag: the generated image must
+/// rebuild identically in CI. The generated crate builds on stable since the
+/// `let_chains` feature it used stabilised in Rust 1.88.
+const RUST_IMAGE: &str = "rust:1.97-slim";
+
 /// Generates a multi-stage Dockerfile that builds the `network_node` example
 /// into a minimal runtime image.
 fn render_dockerfile(ctx: &DeploymentCtx) -> String {
@@ -177,9 +184,7 @@ fn render_dockerfile(ctx: &DeploymentCtx) -> String {
 #   docker run -e REPLICA_ID=a -e LISTEN_PORT=9001 -e HTTP_PORT=8081 \
 #       -p 9001:9001 -p 8081:8081 {project_name}
 
-FROM rust:slim AS builder
-
-RUN rustup default nightly
+FROM {RUST_IMAGE} AS builder
 
 WORKDIR /app
 
@@ -192,8 +197,10 @@ RUN cargo build --release --example network_node -p {project_name}
 # --- Runtime stage ---
 FROM debian:bookworm-slim
 
+# `curl` is required by HEALTHCHECK below
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -206,6 +213,10 @@ ENV HTTP_PORT=8081
 ENV PEERS=
 
 EXPOSE 9001 8081
+
+# Lets orchestrators and test harnesses wait on readiness instead of sleeping
+HEALTHCHECK --interval=1s --timeout=2s --start-period=2s --retries=30 \
+    CMD curl -fsS "http://localhost:$HTTP_PORT/api/health" || exit 1
 
 CMD ["/app/network_node"]
 "#
