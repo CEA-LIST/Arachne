@@ -7,6 +7,20 @@ use std::path::Path;
 
 use heck::ToUpperCamelCase;
 
+/// Where the generated project and the Moirai workspace sit inside the Docker
+/// build context.
+///
+/// The generated manifest reaches Moirai through a relative `path` dependency,
+/// so the image can only build if the context reproduces the same arrangement.
+/// Both fields are paths relative to the context root.
+#[derive(Debug, Clone)]
+pub struct BuildContextLayout {
+    /// Generated project, e.g. `"arachne/generated/json_crdt"`.
+    pub project_dir: String,
+    /// Moirai workspace, e.g. `"moirai"`.
+    pub moirai_dir: String,
+}
+
 /// Parameters derived from the project/package names that the two renderers
 /// need.
 pub struct DeploymentCtx {
@@ -18,10 +32,18 @@ pub struct DeploymentCtx {
     pub package_name: String,
     /// The generated Log type (e.g. `"JsonLog"`).
     pub log_type: String,
+    /// Layout the `Dockerfile` expects of its build context, or `None` when
+    /// the manifest carries absolute `path` dependencies — those can never
+    /// resolve inside an image, so no concrete layout can be described.
+    pub build_context: Option<BuildContextLayout>,
 }
 
 impl DeploymentCtx {
-    pub fn new(project_name: &str, package_name: &str) -> Self {
+    pub fn new(
+        project_name: &str,
+        package_name: &str,
+        build_context: Option<BuildContextLayout>,
+    ) -> Self {
         let crate_import = project_name.replace('-', "_");
         let log_type = format!("{}Log", package_name.to_upper_camel_case());
         Self {
@@ -29,6 +51,7 @@ impl DeploymentCtx {
             crate_import,
             package_name: package_name.to_string(),
             log_type,
+            build_context,
         }
     }
 }
@@ -171,15 +194,40 @@ const RUST_IMAGE: &str = "rust:1.97-slim";
 fn render_dockerfile(ctx: &DeploymentCtx) -> String {
     let project_name = &ctx.project_name;
 
+    // Without a known layout the manifest holds absolute `path` dependencies,
+    // which cannot resolve inside an image; say so instead of emitting a
+    // recipe that is guaranteed to fail.
+    let (layout_doc, project_dir) = match &ctx.build_context {
+        Some(layout) => (
+            format!(
+                "# The context must reproduce the layout the Cargo.toml path dependencies
+# encode, i.e. it must contain both of:
+#
+#   <context>/{:<width$}  <- this project
+#   <context>/{:<width$}  <- the moirai workspace",
+                layout.project_dir,
+                layout.moirai_dir,
+                width = layout.project_dir.len().max(layout.moirai_dir.len()),
+            ),
+            layout.project_dir.clone(),
+        ),
+        None => (
+            "# WARNING: this project was generated with absolute Moirai path dependencies,
+# which cannot resolve inside an image. Regenerate with
+# `--moirai-path-style relative` before building."
+                .to_string(),
+            ".".to_string(),
+        ),
+    };
+
     format!(
         r#"# Dockerfile for {project_name} network node
 #
-# Build context must be a directory that contains this project AND the moirai
-# workspace (paths in Cargo.toml must resolve).
+{layout_doc}
 #
-# Quick start (from the workspace root that contains both moirai and this project):
+# Quick start:
 #
-#   docker build -f <path-to-this>/Dockerfile -t {project_name} .
+#   docker build -f <path-to-this>/Dockerfile -t {project_name} <context>
 #
 #   docker run -e REPLICA_ID=a -e LISTEN_PORT=9001 -e HTTP_PORT=8081 \
 #       -p 9001:9001 -p 8081:8081 {project_name}
@@ -188,11 +236,12 @@ FROM {RUST_IMAGE} AS builder
 
 WORKDIR /app
 
-# Copy the entire build context (workspace + generated project)
+# Copy the entire build context (moirai workspace + generated project)
 COPY . .
 
 # Build the network_node example in release mode
-RUN cargo build --release --example network_node -p {project_name}
+WORKDIR /app/{project_dir}
+RUN cargo build --release --example network_node
 
 # --- Runtime stage ---
 FROM debian:bookworm-slim
@@ -205,7 +254,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/examples/network_node /app/network_node
+COPY --from=builder /app/{project_dir}/target/release/examples/network_node /app/network_node
 
 ENV REPLICA_ID=default
 ENV LISTEN_PORT=9001

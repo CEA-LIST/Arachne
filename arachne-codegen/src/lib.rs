@@ -8,7 +8,7 @@ mod utils;
 
 use std::path::PathBuf;
 
-pub use config::Config;
+pub use config::{Config, MoiraiPathStyle};
 use ecore_rs::repr::{Class, Pack, idx, structural};
 pub use error::{ArachneError, Result};
 use heck::ToSnakeCase;

@@ -20,3 +20,4 @@ xml-builder = "0.5.4"
 moirai-protocol = { version = "*", path = "../../moirai/moirai-protocol" }
 moirai-crdt = { version = "*", path = "../../moirai/moirai-crdt" }
 moirai-macros = { version = "*", path = "../../moirai/moirai-macros" }
+pathdiff = "0.2"

@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf, process::ExitCode, time::Instant};
 
 use anyhow::{Result, anyhow};
-use arachne_codegen::{Config, generate_with_report};
+use arachne_codegen::{Config, MoiraiPathStyle, generate_with_report};
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use ecore_rs::ctx::Ctx;
@@ -52,6 +52,25 @@ enum OutputFormat {
     Pretty,
 }
 
+/// CLI mirror of [`MoiraiPathStyle`], so `clap` stays out of `arachne-codegen`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum MoiraiPathStyleArg {
+    /// Relative to the generated project — portable, keep the workspaces
+    /// in the same relative arrangement
+    Relative,
+    /// Absolute — tied to the machine that ran the generator
+    Absolute,
+}
+
+impl From<MoiraiPathStyleArg> for MoiraiPathStyle {
+    fn from(value: MoiraiPathStyleArg) -> Self {
+        match value {
+            MoiraiPathStyleArg::Relative => Self::Relative,
+            MoiraiPathStyleArg::Absolute => Self::Absolute,
+        }
+    }
+}
+
 #[derive(Debug, clap::Args)]
 struct GenerateArgs {
     /// Input Ecore metamodel path
@@ -69,10 +88,19 @@ struct GenerateArgs {
     #[arg(
         short = 'm',
         long = "moirai-root",
+        alias = "moirai-path",
         default_value = "../moirai",
         env = "ATRAKTOS_MOIRAI_ROOT"
     )]
     moirai_root: PathBuf,
+
+    /// How Moirai `path` dependencies are written into the generated Cargo.toml
+    #[arg(
+        long = "moirai-path-style",
+        value_name = "STYLE",
+        default_value = "relative"
+    )]
+    moirai_path_style: MoiraiPathStyleArg,
 
     /// Increase log verbosity (`-v`, `-vv`)
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
@@ -132,7 +160,8 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
 
     let mut config = Config::new(args.input)
         .with_output_dir(args.output_dir)
-        .with_moirai_root(args.moirai_root);
+        .with_moirai_root(args.moirai_root)
+        .with_moirai_path_style(args.moirai_path_style.into());
 
     if let Some(project_name) = args.project_name {
         config = config.with_project_name(project_name);
