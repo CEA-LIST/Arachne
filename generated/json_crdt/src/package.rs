@@ -26,6 +26,7 @@ pub struct JsonValue {
     pub json: __package::JsonKindValue,
 }
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JsonLog {
     json_log: __package::JsonKindLog,
 }

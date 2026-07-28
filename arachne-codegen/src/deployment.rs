@@ -161,6 +161,7 @@ fn main() {{
     );
 
     node.enable_state_query();
+    node.enable_state_transfer();
 
     if let Some(port) = http_port {{
         node.start_http(port);
