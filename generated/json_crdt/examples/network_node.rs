@@ -43,6 +43,15 @@
 //! - `ADVERTISE_ADDR` — `host:port` peers dial, default `$HOSTNAME:$LISTEN_PORT`
 //! - `RECONCILE_SECS` — re-register interval, default `5`
 //!
+//! # Monitoring
+//!
+//! Set `DASHBOARD_URL` to have the replica post what it delivers, and what the
+//! CRDT did with it, to a `moirai-dashboard`. Outbound only, so it works from
+//! behind NAT; unset means no thread and no request.
+//!
+//! - `DASHBOARD_URL`         — unset means no reporting at all
+//! - `DASHBOARD_INTERVAL_MS` — gap between reports, default `400`
+//!
 //! # HTTP API
 //!
 //! - `POST /api/op`        — submit a JSON-serialised operation
@@ -62,6 +71,7 @@ use std::time::Duration;
 
 use json_crdt::package::JsonLog;
 use moirai_network::HashMap;
+use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
 use moirai_network::generic::TcpNode;
 
@@ -138,6 +148,12 @@ fn main() {
                 ),
             });
         }
+    }
+
+    // Monitoring is opt-in for the same reason and on the same terms: no
+    // `DASHBOARD_URL`, no thread, no outbound request, no delivery trace.
+    if let Some(config) = DashboardConfig::from_env(&replica_id) {
+        node.enable_dashboard(config);
     }
 
     // Give peers time to start, then connect
