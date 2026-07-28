@@ -37,16 +37,33 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
-    # TODO(ci): flip to blocking once the formatting backlog is cleared.
-    # Baseline on 1-newtwork: 50 files are not rustfmt-clean.
-    continue-on-error: true
+    # Blocking: this repo's own sources are rustfmt-clean and stay that way.
+    #
+    # This job used to skip the Moirai checkout, on the assumption that
+    # formatting needs only this repo. It does not. `arachne-codegen` depends
+    # on Moirai through relative paths, so `cargo metadata` — which cargo-fmt
+    # runs first — cannot resolve the workspace without the sibling present,
+    # and the job failed before rustfmt ever started.
+    #
+    # The checkout is therefore required. `--all` is not: it would follow
+    # those path dependencies and format Moirai's sources too, reporting
+    # another repository's backlog as a failure here. Scope to this
+    # workspace's own packages instead.
     steps:
-      # Formatting needs only this repo — no Moirai checkout required.
       - uses: actions/checkout@v4
+        with:
+          path: arachne
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MOIRAI_REPO }}
+          ref: ${{ env.MOIRAI_REF }}
+          token: ${{ secrets.MOIRAI_TOKEN }}
+          path: moirai
       - name: Install rustfmt
         run: rustup component add rustfmt
       - name: cargo fmt --check
-        run: cargo fmt --all --check
+        working-directory: arachne
+        run: cargo fmt -p arachne-codegen -p arachne-cli -p ecore_rs --check
 
   clippy:
     name: Lint
