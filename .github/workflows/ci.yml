@@ -30,8 +30,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  MOIRAI_REPO: Marcosddf/Moirai-mddf
-  MOIRAI_REF: 26-network
+  MOIRAI_REPO: ${{ vars.MOIRAI_REPO || 'Marcosddf/Moirai-mddf' }}
+  MOIRAI_REF: ${{ vars.MOIRAI_REF || '26-network' }}
 
 jobs:
   fmt:
