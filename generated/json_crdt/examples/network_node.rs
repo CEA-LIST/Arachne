@@ -24,12 +24,33 @@
 //!     -p 9001:9001 -p 8081:8081 json_crdt
 //! ```
 //!
+//! # Peer discovery
+//!
+//! Set `BOOTNODE_URL` to have the replica register with a bootnode session
+//! directory every `RECONCILE_SECS` and dial whatever the roster returns. When
+//! it is unset the replica behaves exactly as it always has: `PEERS` only,
+//! dialled once. `PEERS` keeps working when both are set, as a static override.
+//!
+//! ```bash
+//! # Three replicas that were never told about each other
+//! BOOTNODE_URL=http://bootnode:7000 SESSION_ID=demo \
+//!     REPLICA_ID=a LISTEN_PORT=9001 HTTP_PORT=8081 ADVERTISE_ADDR=node-a:9001 \
+//!     cargo run --example network_node
+//! ```
+//!
+//! - `BOOTNODE_URL`   — unset means no discovery at all
+//! - `SESSION_ID`     — session to join, default `default`
+//! - `ADVERTISE_ADDR` — `host:port` peers dial, default `$HOSTNAME:$LISTEN_PORT`
+//! - `RECONCILE_SECS` — re-register interval, default `5`
+//!
 //! # HTTP API
 //!
 //! - `POST /api/op`        — submit a JSON-serialised operation
 //! - `GET  /api/state`     — query the current CRDT state
+//! - `GET  /api/metrics`   — causal-stability and log-size counters
 //! - `GET  /api/health`    — health check
 //! - `GET  /api/peers`     — list connected peers
+//! - `POST /api/leave`     — deregister from the bootnode session
 //! - `POST /api/pause/<id>`  — simulate disconnection from a peer
 //! - `POST /api/resume/<id>` — resume and auto-sync with a peer
 //! - `POST /api/pause-all`   — pause all peers
@@ -39,9 +60,27 @@ use std::env;
 use std::thread;
 use std::time::Duration;
 
-use moirai_network::generic::TcpNode;
-use moirai_network::HashMap;
 use json_crdt::package::JsonLog;
+use moirai_network::HashMap;
+use moirai_network::discovery::DiscoveryConfig;
+use moirai_network::generic::TcpNode;
+
+/// How other replicas reach this one's replication listener.
+///
+/// Not the same as what the process binds: in a container the bind is
+/// `0.0.0.0:9001` while the reachable address is the container's name on the
+/// user-defined network. Docker sets `HOSTNAME` to the container id, and
+/// Compose registers that as a DNS alias, so it is the right default; override
+/// with `ADVERTISE_ADDR` when a stable service name is wanted instead.
+fn advertise_addr(listen_port: u16) -> String {
+    env::var("ADVERTISE_ADDR").unwrap_or_else(|_| {
+        let host = env::var("HOSTNAME")
+            .ok()
+            .filter(|h| !h.is_empty())
+            .unwrap_or_else(|| "127.0.0.1".to_string());
+        format!("{host}:{listen_port}")
+    })
+}
 
 fn main() {
     let replica_id = env::var("REPLICA_ID").unwrap_or_else(|_| "replica-a".to_string());
@@ -78,6 +117,26 @@ fn main() {
 
     if let Some(port) = http_port {
         node.start_http(port);
+    }
+
+    // Discovery is opt-in. Unset `BOOTNODE_URL` and everything below behaves
+    // exactly as it did before phase 1, which is what keeps the existing e2e
+    // suite an honest guard rail.
+    if let Ok(bootnode_url) = env::var("BOOTNODE_URL") {
+        if !bootnode_url.is_empty() {
+            node.enable_discovery(DiscoveryConfig {
+                bootnode_url,
+                session: env::var("SESSION_ID").unwrap_or_else(|_| "default".to_string()),
+                replica_id: replica_id.clone(),
+                advertise_addr: advertise_addr(listen_port),
+                interval: Duration::from_secs(
+                    env::var("RECONCILE_SECS")
+                        .ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(5),
+                ),
+            });
+        }
     }
 
     // Give peers time to start, then connect
