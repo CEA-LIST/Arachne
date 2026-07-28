@@ -50,7 +50,7 @@
 //! behind NAT; unset means no thread and no request.
 //!
 //! - `DASHBOARD_URL`         — unset means no reporting at all
-//! - `DASHBOARD_INTERVAL_MS` — gap between reports, default `400`
+//! - `DASHBOARD_INTERVAL_MS` — gap between state snapshots, default `1000`
 //!
 //! # HTTP API
 //!
