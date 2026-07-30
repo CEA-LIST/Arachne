@@ -117,6 +117,13 @@ fn render_network_node(ctx: &DeploymentCtx) -> String {
 //! it is unset the replica behaves exactly as it always has: `PEERS` only,
 //! dialled once. `PEERS` keeps working when both are set, as a static override.
 //!
+//! ```bash
+//! # Three replicas that were never told about each other
+//! BOOTNODE_URL=http://bootnode:7000 SESSION_ID=demo \
+//!     REPLICA_ID=a LISTEN_PORT=9001 HTTP_PORT=8081 ADVERTISE_ADDR=node-a:9001 \
+//!     cargo run --example network_node
+//! ```
+//!
 //! - `BOOTNODE_URL`   — unset means no discovery at all
 //! - `SESSION_ID`     — session to join, default `default`
 //! - `ADVERTISE_ADDR` — `host:port` peers dial, default `$HOSTNAME:$LISTEN_PORT`
@@ -138,26 +145,29 @@ fn render_network_node(ctx: &DeploymentCtx) -> String {
 //! - `GET  /api/metrics`   — causal-stability and log-size counters
 //! - `GET  /api/health`    — health check
 //! - `GET  /api/peers`     — list connected peers
+//! - `POST /api/leave`     — deregister from the bootnode session
 //! - `POST /api/pause/<id>`  — simulate disconnection from a peer
 //! - `POST /api/resume/<id>` — resume and auto-sync with a peer
 //! - `POST /api/pause-all`   — pause all peers
 //! - `POST /api/resume-all`  — resume all peers
-//! - `POST /api/leave`       — deregister from the bootnode session
 
 use std::env;
 use std::thread;
 use std::time::Duration;
 
+use {crate_import}::package::{log_type};
+use moirai_network::HashMap;
 use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
-use moirai_network::generic::TcpNode;
-use moirai_network::HashMap;
-use {crate_import}::package::{log_type};
+use moirai_network::generic::Node;
 
-/// `host:port` at which other replicas can reach this one.
+/// How other replicas reach this one's replication listener.
 ///
-/// Not necessarily what the process bound: in a container the bind is
-/// `0.0.0.0:9001` and the reachable address is `node-a:9001`.
+/// Not the same as what the process binds: in a container the bind is
+/// `0.0.0.0:9001` while the reachable address is the container's name on the
+/// user-defined network. Docker sets `HOSTNAME` to the container id, and
+/// Compose registers that as a DNS alias, so it is the right default; override
+/// with `ADVERTISE_ADDR` when a stable service name is wanted instead.
 fn advertise_addr(listen_port: u16) -> String {{
     env::var("ADVERTISE_ADDR").unwrap_or_else(|_| {{
         let host = env::var("HOSTNAME")
@@ -192,7 +202,7 @@ fn main() {{
 
     let member_refs: Vec<&str> = all_members.iter().map(|s| s.as_str()).collect();
 
-    let mut node = TcpNode::<{log_type}>::new(
+    let mut node = Node::<{log_type}>::new(
         replica_id.clone(),
         &member_refs,
         listen_port,

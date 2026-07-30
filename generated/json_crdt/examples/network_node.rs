@@ -73,7 +73,7 @@ use json_crdt::package::JsonLog;
 use moirai_network::HashMap;
 use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
-use moirai_network::generic::TcpNode;
+use moirai_network::generic::Node;
 
 /// How other replicas reach this one's replication listener.
 ///
@@ -116,7 +116,7 @@ fn main() {
 
     let member_refs: Vec<&str> = all_members.iter().map(|s| s.as_str()).collect();
 
-    let mut node = TcpNode::<JsonLog>::new(
+    let mut node = Node::<JsonLog>::new(
         replica_id.clone(),
         &member_refs,
         listen_port,
