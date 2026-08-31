@@ -1,0 +1,126 @@
+{
+  "classes": {
+    "Array": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "items",
+          "ordered": true,
+          "required": false,
+          "target": "Json"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "Json"
+      ]
+    },
+    "Boolean": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "bool",
+          "many": false,
+          "name": "value",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Json"
+      ]
+    },
+    "Entry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "key",
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "many": false,
+          "name": "value",
+          "ordered": true,
+          "required": true,
+          "target": "Json"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Json": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Number": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "float",
+          "many": false,
+          "name": "value",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Json"
+      ]
+    },
+    "Object": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "entry",
+          "ordered": true,
+          "required": false,
+          "target": "Entry"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "Json"
+      ]
+    },
+    "String": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "value",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Json"
+      ]
+    }
+  },
+  "enums": {},
+  "formatVersion": 1,
+  "nsURI": "http://www.example.org/json",
+  "package": "json",
+  "rootClasses": [
+    "Json"
+  ]
+}

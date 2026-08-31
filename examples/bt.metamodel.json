@@ -1,0 +1,316 @@
+{
+  "classes": {
+    "Action": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "ExecutionNode"
+      ]
+    },
+    "BehaviorTree": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "ID",
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "many": false,
+          "name": "child",
+          "ordered": true,
+          "required": true,
+          "target": "TreeNode"
+        },
+        {
+          "many": false,
+          "name": "blackboard",
+          "ordered": true,
+          "required": true,
+          "target": "Blackboard"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Blackboard": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "entries",
+          "ordered": true,
+          "required": false,
+          "target": "BlackboardEntry"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "BlackboardEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "key",
+          "required": true
+        },
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "value",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "CloseDoor": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Action"
+      ]
+    },
+    "Condition": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "ExecutionNode"
+      ]
+    },
+    "ControlNode": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "children",
+          "ordered": true,
+          "required": false,
+          "target": "TreeNode"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TreeNode"
+      ]
+    },
+    "DataFlowPort": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "many": false,
+          "name": "entry",
+          "required": false,
+          "target": "BlackboardEntry"
+        }
+      ],
+      "superTypes": []
+    },
+    "Decorator": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [
+        {
+          "many": false,
+          "name": "child",
+          "ordered": true,
+          "required": true,
+          "target": "TreeNode"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TreeNode"
+      ]
+    },
+    "EnterRoom": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Action"
+      ]
+    },
+    "ExecutionNode": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "outflowports",
+          "ordered": true,
+          "required": false,
+          "target": "OutFlowPort"
+        },
+        {
+          "many": true,
+          "name": "inflowports",
+          "ordered": true,
+          "required": false,
+          "target": "InFlowPort"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TreeNode"
+      ]
+    },
+    "Fallback": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "ControlNode"
+      ]
+    },
+    "InFlowPort": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "DataFlowPort"
+      ]
+    },
+    "Inverter": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Decorator"
+      ]
+    },
+    "IsDoorOpen": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Condition"
+      ]
+    },
+    "OpenDoor": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Action"
+      ]
+    },
+    "OutFlowPort": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "DataFlowPort"
+      ]
+    },
+    "Root": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "behaviortrees",
+          "ordered": true,
+          "required": false,
+          "target": "BehaviorTree"
+        },
+        {
+          "many": false,
+          "name": "main",
+          "ordered": true,
+          "required": true,
+          "target": "BehaviorTree"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Sequence": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "ControlNode"
+      ]
+    },
+    "SubTree": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": false,
+          "name": "tree",
+          "ordered": true,
+          "required": true,
+          "target": "BehaviorTree"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TreeNode"
+      ]
+    },
+    "TreeNode": {
+      "abstract": true,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "ID",
+          "required": true
+        },
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "name",
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {
+    "Status": [
+      "RUNNING",
+      "SUCCESS",
+      "FAILURE"
+    ]
+  },
+  "formatVersion": 1,
+  "nsURI": "http://www.example.org/behaviortree",
+  "package": "behaviortree",
+  "rootClasses": [
+    "Root"
+  ]
+}
