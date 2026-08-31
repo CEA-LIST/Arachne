@@ -103,7 +103,6 @@ export function TreeRow({
       aria-expanded={row.expandable ? row.expanded : undefined}
       tabIndex={focused ? 0 : -1}
       className={classes.join(' ')}
-      style={{ paddingLeft: `${(row.level - 1) * 14 + 4}px` }}
       onClick={() => onSelect(row)}
       onDoubleClick={() => {
         if (row.expandable) onToggle(row);
@@ -145,7 +144,11 @@ export function TreeRow({
 
       <span className="me-tree__spacer" />
 
-      <span className="me-tree__actions me-noprint">
+      <span
+        className={
+          menuOpen ? 'me-tree__actions me-tree__actions--open me-noprint' : 'me-tree__actions me-noprint'
+        }
+      >
         {addOptions.length > 0 && (
           <span className="me-anchor">
             <button

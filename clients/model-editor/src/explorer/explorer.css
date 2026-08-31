@@ -12,6 +12,9 @@
 }
 
 .me-tree {
+  /* Deep trees scroll horizontally rather than squeezing labels to ellipses:
+     indentation is the guide spans' job, and nothing else's. */
+  min-width: max-content;
   padding: var(--sp-2) 0 var(--sp-5);
 }
 
@@ -23,7 +26,10 @@
   align-items: center;
   gap: var(--sp-2);
   height: var(--h-row);
-  padding-right: var(--sp-2);
+  width: max-content;
+  min-width: 100%;
+  padding-right: var(--sp-3);
+  padding-left: var(--sp-1);
   border-left: 2px solid transparent;
   cursor: default;
   user-select: none;
@@ -44,7 +50,9 @@
 }
 
 .me-tree__row--selected-blur {
-  background: var(--c-surface-2);
+  /* Not surface-2: that is the hover tint, and a selection that looks
+     identical to hover reads as no selection at all. */
+  background: var(--c-border);
   border-left-color: var(--c-border-2);
 }
 
@@ -132,10 +140,9 @@
 }
 
 .me-tree__label {
+  flex: none;
   font-size: var(--fs-300);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .me-tree__label--anon {
@@ -164,7 +171,7 @@
 
 .me-tree__spacer {
   flex: 1;
-  min-width: var(--sp-2);
+  min-width: var(--sp-5);
 }
 
 /* Row actions never shift the row's layout: they occupy their slot always. */
@@ -177,7 +184,12 @@
 }
 
 .me-tree__row:hover .me-tree__actions,
-.me-tree__row:focus-within .me-tree__actions {
+.me-tree__row:focus-within .me-tree__actions,
+.me-tree__row--selected .me-tree__actions,
+.me-tree__row--selected-blur .me-tree__actions,
+/* An open menu lives inside this container: hiding it with the row's
+   actions would make the menu itself invisible. */
+.me-tree__actions--open {
   visibility: visible;
 }
 
