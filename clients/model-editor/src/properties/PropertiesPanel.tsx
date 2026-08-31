@@ -33,6 +33,8 @@ interface PropertiesPanelProps {
   idInputRef: RefObject<HTMLInputElement | null>;
   /** syncView().detail while the replica has stopped answering. */
   staleNotice: string | null;
+  /** Operations are in flight: reorder is held back until they land. */
+  busy: boolean;
   onOpenConnect: () => void;
 }
 
@@ -111,6 +113,7 @@ export function PropertiesPanel({
   formRef,
   idInputRef,
   staleNotice,
+  busy,
   onOpenConnect,
 }: PropertiesPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -250,6 +253,7 @@ export function PropertiesPanel({
                 desc={desc}
                 sendOps={sendOps}
                 onSelectPath={onSelectPath}
+                busy={busy}
               />
             ))}
           </Section>

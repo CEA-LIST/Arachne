@@ -6,6 +6,18 @@
  * over unchanged — including the two honest caveats the wire forces on us:
  * a reorder is delete + full re-create (there is no move op), and "unset"
  * resets a slot to defaults rather than deleting the key.
+ *
+ * The reorder buttons carry a third caveat, found by driving the real app
+ * against a real replica: because a reorder re-creates the child from the
+ * client's current view of it, issuing one while operations are still in
+ * flight re-creates whatever the queue has half-applied. Measured on the rig:
+ * two reorders queued behind a pending string edit turned a populated element
+ * into a bare `{}` and dropped its child subtree, with both log rows reporting
+ * `ok`; the identical sequence with the queue drained first round-tripped
+ * every one of the document's 13 elements. So reorder waits for quiet. The
+ * defect itself is below this layer (there is no move op on the wire) and is
+ * reported rather than papered over — this only stops the UI from firing the
+ * gun while the queue is moving.
  */
 
 import type { ContainmentDesc, Descriptor, Path, PlainJson } from '../api/types';
@@ -31,7 +43,12 @@ interface ContainmentBlockProps {
   desc: ContainmentDesc;
   sendOps: SendOps;
   onSelectPath: (path: Path) => void;
+  /** True while operations are in flight: reorder is unsafe until they land. */
+  busy: boolean;
 }
+
+const REORDER_BUSY_TITLE =
+  'Waiting for the replica — reorder re-creates the element, so it is only safe once every queued operation has been acknowledged';
 
 export function ContainmentBlock({
   descriptor,
@@ -41,6 +58,7 @@ export function ContainmentBlock({
   desc,
   sendOps,
   onSelectPath,
+  busy,
 }: ContainmentBlockProps) {
   const label = `${eClass}.${desc.name}`;
   const options = concreteSubtypes(descriptor, desc.target);
@@ -96,7 +114,9 @@ export function ContainmentBlock({
               </button>
             </div>
           ) : (
-            <>
+            /* Placeholder and action on one line: an empty feature does not
+               deserve three stacked rows of furniture. */
+            <div className="me-block__empty">
               <p className="me-block__placeholder">No {desc.target} yet</p>
               <AddControl
                 options={options}
@@ -109,7 +129,7 @@ export function ContainmentBlock({
                   )
                 }
               />
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -144,8 +164,12 @@ export function ContainmentBlock({
                 type="button"
                 className="me-iconbtn"
                 aria-label={`Move ${label}[${index}] up`}
-                title="Move up — sent as delete + re-create: the wire has no move op"
-                disabled={index === 0}
+                title={
+                  busy
+                    ? REORDER_BUSY_TITLE
+                    : 'Move up — sent as delete + re-create: the wire has no move op'
+                }
+                disabled={index === 0 || busy}
                 onClick={() => {
                   onSelectPath(elementPath);
                   void sendOps(
@@ -160,8 +184,12 @@ export function ContainmentBlock({
                 type="button"
                 className="me-iconbtn"
                 aria-label={`Move ${label}[${index}] down`}
-                title="Move down — sent as delete + re-create: the wire has no move op"
-                disabled={index === children.length - 1}
+                title={
+                  busy
+                    ? REORDER_BUSY_TITLE
+                    : 'Move down — sent as delete + re-create: the wire has no move op'
+                }
+                disabled={index === children.length - 1 || busy}
                 onClick={() => {
                   onSelectPath(elementPath);
                   void sendOps(
@@ -190,18 +218,20 @@ export function ContainmentBlock({
             </div>
           );
         })}
-        {children.length === 0 && <p className="me-block__placeholder">No {desc.target} yet</p>}
-        <AddControl
-          options={options}
-          verb="Add"
-          onAdd={(cls) =>
-            void sendOps(
-              `add ${cls} to ${label}[${children.length}]`,
-              addChildOps(arrayPath, children.length, cls),
-              { path: arrayPath, value: [...children, { eClass: cls }] },
-            )
-          }
-        />
+        <div className="me-block__empty">
+          {children.length === 0 && <p className="me-block__placeholder">No {desc.target} yet</p>}
+          <AddControl
+            options={options}
+            verb="Add"
+            onAdd={(cls) =>
+              void sendOps(
+                `add ${cls} to ${label}[${children.length}]`,
+                addChildOps(arrayPath, children.length, cls),
+                { path: arrayPath, value: [...children, { eClass: cls }] },
+              )
+            }
+          />
+        </div>
       </div>
     </div>
   );

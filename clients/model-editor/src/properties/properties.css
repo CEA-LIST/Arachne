@@ -96,6 +96,26 @@
   padding: var(--sp-4) var(--sp-5) var(--sp-8);
 }
 
+/* A measure, not a stretch: at 1440px the panel is 1080px wide, and a card
+   whose reorder buttons sit 700px from the name they reorder reads as a table
+   with a hole in it.
+   The width is chosen so the control column and the feature cards end on the
+   SAME right edge — a form whose inputs stop 340px short of the cards beside
+   them looks ragged in a screenshot, however correct each half is. */
+.me-props__body > * {
+  max-width: 720px;
+}
+
+.me-props__body .me-input,
+.me-props__body .me-select {
+  max-width: none;
+}
+
+/* Numbers keep their own narrow measure: a 540px box for "3" is absurd. */
+.me-props__body .me-input--num {
+  max-width: 120px;
+}
+
 /* ---------- sections ---------- */
 
 .me-section + .me-section {
@@ -138,8 +158,22 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  /* wrap so the failure line can claim a row of its own */
   flex-wrap: wrap;
   min-width: 0;
+}
+
+/* The control shares the row with its 14px state slot. Without this the
+   full-width input consumes the line and pushes the slot onto a second one,
+   which silently adds 20px to every field in the form. */
+.me-field__wrap > .me-input,
+.me-field__wrap > .me-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.me-field__wrap > .me-input--num {
+  flex: 0 0 120px;
 }
 
 .me-field__slot {
@@ -267,8 +301,16 @@
   cursor: default;
 }
 
+.me-block__empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
 .me-block__placeholder {
-  width: 100%;
+  /* Hugs its sentence: a full-width dashed box around three words is a lot of
+     furniture for "there is nothing here". */
   padding: var(--sp-2) var(--sp-3);
   border: 1px dashed var(--c-border-2);
   border-radius: var(--r-1);

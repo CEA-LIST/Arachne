@@ -112,7 +112,7 @@ function useFieldStatus() {
 
 interface SyncedTextInputProps {
   path: Path;
-  /** Human name of the field for the action log, e.g. "TreeNode.name". */
+  /** Human name of the field for the action log, e.g. "<eClass>.<feature>". */
   label: string;
   remoteValue: string;
   registry: FieldRegistry;

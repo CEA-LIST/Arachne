@@ -73,14 +73,16 @@ export default function App() {
 
   const [explorerWidth, setExplorerWidth] = usePanelSize(
     'model-editor.explorer-w',
-    288,
+    360,
     EXPLORER_MIN,
     EXPLORER_MAX,
   );
   const consoleMax = Math.max(CONSOLE_MIN, Math.round(window.innerHeight * 0.5));
   const [consoleHeight, setConsoleHeight] = usePanelSize(
     'model-editor.console-h',
-    260,
+    // 300 rather than 260: at 260 the sixth log row is sliced by the viewport
+    // edge, and a list that always ends mid-row reads as a rendering fault.
+    300,
     CONSOLE_MIN,
     consoleMax,
   );
@@ -91,12 +93,15 @@ export default function App() {
   const consoleToggleRef = useRef<HTMLButtonElement | null>(null);
 
   // A connection failure is the one case where the setup controls should come
-  // to the user rather than wait to be found. Derived from the status
-  // transition rather than an effect, so it cannot cascade a second render.
+  // to the user rather than wait to be found; a success is the one case where
+  // they should get out of the way, because the model is what the user came
+  // for. Derived from the status transition rather than an effect, so it
+  // cannot cascade a second render.
   const [lastStatus, setLastStatus] = useState(state.connection.status);
   if (lastStatus !== state.connection.status) {
     setLastStatus(state.connection.status);
     if (state.connection.status === 'error') setConnectOpen(true);
+    if (state.connection.status === 'connected') setConnectOpen(false);
   }
 
   // If the selected element vanished (removed, reordered away), fall back to
@@ -280,6 +285,7 @@ export default function App() {
         formRef={formRef}
         idInputRef={idInputRef}
         staleNotice={view.kind === 'offline' ? view.detail : null}
+        busy={state.pendingOps > 0}
         onOpenConnect={() => setConnectOpen(true)}
       />
 
