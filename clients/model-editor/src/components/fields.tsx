@@ -99,7 +99,15 @@ export function SyncedTextInput({
     const activelyTyping = focused && Date.now() - lastEditAtRef.current < TYPING_THRESHOLD_MS;
     if (activelyTyping) return; // overlay preserved our value; never clobber
     if (remoteValue === localRef.current) {
-      baselineRef.current = remoteValue;
+      // Advance the baseline only for unfocused fields: their value cannot
+      // hold unflushed edits (blur flushes). A focused field's remoteValue may
+      // be its own overlaid local value (the poll writes actively-typing
+      // values back into the doc); treating that echo as server truth would
+      // advance the baseline without the ops ever being sent. The focused
+      // field's flush maintains its baseline itself.
+      if (inputRef.current === null || document.activeElement !== inputRef.current) {
+        baselineRef.current = remoteValue;
+      }
       return;
     }
     if (focused && input !== null) {
