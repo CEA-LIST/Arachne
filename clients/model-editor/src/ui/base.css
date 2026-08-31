@@ -1,0 +1,595 @@
+/**
+ * Base layer: reset, typography, and the shared primitives (buttons, inputs,
+ * chips, badges, cards, menus, popovers). No colour literals — tokens only.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-family: var(--ff-ui);
+  font-size: var(--fs-300);
+  line-height: var(--lh-300);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* panels scroll, the document never does */
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--ff-mono);
+}
+
+:where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+}
+
+/* Focus is never suppressed — the keyboard pass depends on it. */
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+  border-radius: var(--r-1);
+}
+
+.me-mono {
+  font-family: var(--ff-mono);
+}
+
+.me-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.me-muted {
+  color: var(--c-fg-muted);
+}
+
+.me-subtle {
+  color: var(--c-fg-subtle);
+}
+
+.me-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- buttons ---------- */
+
+.me-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--h-control);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--c-border-2);
+  border-radius: var(--r-1);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: var(--fs-300);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.me-btn:hover:not(:disabled) {
+  background: var(--c-surface-2);
+}
+
+.me-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.me-btn--primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-bg);
+}
+
+.me-btn--primary:hover:not(:disabled) {
+  background: var(--c-accent-2);
+  border-color: var(--c-accent-2);
+}
+
+.me-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--c-fg-muted);
+}
+
+.me-btn--ghost:hover:not(:disabled) {
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+}
+
+.me-btn--sm {
+  height: 24px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-200);
+}
+
+/* Square icon-only button, used for row actions and toolbar affordances. */
+.me-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--c-fg-muted);
+  cursor: pointer;
+}
+
+.me-iconbtn:hover:not(:disabled) {
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+}
+
+.me-iconbtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.me-iconbtn--danger:hover:not(:disabled) {
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+}
+
+.me-iconbtn--lg {
+  width: 24px;
+  height: 24px;
+}
+
+/* ---------- inputs ---------- */
+
+.me-input,
+.me-select {
+  height: var(--h-control);
+  max-width: 420px;
+  width: 100%;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border-2);
+  border-radius: var(--r-1);
+  background: var(--c-bg);
+  font-size: var(--fs-300);
+}
+
+.me-select {
+  padding-right: var(--sp-1);
+  cursor: pointer;
+}
+
+.me-input:focus,
+.me-select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 2px var(--c-accent-weak);
+}
+
+.me-input--num {
+  width: 120px;
+  font-variant-numeric: tabular-nums;
+}
+
+.me-input--invalid {
+  border-color: var(--c-danger);
+}
+
+.me-input:disabled {
+  background: var(--c-surface-2);
+  color: var(--c-fg-muted);
+}
+
+/* Switch-styled checkbox for booleans. */
+.me-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+.me-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.me-switch__track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--c-border-2);
+  transition: background var(--dur) var(--ease);
+}
+
+.me-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c-bg);
+  transition: transform var(--dur) var(--ease);
+}
+
+.me-switch input:checked + .me-switch__track {
+  background: var(--c-accent);
+}
+
+.me-switch input:checked + .me-switch__track::after {
+  transform: translateX(12px);
+}
+
+.me-switch input:focus-visible + .me-switch__track {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+.me-switch__value {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-200);
+  color: var(--c-fg-muted);
+}
+
+/* ---------- chips, badges, pills ---------- */
+
+.me-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-1);
+  background: var(--c-surface-2);
+  color: var(--c-fg-muted);
+  font-size: var(--fs-100);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.me-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-1);
+  background: var(--c-bg);
+  font-size: var(--fs-200);
+  color: var(--c-fg-muted);
+  white-space: nowrap;
+}
+
+.me-chip--accent {
+  border-color: var(--c-accent-weak);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-2);
+}
+
+.me-chip--warn {
+  border-color: var(--c-warn-weak);
+  background: var(--c-warn-weak);
+  color: var(--c-warn);
+}
+
+.me-chip--danger {
+  border-color: var(--c-danger-weak);
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+}
+
+.me-chip--button {
+  cursor: pointer;
+}
+
+.me-chip--button:hover {
+  background: var(--c-surface-2);
+}
+
+.me-chip--on {
+  border-color: var(--c-accent);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-2);
+}
+
+.me-typechip {
+  font-size: var(--fs-100);
+  color: var(--c-fg-subtle);
+  font-family: var(--ff-mono);
+  white-space: nowrap;
+}
+
+.me-req {
+  color: var(--c-danger);
+  font-weight: 600;
+}
+
+/* ---------- status dot ---------- */
+
+.me-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--c-fg-subtle);
+}
+
+.me-dot--ok {
+  background: var(--c-ok);
+}
+
+.me-dot--accent {
+  background: var(--c-accent);
+}
+
+.me-dot--warn {
+  background: var(--c-warn);
+}
+
+.me-dot--danger {
+  background: var(--c-danger);
+}
+
+.me-dot--pulse {
+  animation: me-pulse 1.2s var(--ease) infinite;
+}
+
+@keyframes me-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.me-spin {
+  animation: me-spin 1s linear infinite;
+}
+
+@keyframes me-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .me-dot--pulse,
+  .me-spin {
+    animation: none;
+  }
+}
+
+/* ---------- cards, wells, hairlines ---------- */
+
+.me-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  background: var(--c-bg);
+}
+
+.me-well {
+  background: var(--c-surface-2);
+  border-radius: var(--r-1);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-200);
+  overflow-x: auto;
+}
+
+/* ---------- tabs ---------- */
+
+.me-tabs {
+  display: flex;
+  align-items: stretch;
+  height: var(--h-tabs);
+  flex: none;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+.me-tabs__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4);
+  border: none;
+  background: transparent;
+  color: var(--c-fg-muted);
+  font-size: var(--fs-200);
+  cursor: pointer;
+}
+
+.me-tabs__tab:hover {
+  color: var(--c-fg);
+}
+
+.me-tabs__tab[aria-selected='true'] {
+  color: var(--c-fg);
+  font-weight: 500;
+}
+
+.me-tabs__tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 2px;
+  background: var(--c-accent);
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* ---------- popovers and menus ---------- */
+
+.me-pop {
+  position: absolute;
+  z-index: 40;
+  min-width: 200px;
+  padding: var(--sp-4);
+  border-radius: var(--r-2);
+  background: var(--c-bg);
+  box-shadow: var(--sh-pop);
+}
+
+.me-pop--right {
+  right: 0;
+  top: calc(100% + var(--sp-2));
+}
+
+.me-pop--left {
+  left: 0;
+  top: calc(100% + var(--sp-2));
+}
+
+.me-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--sp-1));
+  left: 0;
+  min-width: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--sp-1);
+  border-radius: var(--r-2);
+  background: var(--c-bg);
+  box-shadow: var(--sh-pop);
+}
+
+.me-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: none;
+  border-radius: var(--r-1);
+  background: transparent;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-200);
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-menu__item:hover,
+.me-menu__item--active {
+  background: var(--c-accent-weak);
+  color: var(--c-accent-2);
+}
+
+.me-menu__empty {
+  padding: var(--sp-2);
+  color: var(--c-fg-muted);
+  font-size: var(--fs-200);
+}
+
+.me-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ---------- field grid ---------- */
+
+.me-field {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: var(--sp-2) var(--sp-4);
+  align-items: start;
+  padding: var(--sp-1) 0;
+}
+
+.me-field__label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  min-height: var(--h-control);
+  padding-top: var(--sp-1);
+  font-size: var(--fs-300);
+  color: var(--c-fg-muted);
+}
+
+.me-field__control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+/* ---------- print: paper figures come from print-to-PDF ---------- */
+
+@media print {
+  body {
+    overflow: visible;
+  }
+
+  .me-noprint {
+    display: none !important;
+  }
+
+  :root {
+    --c-surface: #ffffff;
+    --c-surface-2: #ffffff;
+    --c-border: #000000;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    font-size: 10.5pt;
+  }
+}

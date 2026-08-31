@@ -1,0 +1,88 @@
+/**
+ * Design tokens — the ONLY place a colour literal may appear.
+ *
+ * One light theme: print-worthy, screenshot-worthy, no half-tuned dark mode.
+ * Contrast ratios are computed against the grounds each token is allowed to
+ * sit on; every text token clears WCAG AA (>= 4.5:1).
+ */
+
+:root {
+  /* ---- palette ---- */
+  --c-bg: #ffffff;          /* panel/canvas ground */
+  --c-surface: #f7f8fa;     /* explorer + console ground */
+  --c-surface-2: #eef0f4;   /* hover, badges, code wells */
+  --c-border: #e3e6ea;      /* hairlines, indent guides (decorative) */
+  --c-border-2: #cbd1d9;    /* input/control borders */
+  --c-fg: #14171c;          /* 17.96:1 on bg */
+  --c-fg-muted: #5b6472;    /* 5.98:1 on bg, 5.24:1 on surface-2 */
+  --c-fg-subtle: #646d7a;   /* 5.24:1 on bg, 4.59:1 on surface-2 */
+
+  --c-accent: #2b5fd9;      /* 5.61:1 on bg, 4.91:1 on accent-weak */
+  --c-accent-2: #1e46a8;    /* 8.41:1 on bg */
+  --c-accent-weak: #eaf0fd;
+
+  --c-ok: #15743f;          /* 5.83:1 on bg */
+  --c-ok-weak: #e8f5ee;
+  --c-warn: #8a5a00;        /* 5.93:1 on bg */
+  --c-warn-weak: #fdf3e2;
+  --c-danger: #b3261e;      /* 6.54:1 on bg */
+  --c-danger-weak: #fdecea;
+
+  /* ---- type ---- */
+  --ff-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ff-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --fs-100: 11px;
+  --lh-100: 1.45;
+  --fs-200: 12px;
+  --lh-200: 1.5;
+  --fs-300: 13px;
+  --lh-300: 1.55;
+  --fs-400: 14px;
+  --lh-400: 1.6;
+  --fs-500: 15px;
+  --lh-500: 1.4;
+  --fs-600: 20px;
+  --lh-600: 1.3;
+
+  /* ---- spacing (4px base) ---- */
+  --sp-0: 2px;
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 12px;
+  --sp-5: 16px;
+  --sp-6: 20px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+
+  /* ---- fixed heights ---- */
+  --h-topbar: 48px;
+  --h-tabs: 32px;
+  --h-toolbar: 34px;
+  --h-row: 26px;
+  --h-control: 28px;
+  --h-console-collapsed: 34px;
+
+  /* ---- radii: nothing rounder, round reads as consumer app ---- */
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 8px;
+
+  /* ---- elevation: popovers and menus only ---- */
+  --sh-pop: 0 4px 12px rgba(16, 20, 28, 0.12), 0 0 0 1px rgba(16, 20, 28, 0.06);
+
+  /* ---- motion ---- */
+  --dur: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ---- panel geometry (JS-adjustable, persisted) ---- */
+  --explorer-w: 288px;
+  --console-h: 260px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+  }
+}
