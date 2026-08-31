@@ -52,10 +52,22 @@
 //! - `DASHBOARD_URL`         — unset means no reporting at all
 //! - `DASHBOARD_INTERVAL_MS` — gap between state snapshots, default `1000`
 //!
+//! # Metamodel discovery
+//!
+//! The node can serve the crate's metamodel descriptor on
+//! `GET /api/metamodel`, so a metamodel-agnostic client can shape itself to
+//! whatever node it connects to. `METAMODEL_PATH` names the descriptor file;
+//! unset, the node tries `metamodel.json` in the working directory (the
+//! generator writes one next to the crate manifest). Without a readable
+//! descriptor the endpoint answers 404, exactly like any unknown path.
+//!
+//! - `METAMODEL_PATH` — descriptor file, default `metamodel.json`
+//!
 //! # HTTP API
 //!
 //! - `POST /api/op`        — submit a JSON-serialised operation
 //! - `GET  /api/state`     — query the current CRDT state
+//! - `GET  /api/metamodel` — metamodel descriptor, when configured
 //! - `GET  /api/metrics`   — causal-stability and log-size counters
 //! - `GET  /api/health`    — health check
 //! - `GET  /api/peers`     — list connected peers
@@ -125,6 +137,27 @@ fn main() {
 
     node.enable_state_query();
     node.enable_state_transfer();
+
+    // Metamodel discovery is opt-in on the same terms as everything below:
+    // no readable descriptor, no `/api/metamodel` — the endpoint answers 404
+    // exactly as it always has. Must run before `start_http`, which
+    // snapshots the descriptor.
+    let metamodel_path = env::var("METAMODEL_PATH").ok();
+    let metamodel_explicit = metamodel_path.is_some();
+    let metamodel_path = metamodel_path.unwrap_or_else(|| "metamodel.json".to_string());
+    match std::fs::read_to_string(&metamodel_path) {
+        Ok(descriptor) => {
+            eprintln!("[{replica_id}] serving metamodel descriptor from `{metamodel_path}`");
+            node.serve_metamodel(descriptor);
+        }
+        Err(err) if metamodel_explicit => {
+            eprintln!(
+                "[{replica_id}] cannot read METAMODEL_PATH `{metamodel_path}`: {err}; \
+                 /api/metamodel stays 404"
+            );
+        }
+        Err(_) => {}
+    }
 
     if let Some(port) = http_port {
         node.start_http(port);
