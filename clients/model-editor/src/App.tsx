@@ -2,6 +2,7 @@ import { useState } from 'react';
 import './App.css';
 import { ActionLog } from './components/ActionLog';
 import { ConnectPanel } from './components/ConnectPanel';
+import { Editor } from './components/Editor';
 import { ErrorBanner } from './components/ErrorBanner';
 import { MetamodelPanel } from './components/MetamodelPanel';
 import { RawInspector } from './components/RawInspector';
@@ -12,7 +13,7 @@ type Tab = 'editor' | 'metamodel' | 'inspector';
 
 export default function App() {
   const sync = useSync();
-  const [tab, setTab] = useState<Tab>('inspector');
+  const [tab, setTab] = useState<Tab>('editor');
   const { state } = sync;
   const connected = state.connection.status === 'connected';
 
@@ -45,9 +46,13 @@ export default function App() {
       </nav>
       <main className="app-main">
         {tab === 'editor' && (
-          <p className="muted">
-            The typed model editor (tree + forms shaped by the discovered metamodel) plugs in here.
-          </p>
+          <Editor
+            descriptor={state.metamodel}
+            doc={state.doc}
+            connected={connected}
+            registry={sync.registry}
+            sendOps={sync.sendOps}
+          />
         )}
         {tab === 'metamodel' && (
           <MetamodelPanel
