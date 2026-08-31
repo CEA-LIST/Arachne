@@ -26,6 +26,9 @@ enum Command {
     /// Generate a Rust CRDT project from an Ecore metamodel
     #[command(name = "generate", alias = "gen")]
     Generate(GenerateArgs),
+    /// Emit the JSON metamodel descriptor a node serves on `GET /api/metamodel`
+    #[command(name = "describe")]
+    Describe(DescribeArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -107,12 +110,24 @@ struct GenerateArgs {
     verbose: u8,
 }
 
+#[derive(Debug, clap::Args)]
+struct DescribeArgs {
+    /// Path to the ecore file to describe
+    #[arg(value_name = "FILE")]
+    input: PathBuf,
+
+    /// Output file; stdout when omitted
+    #[arg(short = 'o', long = "output")]
+    output: Option<PathBuf>,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let result = match cli.command {
         Command::Parse(args) => run_parse(args),
         Command::Generate(args) => run_generate(args),
+        Command::Describe(args) => run_describe(args),
     };
 
     match result {
@@ -190,6 +205,22 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
         report.class_count.to_string().yellow()
     );
     info!("{} {:.2?}", "duration:".cyan().bold(), elapsed);
+
+    Ok(())
+}
+
+fn run_describe(args: DescribeArgs) -> Result<()> {
+    let parser = arachne_codegen::EcoreParser::from_file(&args.input)
+        .map_err(|e| anyhow!("Failed to parse '{}': {}", args.input.display(), e))?;
+    let pack = arachne_codegen::find_user_package(&parser.ctx)?;
+    let descriptor = arachne_codegen::descriptor_json(&parser.ctx, pack)?;
+    let rendered = format!("{descriptor:#}\n");
+
+    match args.output {
+        Some(path) => fs::write(&path, rendered)
+            .map_err(|e| anyhow!("Failed to write '{}': {}", path.display(), e))?,
+        None => print!("{rendered}"),
+    }
 
     Ok(())
 }
