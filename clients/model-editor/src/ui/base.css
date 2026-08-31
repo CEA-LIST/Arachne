@@ -331,6 +331,19 @@ kbd {
   color: var(--c-danger);
 }
 
+.me-chip--ok {
+  border-color: var(--c-ok-weak);
+  background: var(--c-ok-weak);
+  color: var(--c-ok);
+}
+
+/* A hidden filter: legible, but plainly switched off. */
+.me-chip--off {
+  color: var(--c-fg-subtle);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
 .me-chip--button {
   cursor: pointer;
 }

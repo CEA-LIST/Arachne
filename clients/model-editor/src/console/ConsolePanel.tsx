@@ -71,13 +71,17 @@ export function ConsolePanel({
       <span className="me-console__label">Console</span>
       <span className="me-badge me-num">{log.length}</span>
       {failed && <span className="me-dot me-dot--danger" aria-label="last operation failed" />}
-      <span className="me-console__summary me-truncate">
-        {newest === undefined
-          ? 'no operations yet'
-          : `${newest.description} — ${newest.outcome}${
-              newest.detail !== undefined && newest.detail !== '' ? `: ${newest.detail}` : ''
-            }`}
-      </span>
+      {/* Open, the panel below says all of this in full: repeating the newest
+          line in the bar is two answers to one question. */}
+      {!open && (
+        <span className="me-console__summary me-truncate">
+          {newest === undefined
+            ? 'no operations yet'
+            : `${newest.description} — ${newest.outcome}${
+                newest.detail !== undefined && newest.detail !== '' ? `: ${newest.detail}` : ''
+              }`}
+        </span>
+      )}
       <span className="me-console__spacer" />
       <kbd className="me-panel__hint">⌘J</kbd>
       {open ? (

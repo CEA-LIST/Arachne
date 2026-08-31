@@ -7,14 +7,22 @@
  */
 
 import { useMemo, useState } from 'react';
+import { EmptyState } from '../common/EmptyState';
 import type { LogEntry } from '../state/store';
-import { ChevronDown, ChevronRight, Download, Search, X } from '../ui/icons';
+import { ChevronDown, ChevronRight, Download, Search, Terminal, X } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { exportLog } from './exportLog';
 
 type Outcome = LogEntry['outcome'];
 
 const OUTCOMES: readonly Outcome[] = ['ok', 'refused', 'error'];
+
+/** A filter chip carries its outcome's own colour once it has entries to show. */
+const TONE: Record<Outcome, string> = {
+  ok: 'me-chip--ok',
+  refused: 'me-chip--warn',
+  error: 'me-chip--danger',
+};
 
 interface ActionLogViewProps {
   log: LogEntry[];
@@ -70,7 +78,12 @@ export function ActionLogView({ log, failuresOnly, setFailuresOnly }: ActionLogV
             key={outcome}
             type="button"
             aria-pressed={!hidden.has(outcome)}
-            className={`me-chip me-chip--button${hidden.has(outcome) ? '' : ' me-chip--on'}`}
+            title={`${counts[outcome]} ${outcome} — click to hide`}
+            className={
+              hidden.has(outcome)
+                ? 'me-chip me-chip--button me-chip--off'
+                : `me-chip me-chip--button ${counts[outcome] > 0 ? TONE[outcome] : ''}`
+            }
             onClick={() =>
               setHidden((prev) => {
                 const next = new Set(prev);
@@ -112,12 +125,30 @@ export function ActionLogView({ log, failuresOnly, setFailuresOnly }: ActionLogV
       </div>
 
       {log.length === 0 ? (
-        <p className="me-log__empty">
-          No operations yet. Every edit appears here with the exact CRDT operations sent and the
-          replica's verdict.
-        </p>
+        <EmptyState
+          icon={Terminal}
+          title="No operations yet"
+          body="Every edit appears here with the exact CRDT operations sent and the replica's verdict. The log is append-only — there is no clear button, because this is the evidence."
+        />
       ) : rows.length === 0 ? (
-        <p className="me-log__empty">No log entry matches the current filters.</p>
+        <EmptyState
+          icon={Search}
+          title="No matching entries"
+          body="No log entry matches the current filters."
+        >
+          <button
+            type="button"
+            className="me-btn"
+            onClick={() => {
+              setQuery('');
+              setHidden(new Set());
+              setFailuresOnly(false);
+            }}
+          >
+            <X {...ICON} size={14} aria-hidden="true" />
+            Clear filters
+          </button>
+        </EmptyState>
       ) : (
         <ol className="me-log__list">
           {rows.map((entry) => {
