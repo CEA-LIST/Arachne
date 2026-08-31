@@ -4,6 +4,18 @@ A metamodel-agnostic web editor for models hosted on a moirai replica. It talks 
 
 ## Run
 
+The usual way is the Compose rig, which starts a whole cluster and publishes two replicas for browsers:
+
+```
+cd ../../../moirai-modelsward/docker && ./rig.sh --edit --no-load
+npm run dev            # in this directory; then connect to http://127.0.0.1:8081 or :8082
+```
+
+`editor-a` and `editor-b` join the same cluster as the scaled replicas and serve the baked-in metamodel descriptor on `/api/metamodel` (`METAMODEL_PATH` overrides which one). `--no-load` keeps the load driver's random writes out of the document during a session with people. `./rig.sh down` removes everything.
+
+A single replica without Docker, when that is all you need:
+
+
 Start a replica that serves a metamodel descriptor (from `generated/json_crdt`):
 
 ```sh
