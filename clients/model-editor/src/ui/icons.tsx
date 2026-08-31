@@ -18,7 +18,6 @@ export {
   Check,
   ChevronDown,
   ChevronRight,
-  ChevronsDownUp,
   CircleAlert,
   CircleHelp,
   Copy,
@@ -30,6 +29,9 @@ export {
   Key,
   Keyboard,
   Link2,
+  // Not ChevronsDownUp: two chevrons meeting render as an ✕ at 16px, and an ✕
+  // beside a filter field reads as "clear the filter".
+  ListCollapse,
   MousePointerClick,
   Plug,
   Plus,

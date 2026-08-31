@@ -12,9 +12,12 @@
 }
 
 .me-tree {
-  /* Deep trees scroll horizontally rather than squeezing labels to ellipses:
-     indentation is the guide spans' job, and nothing else's. */
-  min-width: max-content;
+  /* Rows fit the panel and truncate with an ellipsis rather than running off
+     the right edge. Letting the row grow to max-content is the IDE reflex, but
+     with the panel's own overflow clipping it, a deep row's eClass badge gets
+     sliced through the middle of a word — which reads as a broken widget, not
+     as "there is more to the right". An ellipsis reads as deliberate; the
+     panel's drag handle is how you get the space back. */
   padding: var(--sp-2) 0 var(--sp-5);
 }
 
@@ -26,11 +29,13 @@
   align-items: center;
   gap: var(--sp-2);
   height: var(--h-row);
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   padding-right: var(--sp-3);
   padding-left: var(--sp-1);
   border-left: 2px solid transparent;
+  /* Explicit rather than transparent so the overlaid row actions can inherit
+     whichever ground the row is currently painting. */
+  background: var(--c-surface);
   cursor: default;
   user-select: none;
 }
@@ -66,9 +71,10 @@
   border-radius: 0;
 }
 
-/* Indent guides, aligned to the twisty centres. */
+/* Indent guides, aligned to the twisty centres. 12px per level: at ten levels
+   deep that is 20px of label back, which is a whole word. */
 .me-tree__guide {
-  width: 14px;
+  width: 12px;
   height: var(--h-row);
   flex: none;
   margin-right: calc(var(--sp-2) * -1);
@@ -139,8 +145,13 @@
   border-radius: 50%;
 }
 
+/* When a deep row runs out of room the badge gives before the label does:
+   the name is what identifies the element, the type is a hint. */
 .me-tree__label {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-300);
   white-space: nowrap;
 }
@@ -160,11 +171,16 @@
   color: var(--c-fg-muted);
 }
 
+/* The badge never shrinks. A type chip cut down to "I" is noise, not
+   information; the label keeps a distinctive prefix when it truncates, and the
+   row's title carries both in full. */
 .me-tree__eclass {
-  flex: none;
+  flex: 0 0 auto;
 }
 
 .me-tree__empty {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: var(--fs-100);
   color: var(--c-fg-subtle);
 }
@@ -174,12 +190,20 @@
   min-width: var(--sp-5);
 }
 
-/* Row actions never shift the row's layout: they occupy their slot always. */
+/* Row actions never shift the row's layout — but reserving their 42px in the
+   flex flow costs every row a whole word of label at every depth. Out of flow
+   and painted over the row's own ground instead: nothing moves when they
+   appear, and the space is the label's the rest of the time. */
 .me-tree__actions {
+  position: absolute;
+  right: var(--sp-1);
+  top: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: var(--sp-0);
-  flex: none;
+  padding-left: var(--sp-2);
+  background: inherit;
   visibility: hidden;
 }
 
@@ -251,23 +275,40 @@
   flex-direction: column;
 }
 
+/* One line per class, always. Letting the counts wrap onto a second line for
+   the few classes with long supertype names gave the list a limping rhythm —
+   33px, 33px, 66px — which is the first thing the eye reads as unfinished. */
 .me-meta__class {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--c-border);
   font-size: var(--fs-200);
+  white-space: nowrap;
 }
 
 .me-meta__name {
+  flex: 0 1 auto;
+  min-width: 4ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-300);
   color: var(--c-fg);
 }
 
+.me-meta__super {
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .me-meta__counts {
+  flex: none;
   margin-left: auto;
+  padding-left: var(--sp-2);
   white-space: nowrap;
 }
 

@@ -123,7 +123,7 @@ export function MetamodelBrowser({
             <span className="me-meta__name me-mono">{name}</span>
             {cls.abstract && <span className="me-badge">abstract</span>}
             {cls.superTypes.length > 0 && (
-              <span className="me-subtle me-mono">: {cls.superTypes.join(', ')}</span>
+              <span className="me-meta__super me-subtle me-mono">: {cls.superTypes.join(', ')}</span>
             )}
             <span className="me-meta__counts me-subtle me-num">
               {cls.attributes.length} attr · {cls.containments.length} cont ·{' '}

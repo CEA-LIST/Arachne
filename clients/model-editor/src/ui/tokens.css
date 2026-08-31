@@ -61,6 +61,7 @@
   --h-tabs: 32px;
   --h-toolbar: 34px;
   --h-row: 26px;
+  --h-props-header: 60px;
   --h-control: 28px;
   --h-console-collapsed: 34px;
 
@@ -77,8 +78,8 @@
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
 
   /* ---- panel geometry (JS-adjustable, persisted) ---- */
-  --explorer-w: 288px;
-  --console-h: 260px;
+  --explorer-w: 360px;
+  --console-h: 300px;
 }
 
 @media (prefers-reduced-motion: reduce) {

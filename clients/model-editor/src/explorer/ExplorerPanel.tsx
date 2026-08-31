@@ -11,7 +11,7 @@ import { EmptyState } from '../common/EmptyState';
 import { buildTree, rootCandidates, type ModelNode } from '../model/instance';
 import { AddControl } from '../properties/AddControl';
 import { countElements, flattenTree } from '../ui/flattenTree';
-import { Box, ChevronsDownUp, FileWarning, Plug, Search, X } from '../ui/icons';
+import { Box, FileWarning, ListCollapse, Search, X } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { Tabs, type TabSpec } from '../ui/Tabs';
 import { MetamodelBrowser } from './MetamodelBrowser';
@@ -100,6 +100,9 @@ export function ExplorerPanel({
         </div>
       ) : (
         <>
+          {/* A toolbar of disabled controls is the first thing a cold start
+              should NOT show: there is nothing to filter or collapse yet. */}
+          {tree !== null && (
           <div className="me-panel__toolbar me-noprint">
             <span className="me-panel__search">
               <Search {...ICON} size={14} className="me-panel__search-icon" aria-hidden="true" />
@@ -110,7 +113,6 @@ export function ExplorerPanel({
                 value={filter}
                 placeholder="Filter elements…"
                 aria-label="Filter elements"
-                disabled={tree === null}
                 onChange={(e) => setFilter(e.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape' && filter.length > 0) {
@@ -126,17 +128,15 @@ export function ExplorerPanel({
               className="me-iconbtn"
               title="Collapse all"
               aria-label="Collapse all"
-              disabled={tree === null}
               onClick={collapseAll}
             >
-              <ChevronsDownUp {...ICON} size={14} aria-hidden="true" />
+              <ListCollapse {...ICON} aria-hidden="true" />
             </button>
-            {tree !== null && (
-              <span className="me-subtle me-num me-panel__count">
-                {countElements(tree)} element{countElements(tree) === 1 ? '' : 's'}
-              </span>
-            )}
+            <span className="me-subtle me-num me-panel__count">
+              {countElements(tree)} element{countElements(tree) === 1 ? '' : 's'}
+            </span>
           </div>
+          )}
 
           <div
             className="me-panel__body"
@@ -211,12 +211,6 @@ export function ExplorerPanel({
         </>
       )}
 
-      {!connected && tab === 'model' && (
-        <div className="me-panel__footnote">
-          <Plug {...ICON} size={13} aria-hidden="true" />
-          Use Connect in the top bar.
-        </div>
-      )}
     </section>
   );
 }

@@ -102,6 +102,8 @@ export function TreeRow({
       aria-selected={selected}
       aria-expanded={row.expandable ? row.expanded : undefined}
       tabIndex={focused ? 0 : -1}
+      // Deep rows truncate; the full name and type stay reachable on hover.
+      title={showBadge ? `${row.label} — ${row.eClass}` : row.label}
       className={classes.join(' ')}
       onClick={() => onSelect(row)}
       onDoubleClick={() => {
