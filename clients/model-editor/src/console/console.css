@@ -1,0 +1,209 @@
+/* Bottom console: collapsed bar, tabs, action log rows, JSON view. */
+
+.me-console {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+.me-console--collapsed {
+  height: var(--h-console-collapsed);
+}
+
+.me-console__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  height: var(--h-console-collapsed);
+  flex: none;
+  padding: 0 var(--sp-3);
+  border: none;
+  background: transparent;
+  font-size: var(--fs-200);
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-console__bar:hover {
+  background: var(--c-surface-2);
+}
+
+.me-console__label {
+  font-weight: 500;
+  color: var(--c-fg);
+}
+
+.me-console__summary {
+  min-width: 0;
+  color: var(--c-fg-muted);
+}
+
+.me-console__spacer {
+  flex: 1;
+}
+
+.me-console__bar .me-panel__hint {
+  position: static;
+}
+
+.me-console__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-100);
+}
+
+.me-tabs__trailing {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.me-console__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--c-bg);
+}
+
+/* ---------- action log ---------- */
+
+.me-log {
+  display: flex;
+  flex-direction: column;
+}
+
+.me-log .me-panel__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.me-log__spacer {
+  flex: 1;
+}
+
+.me-log__empty {
+  padding: var(--sp-5);
+  max-width: 60ch;
+  color: var(--c-fg-muted);
+  font-size: var(--fs-200);
+  line-height: var(--lh-300);
+}
+
+.me-log__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.me-log__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: 1px solid var(--c-border);
+  border-left: 2px solid transparent;
+  animation: me-fade-in 120ms var(--ease);
+}
+
+@keyframes me-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .me-log__row {
+    animation: none;
+  }
+}
+
+.me-log__row--refused,
+.me-log__row--error {
+  border-left-color: var(--c-danger);
+  background: var(--c-danger-weak);
+}
+
+.me-log__disclose {
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--c-fg-subtle);
+  cursor: pointer;
+}
+
+.me-log__disclose:hover {
+  background: var(--c-surface-2);
+  color: var(--c-fg);
+}
+
+.me-log__time {
+  flex: none;
+  font-size: var(--fs-100);
+  color: var(--c-fg-subtle);
+}
+
+.me-log__pill {
+  flex: none;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-1);
+  font-size: var(--fs-100);
+  font-weight: 500;
+  line-height: 16px;
+  background: var(--c-ok-weak);
+  color: var(--c-ok);
+}
+
+.me-log__pill--refused,
+.me-log__pill--error {
+  background: var(--c-bg);
+  color: var(--c-danger);
+}
+
+.me-log__desc {
+  font-size: var(--fs-300);
+}
+
+.me-log__ops {
+  font-size: var(--fs-100);
+  color: var(--c-fg-muted);
+}
+
+.me-log__detail {
+  font-size: var(--fs-200);
+  color: var(--c-danger);
+}
+
+.me-log__payload {
+  flex-basis: 100%;
+  margin: var(--sp-1) 0 var(--sp-2);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre;
+}
+
+/* ---------- document JSON ---------- */
+
+.me-json {
+  margin: 0;
+  padding: var(--sp-3);
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+  white-space: pre;
+  overflow: auto;
+}
