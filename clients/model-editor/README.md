@@ -30,6 +30,10 @@ On connect the editor calls `GET /api/metamodel`. The node answers with a format
 
 If the node answers 404 (a node without a descriptor), the Metamodel tab offers the labelled fallback: load a descriptor file produced by `arachne describe <file.ecore>`.
 
+## Editing
+
+The Editor tab renders the model as a containment tree shaped by the descriptor (labels come from the element's id attribute — the first `isId` attribute, else one named `ID`/`name`, else the first string attribute — falling back to the class name). Selecting an element shows a typed form: text inputs for strings, number inputs (commit on blur/Enter) for int/float, checkboxes for booleans, literal dropdowns for enums; containments offer create/add with a concrete-subtype menu where the target class is abstract, plus remove and move up/down; references are pickers over the document's existing instances of the target family, stored as the target's id value. On a fresh document the editor offers root creation from the descriptor's root classes. Every action lands in the action log with its exact op payloads and the node's verdict.
+
 ## How edits reach the wire
 
 Every edit intent is mapped by `src/crdt/ops.ts` to a sequence of `JsonKind` ops posted one at a time (`POST /api/op`); string edits are diffed into at most one `DeleteRange` plus single-character `Insert`s (the wire accepts one character per op), numbers commit as a single relative `Inc`, array/containment creation uses the insert-then-update idiom with the mandatory `eClass` field first. A single global FIFO queue serializes all batches so sequences never interleave. The UI polls `GET /api/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are shown in the error banner and recorded in the exportable action log.
