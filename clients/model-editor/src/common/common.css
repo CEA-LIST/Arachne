@@ -1,9 +1,13 @@
 /* The shared empty-state card. */
 
+/* Centred in its panel on both axes: top-aligned in a 700px-tall panel reads
+   as content that failed to load, not as a state the app meant to show. */
 .me-empty {
   display: flex;
-  align-items: flex-start;
+  flex: 1;
+  align-items: center;
   justify-content: center;
+  min-height: 100%;
   padding: var(--sp-8) var(--sp-5);
 }
 

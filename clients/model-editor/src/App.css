@@ -28,10 +28,13 @@
   grid-column: 1 / -1;
 }
 
-/* Alerts float over the content so a failure never reflows the panels. */
+/* Alerts float over the content so a failure never reflows the panels — but
+   below the properties header, whose Copy path / Delete element buttons live
+   in exactly the same corner. A transient alert may cover the form; it may not
+   cover the controls for the element it is complaining about. */
 .me-app__alerts {
   position: absolute;
-  top: calc(var(--h-topbar) + var(--sp-3));
+  top: calc(var(--h-topbar) + var(--h-props-header) + var(--sp-3));
   right: var(--sp-5);
   z-index: 30;
   max-width: 640px;
@@ -99,21 +102,18 @@
   white-space: nowrap;
 }
 
+/* Centred like the empty-state cards it sits beside: one grey sentence pinned
+   to the top-left corner of a 750px column is what "unfinished" looks like. */
 .me-panel__placeholder {
-  padding: var(--sp-5);
-  color: var(--c-fg-muted);
-}
-
-.me-panel__footnote {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex: none;
-  padding: var(--sp-2) var(--sp-3);
-  border-top: 1px solid var(--c-border);
-  background: var(--c-surface);
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--sp-8) var(--sp-6);
   color: var(--c-fg-muted);
   font-size: var(--fs-200);
+  text-align: center;
+  text-wrap: balance;
 }
 
 /* ---------- resizers ---------- */
