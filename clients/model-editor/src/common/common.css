@@ -1,0 +1,64 @@
+/* The shared empty-state card. */
+
+.me-empty {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--sp-8) var(--sp-5);
+}
+
+.me-empty__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  max-width: 380px;
+  padding: var(--sp-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-3);
+  background: var(--c-bg);
+}
+
+.me-empty__card--warn {
+  border-color: var(--c-warn-weak);
+  background: var(--c-warn-weak);
+}
+
+.me-empty__icon {
+  color: var(--c-fg-subtle);
+}
+
+.me-empty__card--warn .me-empty__icon {
+  color: var(--c-warn);
+}
+
+.me-empty__title {
+  font-size: var(--fs-500);
+  line-height: var(--lh-500);
+  font-weight: 600;
+}
+
+.me-empty__body {
+  font-size: var(--fs-300);
+  line-height: 1.55;
+  color: var(--c-fg-muted);
+}
+
+.me-empty__body code {
+  font-size: var(--fs-200);
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-1);
+  background: var(--c-surface-2);
+}
+
+.me-empty__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.me-empty__actions .me-well {
+  width: 100%;
+}

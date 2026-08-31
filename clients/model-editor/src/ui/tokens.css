@@ -86,3 +86,14 @@
     --dur: 0ms;
   }
 }
+
+/* Print: white ground, black hairlines, so a paper figure can come from
+   print-to-PDF rather than a screenshot crop. */
+@media print {
+  :root {
+    --c-surface: #ffffff;
+    --c-surface-2: #ffffff;
+    --c-border: #000000;
+    --c-border-2: #000000;
+  }
+}

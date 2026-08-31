@@ -580,12 +580,6 @@ kbd {
     display: none !important;
   }
 
-  :root {
-    --c-surface: #ffffff;
-    --c-surface-2: #ffffff;
-    --c-border: #000000;
-  }
-
   html,
   body,
   #root {
