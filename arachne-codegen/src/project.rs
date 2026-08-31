@@ -21,6 +21,7 @@ pub fn write_project(
     classifiers_code: TokenStream,
     references_code: TokenStream,
     package_code: TokenStream,
+    metamodel_descriptor: &serde_json::Value,
 ) -> Result<()> {
     let project_name = sanitize_package_name(project_name);
     let root = &config.output_dir;
@@ -63,6 +64,12 @@ pub fn write_project(
     let cargo_toml = render_cargo_toml(&project_name, &moirai.base);
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
+    // The descriptor `network_node` serves on `GET /api/metamodel` (its
+    // `METAMODEL_PATH` defaults to this file, next to the manifest).
+    fs::write(
+        root.join("metamodel.json"),
+        format!("{:#}\n", metamodel_descriptor),
+    )?;
     fs::write(src_dir.join("lib.rs"), formatted_lib)?;
     fs::write(src_dir.join("classifiers.rs"), formatted_classifiers)?;
     fs::write(src_dir.join("references.rs"), formatted_references)?;

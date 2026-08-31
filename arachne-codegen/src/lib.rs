@@ -8,6 +8,7 @@ mod utils;
 
 use std::path::PathBuf;
 
+pub use codegen::descriptor::descriptor_json;
 pub use config::{Config, MoiraiPathStyle};
 use ecore_rs::repr::{Class, Pack, idx, structural};
 pub use error::{ArachneError, Result};
@@ -54,12 +55,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     info!("Parsing ecore metamodel: {:?}", config.input_path);
     let parser = EcoreParser::from_file(&config.input_path)?;
 
-    let pack = parser
-        .ctx
-        .packs()
-        .iter()
-        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
-        .ok_or(ArachneError::NoValidPackageFound)?;
+    let pack = find_user_package(&parser.ctx)?;
 
     let class_count = pack.classes().len();
     debug!(
@@ -89,6 +85,10 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         .or_else(|| Some(pack.name().to_snake_case()))
         .unwrap_or_else(|| "generated_crdt".to_string());
 
+    // The metamodel the generated types encode, re-emitted as data so the
+    // node can serve it to clients (`GET /api/metamodel`).
+    let descriptor = codegen::descriptor::descriptor_json(&parser.ctx, pack)?;
+
     info!("Writing generated project '{}'", project_name);
     // Write a full Rust project
     project::write_project(
@@ -98,6 +98,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         classifiers_code,
         references_code,
         package_code,
+        &descriptor,
     )?;
 
     Ok(GenerationReport {
@@ -107,6 +108,15 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         package_name: pack.name().to_string(),
         class_count: generated_class_count,
     })
+}
+
+/// The package generation targets: the first that is neither the parser's
+/// `[root]` nor `[builtin]` bookkeeping package.
+pub fn find_user_package(ctx: &ecore_rs::ctx::Ctx) -> Result<&Pack> {
+    ctx.packs()
+        .iter()
+        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .ok_or(ArachneError::NoValidPackageFound)
 }
 
 /// Generates code from a parsed Ecore context.
@@ -125,48 +135,8 @@ pub fn generate_from_parser<'a>(
     let package_class_set: std::collections::HashSet<idx::Class> =
         package_classes.iter().copied().collect();
 
-    let concrete_package_classes: Vec<idx::Class> = package_classes
-        .iter()
-        .copied()
-        .filter(|class_idx| parser.ctx.classes()[**class_idx].is_concrete())
-        .collect();
-
-    let concrete_containment_incoming =
-        compute_concrete_containment_incoming(&parser.ctx, &package_classes, &package_class_set);
-
-    let mut top_level_roots: Vec<idx::Class> = concrete_package_classes
-        .iter()
-        .copied()
-        .filter(|class_idx| {
-            let class = &parser.ctx.classes()[**class_idx];
-            !class.is_enum()
-                && !class.is_interface()
-                && !concrete_containment_incoming.contains(class_idx)
-        })
-        .collect();
-
-    if top_level_roots.is_empty() {
-        debug!(
-            "No top-level roots found based on concrete classes. Falling back to abstract/interface classes with concrete descendants and no external containers."
-        );
-        top_level_roots = package_classes
-            .iter()
-            .copied()
-            .filter(|class_idx| {
-                let class = &parser.ctx.classes()[**class_idx];
-                !class.is_enum()
-                    && !class.is_interface()
-                    && !class.is_concrete()
-                    && has_concrete_descendant(&parser.ctx, *class_idx, &package_class_set)
-                    && abstract_family_has_no_external_container(
-                        &parser.ctx,
-                        *class_idx,
-                        &package_classes,
-                        &package_class_set,
-                    )
-            })
-            .collect();
-    }
+    let top_level_roots =
+        compute_top_level_roots(&parser.ctx, &package_classes, &package_class_set);
 
     if top_level_roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()).into());
@@ -239,6 +209,60 @@ pub fn generate_from_parser<'a>(
         package,
         reachable_package_classes.len(),
     ))
+}
+
+/// Computes the top-level root classes of a package: the concrete,
+/// non-enum, non-interface classes no other concrete class contains — falling
+/// back to abstract classes with concrete descendants and no external
+/// container when there is no such concrete class.
+///
+/// Shared by code generation and metamodel-descriptor emission, so both name
+/// the same roots. Empty when the package has no viable root; callers decide
+/// whether that is an error.
+fn compute_top_level_roots(
+    ctx: &ecore_rs::ctx::Ctx,
+    package_classes: &[idx::Class],
+    package_class_set: &std::collections::HashSet<idx::Class>,
+) -> Vec<idx::Class> {
+    let concrete_containment_incoming =
+        compute_concrete_containment_incoming(ctx, package_classes, package_class_set);
+
+    let mut top_level_roots: Vec<idx::Class> = package_classes
+        .iter()
+        .copied()
+        .filter(|class_idx| {
+            let class = &ctx.classes()[**class_idx];
+            class.is_concrete()
+                && !class.is_enum()
+                && !class.is_interface()
+                && !concrete_containment_incoming.contains(class_idx)
+        })
+        .collect();
+
+    if top_level_roots.is_empty() {
+        debug!(
+            "No top-level roots found based on concrete classes. Falling back to abstract/interface classes with concrete descendants and no external containers."
+        );
+        top_level_roots = package_classes
+            .iter()
+            .copied()
+            .filter(|class_idx| {
+                let class = &ctx.classes()[**class_idx];
+                !class.is_enum()
+                    && !class.is_interface()
+                    && !class.is_concrete()
+                    && has_concrete_descendant(ctx, *class_idx, package_class_set)
+                    && abstract_family_has_no_external_container(
+                        ctx,
+                        *class_idx,
+                        package_classes,
+                        package_class_set,
+                    )
+            })
+            .collect();
+    }
+
+    top_level_roots
 }
 
 fn collect_reachable_classes(
