@@ -1,0 +1,180 @@
+/* Top bar, sync chip, connect popover, alert dock. */
+
+.me-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--h-topbar);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+
+.me-topbar__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.me-topbar__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-2);
+  background: var(--c-accent);
+}
+
+.me-topbar__wordmark {
+  font-size: var(--fs-500);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.me-topbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--c-border);
+}
+
+.me-topbar__context {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-200);
+}
+
+.me-topbar__package {
+  font-family: var(--ff-mono);
+  color: var(--c-fg);
+}
+
+.me-topbar__spacer {
+  flex: 1;
+}
+
+.me-topbar__replica {
+  gap: var(--sp-1);
+}
+
+/* ---------- sync chip ---------- */
+
+.me-syncchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-1);
+  font-size: var(--fs-200);
+  white-space: nowrap;
+}
+
+.me-syncchip__live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.me-syncchip--live {
+  border-color: var(--c-ok-weak);
+  background: var(--c-ok-weak);
+  color: var(--c-ok);
+}
+
+.me-syncchip--syncing {
+  border-color: var(--c-accent-weak);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-2);
+}
+
+.me-syncchip--stale,
+.me-syncchip--connecting {
+  border-color: var(--c-warn-weak);
+  background: var(--c-warn-weak);
+  color: var(--c-warn);
+}
+
+.me-syncchip--offline,
+.me-syncchip--connect-failed {
+  border-color: var(--c-danger-weak);
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+}
+
+.me-syncchip--disconnected {
+  color: var(--c-fg-muted);
+}
+
+/* ---------- connect popover ---------- */
+
+.me-connect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 300px;
+}
+
+.me-connect__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.me-connect__label {
+  font-size: var(--fs-200);
+  color: var(--c-fg-muted);
+}
+
+.me-connect__poll {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.me-connect__hint {
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+  color: var(--c-fg-subtle);
+}
+
+.me-connect__error {
+  padding: var(--sp-2);
+  border-radius: var(--r-1);
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+  font-size: var(--fs-200);
+}
+
+/* ---------- alert dock ---------- */
+
+.me-alertdock {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-danger);
+  border-radius: var(--r-2);
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+  box-shadow: var(--sh-pop);
+}
+
+.me-alertdock__icon {
+  flex: none;
+}
+
+.me-alertdock__message {
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+}
+
+.me-alertdock .me-btn {
+  border-color: var(--c-danger);
+  background: transparent;
+  color: var(--c-danger);
+}
+
+.me-alertdock .me-iconbtn {
+  color: var(--c-danger);
+}
