@@ -63,6 +63,16 @@
 //!
 //! - `METAMODEL_PATH` — descriptor file, default `metamodel.json`
 //!
+//! # Log identity
+//!
+//! Every replica of a session must host the same log, and `LOG_ID` names it:
+//! 32 lowercase hex characters, the same value on every replica. Unset, the
+//! replica mints a fresh id and prints it — right for the replica that
+//! creates a session, wrong for one joining it, whose peers would refuse its
+//! events as belonging to another log.
+//!
+//! - `LOG_ID` — the log this replica hosts; unset mints a fresh one
+//!
 //! # HTTP API
 //!
 //! - `POST /api/op`        — submit a JSON-serialised operation
@@ -86,6 +96,7 @@ use moirai_network::HashMap;
 use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
 use moirai_network::generic::Node;
+use moirai_protocol::log_id::LogId;
 
 /// How other replicas reach this one's replication listener.
 ///
@@ -128,11 +139,28 @@ fn main() {
 
     let member_refs: Vec<&str> = all_members.iter().map(|s| s.as_str()).collect();
 
-    let mut node = Node::<JsonLog>::new(
+    // The log this replica hosts. Set, `LOG_ID` means join that log; unset,
+    // a fresh id is minted and printed, which is right only for the replica
+    // that creates the session — peers hosting a different log refuse each
+    // other's events.
+    let log_id = match env::var("LOG_ID") {
+        Ok(raw) => LogId::parse(&raw).unwrap_or_else(|err| {
+            eprintln!("[{replica_id}] invalid LOG_ID `{raw}`: {err}");
+            std::process::exit(1);
+        }),
+        Err(_) => {
+            let id = LogId::generate();
+            eprintln!("[{replica_id}] log id: {id}");
+            id
+        }
+    };
+
+    let mut node = Node::<JsonLog>::new_with_log_id(
         replica_id.clone(),
         &member_refs,
         listen_port,
         peer_addresses,
+        log_id,
     );
 
     node.enable_state_query();
