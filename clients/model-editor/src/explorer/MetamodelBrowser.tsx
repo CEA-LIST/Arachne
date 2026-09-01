@@ -10,8 +10,25 @@ import { useMemo, useState } from 'react';
 import { validateDescriptor } from '../api/client';
 import type { Descriptor } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
+import type { ClassDesc } from '../api/types';
 import { FileWarning, Plug, Search } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
+
+/**
+ * Feature counts, zeros omitted.
+ *
+ * Most classes in a real metamodel declare features in one or two of the three
+ * kinds, so `0 attr · 0 cont · 0 ref` spent a quarter of the panel's width
+ * saying nothing — and it was the CLASS NAME that got the ellipsis for it. The
+ * absence of a part is the zero; the full sentence stays in the row's title.
+ */
+function countParts(cls: ClassDesc): string {
+  const parts: string[] = [];
+  if (cls.attributes.length > 0) parts.push(`${cls.attributes.length} attr`);
+  if (cls.containments.length > 0) parts.push(`${cls.containments.length} cont`);
+  if (cls.references.length > 0) parts.push(`${cls.references.length} ref`);
+  return parts.join(' · ');
+}
 
 interface MetamodelBrowserProps {
   metamodel: Descriptor | null;
@@ -120,14 +137,20 @@ export function MetamodelBrowser({
       <ul className="me-meta__list">
         {classes.map(([name, cls]) => (
           <li key={name} className="me-meta__class">
-            <span className="me-meta__name me-mono">{name}</span>
+            <span className="me-meta__name me-mono" title={name}>
+              {name}
+            </span>
             {cls.abstract && <span className="me-badge">abstract</span>}
             {cls.superTypes.length > 0 && (
-              <span className="me-meta__super me-subtle me-mono">: {cls.superTypes.join(', ')}</span>
+              <span className="me-meta__super me-subtle me-mono" title={cls.superTypes.join(', ')}>
+                : {cls.superTypes.join(', ')}
+              </span>
             )}
-            <span className="me-meta__counts me-subtle me-num">
-              {cls.attributes.length} attr · {cls.containments.length} cont ·{' '}
-              {cls.references.length} ref
+            <span
+              className="me-meta__counts me-subtle me-num"
+              title={`${cls.attributes.length} attributes · ${cls.containments.length} containments · ${cls.references.length} references`}
+            >
+              {countParts(cls)}
             </span>
           </li>
         ))}

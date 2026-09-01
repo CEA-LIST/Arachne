@@ -289,9 +289,13 @@
   white-space: nowrap;
 }
 
+/* The identifying name is the last thing that may be cut — the same rule the
+   tree rows follow. Shrink weights, not `flex: none`: supertypes give way
+   first, then the counts, and a pathologically long class name still yields
+   rather than pushing the row into a horizontal scroll. */
 .me-meta__name {
   flex: 0 1 auto;
-  min-width: 4ch;
+  min-width: 8ch;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--fs-300);
@@ -299,14 +303,17 @@
 }
 
 .me-meta__super {
-  flex: 0 2 auto;
+  flex: 0 20 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .me-meta__counts {
-  flex: none;
+  flex: 0 8 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: auto;
   padding-left: var(--sp-2);
   white-space: nowrap;
