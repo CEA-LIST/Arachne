@@ -8,6 +8,8 @@
 import type { RefObject } from 'react';
 import type { PlainJson } from '../api/types';
 import type { LogEntry } from '../state/store';
+import type { FlushProgress } from '../ui/editGate';
+import { FlushBar } from '../ui/FlushBar';
 import { Braces, ChevronDown, ChevronRight, Terminal } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { Resizer } from '../ui/Resizer';
@@ -36,6 +38,8 @@ interface ConsolePanelProps {
   maxHeight: number;
   failuresOnly: boolean;
   setFailuresOnly: (value: boolean) => void;
+  /** The batch in flight: shown here too, so a closed console is never silent. */
+  progress: FlushProgress | null;
   toggleRef: RefObject<HTMLButtonElement | null>;
 }
 
@@ -53,6 +57,7 @@ export function ConsolePanel({
   maxHeight,
   failuresOnly,
   setFailuresOnly,
+  progress,
   toggleRef,
 }: ConsolePanelProps) {
   const newest = log[log.length - 1];
@@ -73,15 +78,23 @@ export function ConsolePanel({
       {failed && <span className="me-dot me-dot--danger" aria-label="last operation failed" />}
       {/* Open, the panel below says all of this in full: repeating the newest
           line in the bar is two answers to one question. */}
-      {!open && (
-        <span className="me-console__summary me-truncate">
-          {newest === undefined
-            ? 'no operations yet'
-            : `${newest.description} — ${newest.outcome}${
-                newest.detail !== undefined && newest.detail !== '' ? `: ${newest.detail}` : ''
-              }`}
-        </span>
-      )}
+      {!open &&
+        (progress !== null ? (
+          // A batch takes ~400 ms per op on this wire; a closed console that
+          // showed only the PREVIOUS entry for a minute is the silence the
+          // review filed. The bar is the same one the top bar shows.
+          <span className="me-console__summary">
+            <FlushBar progress={progress} />
+          </span>
+        ) : (
+          <span className="me-console__summary me-truncate">
+            {newest === undefined
+              ? 'no operations yet'
+              : `${newest.description} — ${newest.outcome}${
+                  newest.detail !== undefined && newest.detail !== '' ? `: ${newest.detail}` : ''
+                }`}
+          </span>
+        ))}
       <span className="me-console__spacer" />
       <kbd className="me-panel__hint">⌘J</kbd>
       {open ? (
@@ -136,6 +149,7 @@ export function ConsolePanel({
             log={log}
             failuresOnly={failuresOnly}
             setFailuresOnly={setFailuresOnly}
+            progress={progress}
           />
         ) : (
           <DocumentJsonView doc={doc} connected={connected} />

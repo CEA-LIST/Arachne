@@ -4,11 +4,20 @@
  *
  * There is deliberately NO "clear log" — this is evidence for the case study,
  * and it is append-only up to MAX_LOG_ENTRIES. Filters are view-only.
+ *
+ * Two honesty points the panel states rather than implies:
+ * - a log row is appended when the whole BATCH resolves, so a long batch would
+ *   otherwise leave the panel blank for the minute it takes; the batch in
+ *   flight therefore has a live row of its own at the head of the list;
+ * - the log lives in this tab. A reload starts a new one — `Export JSON` is
+ *   what makes it durable, and the empty state says so.
  */
 
 import { useMemo, useState } from 'react';
 import { EmptyState } from '../common/EmptyState';
 import type { LogEntry } from '../state/store';
+import type { FlushProgress } from '../ui/editGate';
+import { FlushBar } from '../ui/FlushBar';
 import { ChevronDown, ChevronRight, Download, Search, Terminal, X } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { exportLog } from './exportLog';
@@ -29,9 +38,16 @@ interface ActionLogViewProps {
   /** Set by "Details" on an alert: pre-filter to the failures. */
   failuresOnly: boolean;
   setFailuresOnly: (value: boolean) => void;
+  /** The batch being applied, which has no log row yet. */
+  progress: FlushProgress | null;
 }
 
-export function ActionLogView({ log, failuresOnly, setFailuresOnly }: ActionLogViewProps) {
+export function ActionLogView({
+  log,
+  failuresOnly,
+  setFailuresOnly,
+  progress,
+}: ActionLogViewProps) {
   const [query, setQuery] = useState('');
   const [hidden, setHidden] = useState<ReadonlySet<Outcome>>(new Set());
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
@@ -116,7 +132,7 @@ export function ActionLogView({ log, failuresOnly, setFailuresOnly }: ActionLogV
           type="button"
           className="me-btn me-btn--sm"
           disabled={log.length === 0}
-          title="Export the whole log as JSON (⌘⇧E)"
+          title="Export the whole log as JSON (⌘⇧E) — the log lives in this tab, so this is what makes it durable"
           onClick={() => exportLog(log)}
         >
           <Download {...ICON} size={13} aria-hidden="true" />
@@ -124,13 +140,20 @@ export function ActionLogView({ log, failuresOnly, setFailuresOnly }: ActionLogV
         </button>
       </div>
 
-      {log.length === 0 ? (
+      {progress !== null && (
+        <div className="me-log__running">
+          <span className="me-log__pill me-log__pill--running">applying</span>
+          <FlushBar progress={progress} />
+        </div>
+      )}
+
+      {log.length === 0 && progress === null ? (
         <EmptyState
           icon={Terminal}
           title="No operations yet"
-          body="Every edit appears here with the exact CRDT operations sent and the replica's verdict. The log is append-only — there is no clear button, because this is the evidence."
+          body="Every edit appears here with the exact CRDT operations sent and the replica's verdict. The log is append-only — there is no clear button, because this is the evidence. It lives in this browser tab: a reload starts a new one, so export it if it matters."
         />
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && progress === null ? (
         <EmptyState
           icon={Search}
           title="No matching entries"

@@ -83,6 +83,19 @@
   font-size: var(--fs-200);
 }
 
+/* The form is held while a structural batch rebuilds the element on the
+   replica: accent, not warning — nothing is wrong, something is in progress. */
+.me-props__held {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  padding: var(--sp-2) var(--sp-5);
+  background: var(--c-accent-weak);
+  color: var(--c-accent-2);
+  font-size: var(--fs-200);
+}
+
 .me-props__unknown {
   margin: var(--sp-4) var(--sp-5) 0;
   border-radius: var(--r-1);

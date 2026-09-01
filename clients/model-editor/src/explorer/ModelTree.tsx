@@ -26,6 +26,10 @@ interface ModelTreeProps {
   filter: string;
   onAddChild: (elementPath: Path, feature: ContainmentDesc, className: string) => void;
   onRemove: (path: Path) => void;
+  /** False while the edit gate holds structural edits (ui/editGate.ts). */
+  structureEnabled: boolean;
+  /** The gate's own sentence, for the held controls' titles. */
+  structureReason: string | null;
   /** Enter: selection made, move on into the properties form. */
   onActivate: () => void;
   /** F2: jump to the element's id/name field. */
@@ -44,6 +48,8 @@ export function ModelTree({
   filter,
   onAddChild,
   onRemove,
+  structureEnabled,
+  structureReason,
   onActivate,
   onRename,
   onRowCount,
@@ -227,6 +233,8 @@ export function ModelTree({
             treeFocused={treeFocused}
             filter={filter}
             addOptions={addOptionsFor(row)}
+            structureEnabled={structureEnabled}
+            structureReason={structureReason}
             onSelect={select}
             onToggle={toggle}
             onAdd={add}
@@ -244,7 +252,9 @@ export function ModelTree({
           <button
             ref={confirmRef}
             type="button"
-            className="me-btn me-btn--sm"
+            className={structureEnabled ? 'me-btn me-btn--sm' : 'me-btn me-btn--sm me-held'}
+            disabled={!structureEnabled}
+            title={structureReason ?? undefined}
             onClick={() => {
               onRemove(confirmDelete.path);
               setConfirmDelete(null);

@@ -14,7 +14,7 @@ import { addManyReferenceOps, clearStringOps, removeFromArrayOps, setStringOps }
 import { collectInstances, type InstanceRef } from '../model/instance';
 import { Link2, Plus, Trash2, TriangleAlert } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
-import type { SendOps } from './fields';
+import type { EditControls } from './fields';
 
 interface ReferenceBlockProps {
   descriptor: Descriptor;
@@ -23,8 +23,10 @@ interface ReferenceBlockProps {
   elementPath: Path;
   eClass: string;
   desc: ReferenceDesc;
-  sendOps: SendOps;
   onSelectPath: (path: Path) => void;
+  /** References are stored as id strings, but a write here is still computed
+      from the live document — so it is gated like any structural edit. */
+  edit: EditControls;
 }
 
 function optionLabel(instance: InstanceRef): string {
@@ -38,8 +40,8 @@ export function ReferenceBlock({
   elementPath,
   eClass,
   desc,
-  sendOps,
   onSelectPath,
+  edit,
 }: ReferenceBlockProps) {
   const label = `${eClass}.${desc.name}`;
   // Only instances carrying an id can be referenced at all.
@@ -72,11 +74,13 @@ export function ReferenceBlock({
             className="me-select"
             aria-label={label}
             value={current}
+            disabled={!edit.structureEnabled}
+            title={edit.structureReason ?? undefined}
             onChange={(event) => {
               const id = event.target.value;
               const ops = id === '' ? clearStringOps(path, current) : setStringOps(path, current, id);
               if (ops.length > 0) {
-                void sendOps(`set ${label} → ${id === '' ? '(none)' : id}`, ops, { path, value: id });
+                void edit.runStructural(`set ${label} → ${id === '' ? '(none)' : id}`, ops, { path, value: id });
               }
             }}
           >
@@ -138,11 +142,12 @@ export function ReferenceBlock({
                 )}
                 <button
                   type="button"
-                  className="me-iconbtn"
+                  className={edit.structureEnabled ? 'me-iconbtn' : 'me-iconbtn me-held'}
                   aria-label={`Remove ${label}[${index}]`}
-                  title="Remove"
+                  disabled={!edit.structureEnabled}
+                  title={edit.structureReason ?? 'Remove'}
                   onClick={() =>
-                    void sendOps(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
+                    void edit.runStructural(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
                       path: arrayPath,
                       value: ids.filter((_, i) => i !== index),
                     })
@@ -157,8 +162,10 @@ export function ReferenceBlock({
         {addable.length > 0 ? (
           <ManyReferenceAdd
             addable={addable}
+            disabled={!edit.structureEnabled}
+            disabledReason={edit.structureReason}
             onAdd={(id) =>
-              void sendOps(
+              void edit.runStructural(
                 `add ${label}[${ids.length}] → ${id}`,
                 addManyReferenceOps(arrayPath, ids.length, id),
                 { path: arrayPath, value: [...ids, id] },
@@ -176,9 +183,11 @@ export function ReferenceBlock({
 interface ManyReferenceAddProps {
   addable: InstanceRef[];
   onAdd: (id: string) => void;
+  disabled: boolean;
+  disabledReason: string | null;
 }
 
-function ManyReferenceAdd({ addable, onAdd }: ManyReferenceAddProps) {
+function ManyReferenceAdd({ addable, onAdd, disabled, disabledReason }: ManyReferenceAddProps) {
   const [choice, setChoice] = useState('');
   const selected = addable.some((i) => i.id === choice) ? choice : addable[0].id;
   return (
@@ -187,6 +196,8 @@ function ManyReferenceAdd({ addable, onAdd }: ManyReferenceAddProps) {
         className="me-select"
         aria-label="Reference to add"
         value={selected}
+        disabled={disabled}
+        title={disabledReason ?? undefined}
         onChange={(e) => setChoice(e.target.value)}
       >
         {addable.map((instance) => (
@@ -195,7 +206,13 @@ function ManyReferenceAdd({ addable, onAdd }: ManyReferenceAddProps) {
           </option>
         ))}
       </select>
-      <button type="button" className="me-btn" onClick={() => onAdd(selected)}>
+      <button
+        type="button"
+        className={disabled ? 'me-btn me-held' : 'me-btn'}
+        disabled={disabled}
+        title={disabledReason ?? undefined}
+        onClick={() => onAdd(selected)}
+      >
         <Plus {...ICON} size={14} aria-hidden="true" />
         Add
       </button>

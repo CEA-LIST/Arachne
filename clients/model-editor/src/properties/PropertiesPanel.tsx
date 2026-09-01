@@ -14,12 +14,12 @@ import { getAtPath } from '../crdt/path';
 import { removeFromArrayOps } from '../crdt/ops';
 import { flattenFeatures, idAttributeOf, isPresent, labelFor } from '../model/instance';
 import type { FieldRegistry } from '../sync/fieldRegistry';
-import { Box, Copy, MousePointerClick, Plug, Trash2, TriangleAlert } from '../ui/icons';
+import { Box, Copy, Hourglass, MousePointerClick, Plug, Trash2, TriangleAlert } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { AttributeRow } from './AttributeRow';
 import { ContainmentBlock } from './ContainmentBlock';
 import { ReferenceBlock } from './ReferenceBlock';
-import type { SendOps } from './fields';
+import type { EditControls } from './fields';
 
 interface PropertiesPanelProps {
   descriptor: Descriptor | null;
@@ -27,14 +27,13 @@ interface PropertiesPanelProps {
   connected: boolean;
   path: Path;
   registry: FieldRegistry;
-  sendOps: SendOps;
+  /** Senders plus the edit gate (ui/editGate.ts). */
+  edit: EditControls;
   onSelectPath: (path: Path) => void;
   formRef: RefObject<HTMLDivElement | null>;
   idInputRef: RefObject<HTMLInputElement | null>;
   /** syncView().detail while the replica has stopped answering. */
   staleNotice: string | null;
-  /** Operations are in flight: reorder is held back until they land. */
-  busy: boolean;
   onOpenConnect: () => void;
 }
 
@@ -108,12 +107,11 @@ export function PropertiesPanel({
   connected,
   path,
   registry,
-  sendOps,
+  edit,
   onSelectPath,
   formRef,
   idInputRef,
   staleNotice,
-  busy,
   onOpenConnect,
 }: PropertiesPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -181,12 +179,18 @@ export function PropertiesPanel({
         {removable && (
           <button
             type="button"
-            className="me-btn me-btn--sm me-noprint"
+            className={
+              edit.structureEnabled
+                ? 'me-btn me-btn--sm me-noprint'
+                : 'me-btn me-btn--sm me-noprint me-held'
+            }
+            disabled={!edit.structureEnabled}
+            title={edit.structureReason ?? undefined}
             onClick={() => {
               const arrayPath = path.slice(0, -1);
               const siblings = getAtPath(doc, arrayPath);
               onSelectPath(arrayPath.slice(0, -1));
-              void sendOps(
+              void edit.runStructural(
                 `remove element at /${path.join('/')}`,
                 removeFromArrayOps(arrayPath, arrayIndex),
                 Array.isArray(siblings)
@@ -200,6 +204,13 @@ export function PropertiesPanel({
           </button>
         )}
       </header>
+
+      {edit.lock.reason !== null && (
+        <p className="me-props__held" role="status">
+          <Hourglass {...ICON} size={14} aria-hidden="true" />
+          {edit.lock.reason}
+        </p>
+      )}
 
       {staleNotice !== null && (
         <p className="me-props__stale">
@@ -228,7 +239,7 @@ export function PropertiesPanel({
                 eClass={eClass}
                 attr={attr}
                 registry={registry}
-                sendOps={sendOps}
+                edit={edit}
                 idInputRef={
                   idAttr !== null && attr.name === idAttr.name && !attr.many
                     ? (input) => {
@@ -251,9 +262,8 @@ export function PropertiesPanel({
                 elementPath={path}
                 eClass={eClass}
                 desc={desc}
-                sendOps={sendOps}
                 onSelectPath={onSelectPath}
-                busy={busy}
+                edit={edit}
               />
             ))}
           </Section>
@@ -270,8 +280,8 @@ export function PropertiesPanel({
                 elementPath={path}
                 eClass={eClass}
                 desc={desc}
-                sendOps={sendOps}
                 onSelectPath={onSelectPath}
+                edit={edit}
               />
             ))}
           </Section>

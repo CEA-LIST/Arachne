@@ -7,17 +7,21 @@
  * a reorder is delete + full re-create (there is no move op), and "unset"
  * resets a slot to defaults rather than deleting the key.
  *
- * The reorder buttons carry a third caveat, found by driving the real app
- * against a real replica: because a reorder re-creates the child from the
- * client's current view of it, issuing one while operations are still in
- * flight re-creates whatever the queue has half-applied. Measured on the rig:
+ * EVERY control in this card carries a third caveat, found by driving the real
+ * app against a real replica: its ops are computed from the client's current
+ * view — an index, an array length, or, for a reorder, the whole child subtree
+ * that gets deleted and re-created. Issued while the queue is draining, they
+ * are computed from the replica's half-applied state. Measured on the rig:
  * two reorders queued behind a pending string edit turned a populated element
  * into a bare `{}` and dropped its child subtree, with both log rows reporting
- * `ok`; the identical sequence with the queue drained first round-tripped
- * every one of the document's 13 elements. So reorder waits for quiet. The
- * defect itself is below this layer (there is no move op on the wire) and is
- * reported rather than papered over — this only stops the UI from firing the
- * gun while the queue is moving.
+ * `ok`; a later sweep destroyed an element using add/remove alone during the
+ * same window. The identical sequences with the queue drained first round-trip
+ * every element. So the card is gated (ui/editGate.ts): add / remove / unset
+ * wait for no structural batch to be in flight, and the two reorder buttons —
+ * which copy a whole subtree out of the local document — wait for a completely
+ * silent queue. The defect itself is below this layer — there is no move op on
+ * the wire — and is reported rather than papered over; this only stops the UI
+ * from firing the gun while the queue is moving.
  */
 
 import type { ContainmentDesc, Descriptor, Path, PlainJson } from '../api/types';
@@ -33,7 +37,7 @@ import { concreteSubtypes, isPresent, labelFor } from '../model/instance';
 import { ArrowDown, ArrowUp, Box, Folder, Trash2, TriangleAlert, Unlink } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { AddControl } from './AddControl';
-import type { SendOps } from './fields';
+import type { EditControls } from './fields';
 
 interface ContainmentBlockProps {
   descriptor: Descriptor;
@@ -41,14 +45,10 @@ interface ContainmentBlockProps {
   elementPath: Path;
   eClass: string;
   desc: ContainmentDesc;
-  sendOps: SendOps;
   onSelectPath: (path: Path) => void;
-  /** True while operations are in flight: reorder is unsafe until they land. */
-  busy: boolean;
+  /** Senders and the edit gate: every control here is structural. */
+  edit: EditControls;
 }
-
-const REORDER_BUSY_TITLE =
-  'Waiting for the replica — reorder re-creates the element, so it is only safe once every queued operation has been acknowledged';
 
 export function ContainmentBlock({
   descriptor,
@@ -56,9 +56,8 @@ export function ContainmentBlock({
   elementPath,
   eClass,
   desc,
-  sendOps,
   onSelectPath,
-  busy,
+  edit,
 }: ContainmentBlockProps) {
   const label = `${eClass}.${desc.name}`;
   const options = concreteSubtypes(descriptor, desc.target);
@@ -99,12 +98,16 @@ export function ContainmentBlock({
               </button>
               <button
                 type="button"
-                className="me-iconbtn"
+                className={edit.structureEnabled ? 'me-iconbtn' : 'me-iconbtn me-held'}
                 aria-label={`Unset ${desc.name}`}
-                title="Unset — resets the slot to defaults; the key remains in the serialized state"
+                disabled={!edit.structureEnabled}
+                title={
+                  edit.structureReason ??
+                  'Unset — resets the slot to defaults; the key remains in the serialized state'
+                }
                 onClick={() => {
                   onSelectPath(elementPath);
-                  void sendOps(`unset ${label}`, unsetFeatureOps(elementPath, desc.name), {
+                  void edit.runStructural(`unset ${label}`, unsetFeatureOps(elementPath, desc.name), {
                     path: childPath,
                     value: { eClass: '' },
                   });
@@ -121,8 +124,10 @@ export function ContainmentBlock({
               <AddControl
                 options={options}
                 verb="Create"
+                disabled={!edit.structureEnabled}
+                disabledReason={edit.structureReason}
                 onAdd={(cls) =>
-                  void sendOps(
+                  void edit.runStructural(
                     `create ${cls} in ${label}`,
                     createSingleContainmentOps(elementPath, desc.name, cls),
                     { path: childPath, value: { eClass: cls } },
@@ -162,17 +167,16 @@ export function ContainmentBlock({
               </button>
               <button
                 type="button"
-                className="me-iconbtn"
+                className={edit.reorderEnabled ? 'me-iconbtn' : 'me-iconbtn me-held'}
                 aria-label={`Move ${label}[${index}] up`}
                 title={
-                  busy
-                    ? REORDER_BUSY_TITLE
-                    : 'Move up — sent as delete + re-create: the wire has no move op'
+                  edit.reorderReason ??
+                  'Move up — sent as delete + re-create: the wire has no move op'
                 }
-                disabled={index === 0 || busy}
+                disabled={index === 0 || !edit.reorderEnabled}
                 onClick={() => {
                   onSelectPath(elementPath);
-                  void sendOps(
+                  void edit.runStructural(
                     `move ${label}[${index}] up`,
                     reorderArrayOps(arrayPath, index, index - 1, child),
                   );
@@ -182,17 +186,16 @@ export function ContainmentBlock({
               </button>
               <button
                 type="button"
-                className="me-iconbtn"
+                className={edit.reorderEnabled ? 'me-iconbtn' : 'me-iconbtn me-held'}
                 aria-label={`Move ${label}[${index}] down`}
                 title={
-                  busy
-                    ? REORDER_BUSY_TITLE
-                    : 'Move down — sent as delete + re-create: the wire has no move op'
+                  edit.reorderReason ??
+                  'Move down — sent as delete + re-create: the wire has no move op'
                 }
-                disabled={index === children.length - 1 || busy}
+                disabled={index === children.length - 1 || !edit.reorderEnabled}
                 onClick={() => {
                   onSelectPath(elementPath);
-                  void sendOps(
+                  void edit.runStructural(
                     `move ${label}[${index}] down`,
                     reorderArrayOps(arrayPath, index, index + 1, child),
                   );
@@ -202,12 +205,17 @@ export function ContainmentBlock({
               </button>
               <button
                 type="button"
-                className="me-iconbtn me-iconbtn--danger"
+                className={
+                  edit.structureEnabled
+                    ? 'me-iconbtn me-iconbtn--danger'
+                    : 'me-iconbtn me-iconbtn--danger me-held'
+                }
                 aria-label={`Remove ${label}[${index}]`}
-                title="Remove"
+                disabled={!edit.structureEnabled}
+                title={edit.structureReason ?? 'Remove'}
                 onClick={() => {
                   onSelectPath(elementPath);
-                  void sendOps(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
+                  void edit.runStructural(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
                     path: arrayPath,
                     value: children.filter((_, i) => i !== index),
                   });
@@ -223,8 +231,10 @@ export function ContainmentBlock({
           <AddControl
             options={options}
             verb="Add"
+            disabled={!edit.structureEnabled}
+            disabledReason={edit.structureReason}
             onAdd={(cls) =>
-              void sendOps(
+              void edit.runStructural(
                 `add ${cls} to ${label}[${children.length}]`,
                 addChildOps(arrayPath, children.length, cls),
                 { path: arrayPath, value: [...children, { eClass: cls }] },

@@ -42,6 +42,9 @@ interface ExplorerPanelProps {
   onAddChild: (elementPath: Path, feature: ContainmentDesc, className: string) => void;
   onRemove: (path: Path) => void;
   onCreateRoot: (className: string) => void;
+  /** False while the edit gate holds structural edits (ui/editGate.ts). */
+  structureEnabled: boolean;
+  structureReason: string | null;
   onActivate: () => void;
   onRename: () => void;
   onRowCount: (count: number) => void;
@@ -66,6 +69,8 @@ export function ExplorerPanel({
   onAddChild,
   onRemove,
   onCreateRoot,
+  structureEnabled,
+  structureReason,
   onActivate,
   onRename,
   onRowCount,
@@ -174,6 +179,8 @@ export function ExplorerPanel({
                   options={rootCandidates(descriptor)}
                   verb="Create root"
                   primary
+                  disabled={!structureEnabled}
+                  disabledReason={structureReason}
                   onAdd={onCreateRoot}
                 />
               </EmptyState>
@@ -202,6 +209,8 @@ export function ExplorerPanel({
                 filter={filter}
                 onAddChild={onAddChild}
                 onRemove={onRemove}
+                structureEnabled={structureEnabled}
+                structureReason={structureReason}
                 onActivate={onActivate}
                 onRename={onRename}
                 onRowCount={onRowCount}

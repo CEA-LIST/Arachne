@@ -20,6 +20,9 @@ interface TreeRowProps {
   treeFocused: boolean;
   filter: string;
   addOptions: MenuItem[];
+  /** False while the edit gate holds structural edits (ui/editGate.ts). */
+  structureEnabled: boolean;
+  structureReason: string | null;
   onSelect: (row: Row) => void;
   onToggle: (row: Row) => void;
   onAdd: (row: Row, optionId: string) => void;
@@ -76,6 +79,8 @@ export function TreeRow({
   treeFocused,
   filter,
   addOptions,
+  structureEnabled,
+  structureReason,
   onSelect,
   onToggle,
   onAdd,
@@ -156,9 +161,10 @@ export function TreeRow({
             <button
               type="button"
               tabIndex={-1}
-              className="me-iconbtn"
+              className={structureEnabled ? 'me-iconbtn' : 'me-iconbtn me-held'}
               aria-label={`Add to ${row.label}`}
-              title={`Add to ${row.label}`}
+              disabled={!structureEnabled}
+              title={structureReason ?? `Add to ${row.label}`}
               onClick={(event) => {
                 event.stopPropagation();
                 if (addOptions.length === 1) onAdd(row, addOptions[0].id);
@@ -183,9 +189,14 @@ export function TreeRow({
           <button
             type="button"
             tabIndex={-1}
-            className="me-iconbtn me-iconbtn--danger"
+            className={
+              structureEnabled
+                ? 'me-iconbtn me-iconbtn--danger'
+                : 'me-iconbtn me-iconbtn--danger me-held'
+            }
             aria-label={`Remove ${row.label}`}
-            title={`Remove ${row.label}`}
+            disabled={!structureEnabled}
+            title={structureReason ?? `Remove ${row.label}`}
             onClick={(event) => {
               event.stopPropagation();
               onRemove(row);

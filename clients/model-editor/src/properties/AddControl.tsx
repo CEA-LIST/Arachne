@@ -17,20 +17,39 @@ interface AddControlProps {
   verb: string;
   onAdd: (className: string) => void;
   primary?: boolean;
+  /** Held by the edit gate: adding computes an index from the live document. */
+  disabled?: boolean;
+  /** The gate's sentence, as the control's title. */
+  disabledReason?: string | null;
 }
 
-export function AddControl({ options, verb, onAdd, primary }: AddControlProps) {
+export function AddControl({
+  options,
+  verb,
+  onAdd,
+  primary,
+  disabled = false,
+  disabledReason = null,
+}: AddControlProps) {
   const [open, setOpen] = useState(false);
 
   if (options.length === 0) {
     return <p className="me-muted">No concrete class can be instantiated here.</p>;
   }
 
-  const className = primary === true ? 'me-btn me-btn--primary' : 'me-btn';
+  const base = primary === true ? 'me-btn me-btn--primary' : 'me-btn';
+  const className = disabled ? `${base} me-held` : base;
+  const title = disabledReason ?? undefined;
 
   if (options.length === 1) {
     return (
-      <button type="button" className={className} onClick={() => onAdd(options[0])}>
+      <button
+        type="button"
+        className={className}
+        disabled={disabled}
+        title={title}
+        onClick={() => onAdd(options[0])}
+      >
         <Plus {...ICON} size={14} aria-hidden="true" />
         {verb} {options[0]}
       </button>
@@ -42,6 +61,8 @@ export function AddControl({ options, verb, onAdd, primary }: AddControlProps) {
       <button
         type="button"
         className={className}
+        disabled={disabled}
+        title={title}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}

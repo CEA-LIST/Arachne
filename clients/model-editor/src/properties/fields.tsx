@@ -20,6 +20,13 @@
  * Each field owns a small state slot (pending dot -> check -> danger dot with
  * the node's own message and a Retry). Per-field truth, no modal, no layout
  * shift — the redesign's "visible but calm" rule.
+ *
+ * `locked` (from ui/editGate.ts) holds a field while a STRUCTURAL batch is in
+ * flight — while the element this field belongs to may be being deleted and
+ * re-created on the replica, a value diff computed against the half-applied
+ * document is corrupt. It is never set by the field's own typing: fields would
+ * otherwise lock themselves mid-word, since each character is an op. A pending
+ * debounce that comes due while locked reschedules rather than sending.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -42,6 +49,39 @@ export type SendOps = (
 ) => Promise<BatchOutcome>;
 
 type FieldStatus = 'idle' | 'pending' | 'ok' | 'error';
+
+/** What every input needs to know about the edit gate. */
+export interface FieldLock {
+  /** True while a structural batch is in flight: no value may be committed. */
+  locked: boolean;
+  /** The gate's own sentence, shown as the control's title. */
+  reason: string | null;
+}
+
+/* Module-local, deliberately not exported: every caller passes the gate's own
+   lock, and exporting a value from this file would break its fast-refresh
+   boundary (it exports components). */
+const UNLOCKED: FieldLock = { locked: false, reason: null };
+
+/**
+ * What the form needs from the edit gate, in one prop.
+ *
+ * Two senders, deliberately: value commits go straight through, structural
+ * batches (add / remove / reorder / reference writes) go through the session so
+ * their size is known and their wait is measured.
+ */
+export interface EditControls {
+  sendOps: SendOps;
+  runStructural: SendOps;
+  /** Applies to value fields. */
+  lock: FieldLock;
+  /** Index edits: add, remove, unset, reference writes. */
+  structureEnabled: boolean;
+  structureReason: string | null;
+  /** Subtree-snapshot edits: reorder. Stricter — needs a silent queue. */
+  reorderEnabled: boolean;
+  reorderReason: string | null;
+}
 
 interface FieldStateSlotProps {
   status: FieldStatus;
@@ -119,6 +159,7 @@ interface SyncedTextInputProps {
   sendOps: SendOps;
   placeholder?: string;
   inputRef?: (element: HTMLInputElement | null) => void;
+  lock?: FieldLock;
 }
 
 export function SyncedTextInput({
@@ -129,8 +170,11 @@ export function SyncedTextInput({
   sendOps,
   placeholder,
   inputRef: exposeRef,
+  lock = UNLOCKED,
 }: SyncedTextInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const lockedRef = useRef(lock.locked);
+  lockedRef.current = lock.locked;
   const [localValue, setLocalValue] = useState(remoteValue);
   const localRef = useRef(localValue);
   localRef.current = localValue;
@@ -157,6 +201,14 @@ export function SyncedTextInput({
     const target = localRef.current;
     const baseline = baselineRef.current;
     if (target === baseline) return;
+    if (lockedRef.current) {
+      // A structural batch is rebuilding this element on the replica: diffing
+      // against the half-applied document would corrupt it. Try again shortly;
+      // the typed text is not lost, and unmount clears this timer.
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => void flush(), DEBOUNCE_MS);
+      return;
+    }
     const ops = setStringOps(path, baseline, target);
     flushingRef.current = true;
     begin();
@@ -228,6 +280,8 @@ export function SyncedTextInput({
         type="text"
         value={localValue}
         placeholder={placeholder}
+        readOnly={lock.locked}
+        title={lock.reason ?? undefined}
         onChange={(e) => {
           setLocalValue(e.target.value);
           lastEditAtRef.current = Date.now();
@@ -264,10 +318,18 @@ interface NumberInputProps {
   remoteValue: number;
   sendOps: SendOps;
   integer?: boolean;
+  lock?: FieldLock;
 }
 
 /** Numbers commit on blur/Enter only, as a single relative Inc. */
-export function NumberInput({ path, label, remoteValue, sendOps, integer }: NumberInputProps) {
+export function NumberInput({
+  path,
+  label,
+  remoteValue,
+  sendOps,
+  integer,
+  lock = UNLOCKED,
+}: NumberInputProps) {
   const [text, setText] = useState(String(remoteValue));
   const editingRef = useRef(false);
   const { status, message, begin, settle } = useFieldStatus();
@@ -277,6 +339,7 @@ export function NumberInput({ path, label, remoteValue, sendOps, integer }: Numb
   }, [remoteValue]);
 
   const commit = useCallback(() => {
+    if (lock.locked) return;
     editingRef.current = false;
     const parsed = integer === true ? parseInt(text, 10) : parseFloat(text);
     if (Number.isNaN(parsed)) {
@@ -289,7 +352,7 @@ export function NumberInput({ path, label, remoteValue, sendOps, integer }: Numb
       void sendOps(`set ${label} = ${parsed}`, ops, { path, value: parsed }).then(settle);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, remoteValue, integer, label, sendOps, pathKey(path), begin, settle]);
+  }, [text, remoteValue, integer, label, sendOps, pathKey(path), begin, settle, lock.locked]);
 
   return (
     <span className="me-field__wrap">
@@ -297,7 +360,10 @@ export function NumberInput({ path, label, remoteValue, sendOps, integer }: Numb
         className="me-input me-input--num"
         type="number"
         step={integer === true ? 1 : 'any'}
-        title="Sent as a relative Inc: the wire has no absolute set for numbers."
+        readOnly={lock.locked}
+        title={
+          lock.reason ?? 'Sent as a relative Inc: the wire has no absolute set for numbers.'
+        }
         value={text}
         onChange={(e) => {
           editingRef.current = true;
@@ -324,16 +390,18 @@ interface BoolInputProps {
   label: string;
   remoteValue: boolean;
   sendOps: SendOps;
+  lock?: FieldLock;
 }
 
-export function BoolInput({ path, label, remoteValue, sendOps }: BoolInputProps) {
+export function BoolInput({ path, label, remoteValue, sendOps, lock = UNLOCKED }: BoolInputProps) {
   const { status, message, begin, settle } = useFieldStatus();
   return (
     <span className="me-field__wrap">
-      <label className="me-switch">
+      <label className="me-switch" title={lock.reason ?? undefined}>
         <input
           type="checkbox"
           checked={remoteValue}
+          disabled={lock.locked}
           onChange={(e) => {
             const next = e.target.checked;
             begin();
@@ -357,16 +425,27 @@ interface EnumSelectProps {
   remoteValue: string;
   literals: string[];
   sendOps: SendOps;
+  lock?: FieldLock;
 }
 
 /** Enums are strings on the wire: the select commits a full string diff. */
-export function EnumSelect({ path, label, remoteValue, literals, sendOps }: EnumSelectProps) {
+export function EnumSelect({
+  path,
+  label,
+  remoteValue,
+  literals,
+  sendOps,
+  lock = UNLOCKED,
+}: EnumSelectProps) {
   const { status, message, begin, settle } = useFieldStatus();
   return (
     <span className="me-field__wrap">
       <select
         className="me-select"
+        aria-label={label}
         value={remoteValue}
+        disabled={lock.locked}
+        title={lock.reason ?? undefined}
         onChange={(e) => {
           const next = e.target.value;
           begin();

@@ -14,7 +14,7 @@ import { attributeValue, defaultForKind } from '../model/instance';
 import type { FieldRegistry } from '../sync/fieldRegistry';
 import { Key, Plus, Trash2 } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
-import { BoolInput, EnumSelect, NumberInput, SyncedTextInput, type SendOps } from './fields';
+import { BoolInput, EnumSelect, NumberInput, SyncedTextInput, type EditControls } from './fields';
 
 /** The 11px chip after a feature name: its declared type, in wire terms. */
 function typeChip(attr: AttributeDesc): string {
@@ -29,7 +29,7 @@ interface AttributeRowProps {
   eClass: string;
   attr: AttributeDesc;
   registry: FieldRegistry;
-  sendOps: SendOps;
+  edit: EditControls;
   /** Set on the element's id/name attribute so F2 can reach it. */
   idInputRef?: (element: HTMLInputElement | null) => void;
 }
@@ -41,7 +41,7 @@ export function AttributeRow({
   eClass,
   attr,
   registry,
-  sendOps,
+  edit,
   idInputRef,
 }: AttributeRowProps) {
   const label = `${eClass}.${attr.name}`;
@@ -75,7 +75,7 @@ export function AttributeRow({
             label={label}
             attr={attr}
             registry={registry}
-            sendOps={sendOps}
+            edit={edit}
           />
         ) : (
           <AttributeInput
@@ -85,7 +85,7 @@ export function AttributeRow({
             attr={attr}
             value={attributeValue(element, attr)}
             registry={registry}
-            sendOps={sendOps}
+            edit={edit}
             inputRef={idInputRef}
           />
         )}
@@ -101,7 +101,7 @@ interface AttributeInputProps {
   attr: AttributeDesc;
   value: string | number | boolean;
   registry: FieldRegistry;
-  sendOps: SendOps;
+  edit: EditControls;
   inputRef?: (element: HTMLInputElement | null) => void;
 }
 
@@ -112,7 +112,7 @@ function AttributeInput({
   attr,
   value,
   registry,
-  sendOps,
+  edit,
   inputRef,
 }: AttributeInputProps) {
   switch (attr.kind) {
@@ -123,12 +123,21 @@ function AttributeInput({
           path={path}
           label={label}
           remoteValue={typeof value === 'number' ? value : 0}
-          sendOps={sendOps}
+          sendOps={edit.sendOps}
           integer={attr.kind === 'int'}
+          lock={edit.lock}
         />
       );
     case 'bool':
-      return <BoolInput path={path} label={label} remoteValue={value === true} sendOps={sendOps} />;
+      return (
+        <BoolInput
+          path={path}
+          label={label}
+          remoteValue={value === true}
+          sendOps={edit.sendOps}
+          lock={edit.lock}
+        />
+      );
     case 'enum':
       return (
         <EnumSelect
@@ -136,7 +145,8 @@ function AttributeInput({
           label={label}
           remoteValue={typeof value === 'string' ? value : ''}
           literals={descriptor.enums[attr.enum ?? ''] ?? []}
-          sendOps={sendOps}
+          sendOps={edit.sendOps}
+          lock={edit.lock}
         />
       );
     default:
@@ -146,8 +156,9 @@ function AttributeInput({
           label={label}
           remoteValue={typeof value === 'string' ? value : ''}
           registry={registry}
-          sendOps={sendOps}
+          sendOps={edit.sendOps}
           inputRef={inputRef}
+          lock={edit.lock}
         />
       );
   }
@@ -160,7 +171,7 @@ interface ManyAttributeValuesProps {
   label: string;
   attr: AttributeDesc;
   registry: FieldRegistry;
-  sendOps: SendOps;
+  edit: EditControls;
 }
 
 function ManyAttributeValues({
@@ -170,14 +181,14 @@ function ManyAttributeValues({
   label,
   attr,
   registry,
-  sendOps,
+  edit,
 }: ManyAttributeValuesProps) {
   const arrayPath = [...elementPath, attr.name];
   const raw = element[attr.name];
   const values = Array.isArray(raw) ? raw : [];
 
   const addEntry = () =>
-    void sendOps(
+    void edit.runStructural(
       `add ${label}[${values.length}]`,
       insertIntoArrayOps(arrayPath, values.length, defaultForKind(attr.kind)),
       { path: arrayPath, value: [...values, defaultForKind(attr.kind)] },
@@ -198,15 +209,20 @@ function ManyAttributeValues({
                 : defaultForKind(attr.kind)
             }
             registry={registry}
-            sendOps={sendOps}
+            edit={edit}
           />
           <button
             type="button"
-            className="me-iconbtn me-iconbtn--danger"
+            className={
+              edit.structureEnabled
+                ? 'me-iconbtn me-iconbtn--danger'
+                : 'me-iconbtn me-iconbtn--danger me-held'
+            }
             aria-label={`Remove ${label}[${index}]`}
-            title="Remove"
+            disabled={!edit.structureEnabled}
+            title={edit.structureReason ?? 'Remove'}
             onClick={() =>
-              void sendOps(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
+              void edit.runStructural(`remove ${label}[${index}]`, removeFromArrayOps(arrayPath, index), {
                 path: arrayPath,
                 value: values.filter((_, i) => i !== index),
               })
@@ -218,7 +234,11 @@ function ManyAttributeValues({
       ))}
       <button
         type="button"
-        className="me-btn me-btn--sm me-many__add"
+        className={
+          edit.structureEnabled ? 'me-btn me-btn--sm me-many__add' : 'me-btn me-btn--sm me-many__add me-held'
+        }
+        disabled={!edit.structureEnabled}
+        title={edit.structureReason ?? undefined}
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') addEntry();
         }}

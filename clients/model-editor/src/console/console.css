@@ -207,3 +207,24 @@
   white-space: pre;
   overflow: auto;
 }
+
+/* The batch in flight has no log row yet — a row is appended when the whole
+   batch resolves, which on this wire can be a minute away. */
+.me-log__running {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-accent-weak);
+}
+
+.me-log__running .me-flush {
+  flex: 1;
+  min-width: 0;
+}
+
+.me-log__pill--running {
+  background: var(--c-bg);
+  color: var(--c-accent-2);
+}

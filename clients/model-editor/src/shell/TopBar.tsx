@@ -7,6 +7,8 @@
  */
 
 import type { AppState } from '../state/store';
+import type { FlushProgress } from '../ui/editGate';
+import { FlushBar } from '../ui/FlushBar';
 import { Cpu, Keyboard } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import type { SyncView } from '../ui/syncState';
@@ -23,6 +25,8 @@ interface TopBarProps {
   view: SyncView;
   connectOpen: boolean;
   setConnectOpen: (open: boolean) => void;
+  /** Non-null while a structural batch is being applied. */
+  progress: FlushProgress | null;
   onShowHelp: () => void;
 }
 
@@ -36,6 +40,7 @@ export function TopBar({
   view,
   connectOpen,
   setConnectOpen,
+  progress,
   onShowHelp,
 }: TopBarProps) {
   const { connection, metamodel, metamodelSource, pendingOps } = state;
@@ -63,10 +68,16 @@ export function TopBar({
 
       <div className="me-topbar__spacer" />
 
-      {pendingOps > 0 && (
-        <span className="me-chip me-chip--accent me-num">
-          {pendingOps} op{pendingOps === 1 ? '' : 's'} queued
-        </span>
+      {/* A batch whose size we know gets a measured bar; a stray queued op
+          (a character being flushed) gets the count it deserves and no more. */}
+      {progress !== null ? (
+        <FlushBar progress={progress} compact />
+      ) : (
+        pendingOps > 0 && (
+          <span className="me-chip me-chip--accent me-num">
+            {pendingOps} op{pendingOps === 1 ? '' : 's'} queued
+          </span>
+        )
       )}
       <SyncChip view={view} onRetry={connect} />
       {connected && connection.replicaId !== null && (

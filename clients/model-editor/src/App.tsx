@@ -17,6 +17,7 @@ import { addChildOps, createRootOps, createSingleContainmentOps, removeFromArray
 import { getAtPath } from './crdt/path';
 import { ExplorerPanel, type ExplorerTab } from './explorer/ExplorerPanel';
 import { isPresent } from './model/instance';
+import type { EditControls } from './properties/fields';
 import { PropertiesPanel } from './properties/PropertiesPanel';
 import { AlertDock } from './shell/AlertDock';
 import { TopBar } from './shell/TopBar';
@@ -26,6 +27,7 @@ import { ICON } from './ui/iconProps';
 import { Popover } from './ui/Popover';
 import { Resizer } from './ui/Resizer';
 import { syncView } from './ui/syncState';
+import { useEditSession } from './ui/useEditSession';
 import { useNow } from './ui/useNow';
 import { usePanelSize } from './ui/usePanelSize';
 
@@ -58,6 +60,40 @@ export default function App() {
   const view = useMemo(
     () => syncView(state, sync.pollMs, now),
     [state, sync.pollMs, now],
+  );
+
+  // Which edits may run right now, and how far the batch in flight has got.
+  // The rule and the data-loss defect behind it: ui/editGate.ts.
+  const edit = useEditSession(sync, now);
+  const {
+    runStructural,
+    canEditStructure,
+    canReorder,
+    canEditValues,
+    structureHeldReason,
+    reorderHeldReason,
+    valuesHeldReason,
+  } = edit;
+  const controls: EditControls = useMemo(
+    () => ({
+      sendOps: sync.sendOps,
+      runStructural,
+      lock: { locked: !canEditValues, reason: valuesHeldReason },
+      structureEnabled: canEditStructure,
+      structureReason: structureHeldReason,
+      reorderEnabled: canReorder,
+      reorderReason: reorderHeldReason,
+    }),
+    [
+      sync.sendOps,
+      runStructural,
+      canEditValues,
+      valuesHeldReason,
+      canEditStructure,
+      structureHeldReason,
+      canReorder,
+      reorderHeldReason,
+    ],
   );
 
   const [selectedPath, setSelectedPath] = useState<Path>([]);
@@ -113,45 +149,50 @@ export default function App() {
 
   const onCreateRoot = useCallback(
     (className: string) => {
-      void sync.sendOps(`create root ${className}`, createRootOps(className), {
+      if (!canEditStructure) return;
+      void runStructural(`create root ${className}`, createRootOps(className), {
         path: [],
         value: { eClass: className },
       });
     },
-    [sync],
+    [runStructural, canEditStructure],
   );
 
   const onAddChild = useCallback(
     (elementPath: Path, feature: ContainmentDesc, className: string) => {
+      // Every branch below computes its ops from the CURRENT document (the
+      // array's length, the slot's occupancy). Never while the queue moves.
+      if (!canEditStructure) return;
       const label = `${feature.name}`;
       if (feature.many) {
         const arrayPath = [...elementPath, feature.name];
         const raw = getAtPath(state.doc, arrayPath);
         const children = Array.isArray(raw) ? raw : [];
-        void sync.sendOps(
+        void runStructural(
           `add ${className} to ${label}[${children.length}]`,
           addChildOps(arrayPath, children.length, className),
           { path: arrayPath, value: [...children, { eClass: className }] },
         );
       } else {
-        void sync.sendOps(
+        void runStructural(
           `create ${className} in ${label}`,
           createSingleContainmentOps(elementPath, feature.name, className),
           { path: [...elementPath, feature.name], value: { eClass: className } },
         );
       }
     },
-    [sync, state.doc],
+    [runStructural, canEditStructure, state.doc],
   );
 
   const onRemoveElement = useCallback(
     (path: Path) => {
+      if (!canEditStructure) return;
       const index = path[path.length - 1];
       if (typeof index !== 'number') return;
       const arrayPath = path.slice(0, -1);
       const siblings = getAtPath(state.doc, arrayPath);
       setSelectedPath(arrayPath.slice(0, -1));
-      void sync.sendOps(
+      void runStructural(
         `remove element at /${path.join('/')}`,
         removeFromArrayOps(arrayPath, index),
         Array.isArray(siblings)
@@ -159,7 +200,7 @@ export default function App() {
           : undefined,
       );
     },
-    [sync, state.doc],
+    [runStructural, canEditStructure, state.doc],
   );
 
   const focusForm = useCallback(() => {
@@ -224,6 +265,7 @@ export default function App() {
         view={view}
         connectOpen={connectOpen}
         setConnectOpen={setConnectOpen}
+        progress={edit.progress}
         onShowHelp={() => setHelpOpen(true)}
       />
 
@@ -259,6 +301,8 @@ export default function App() {
         onAddChild={onAddChild}
         onRemove={onRemoveElement}
         onCreateRoot={onCreateRoot}
+        structureEnabled={canEditStructure}
+        structureReason={structureHeldReason}
         onActivate={focusForm}
         onRename={() => idInputRef.current?.focus()}
         onRowCount={setVisibleRows}
@@ -280,12 +324,11 @@ export default function App() {
         connected={connected}
         path={effectivePath}
         registry={sync.registry}
-        sendOps={sync.sendOps}
+        edit={controls}
         onSelectPath={setSelectedPath}
         formRef={formRef}
         idInputRef={idInputRef}
         staleNotice={view.kind === 'offline' ? view.detail : null}
-        busy={state.pendingOps > 0}
         onOpenConnect={() => setConnectOpen(true)}
       />
 
@@ -303,6 +346,7 @@ export default function App() {
         maxHeight={consoleMax}
         failuresOnly={failuresOnly}
         setFailuresOnly={setFailuresOnly}
+        progress={edit.progress}
         toggleRef={consoleToggleRef}
       />
 
