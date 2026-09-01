@@ -600,3 +600,90 @@ kbd {
     font-size: 10.5pt;
   }
 }
+
+/* ---------- flush progress: a long batch, said honestly ---------- */
+
+.me-flush {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.me-flush__text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-200);
+  color: var(--c-accent-2);
+}
+
+.me-flush__desc {
+  min-width: 0;
+  color: var(--c-fg);
+}
+
+.me-flush__count {
+  flex: none;
+  color: var(--c-accent-2);
+}
+
+.me-flush__track {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-surface-2);
+  overflow: hidden;
+}
+
+/* In the top bar the batch has to read as one of the status chips, not as
+   text floating above a hairline. */
+.me-flush--compact {
+  width: 132px;
+  align-self: center;
+  padding: 3px var(--sp-2) 4px;
+  border: 1px solid var(--c-accent-weak);
+  border-radius: var(--r-1);
+  background: var(--c-accent-weak);
+}
+
+.me-flush--compact .me-flush__text {
+  font-size: var(--fs-100);
+  justify-content: center;
+}
+
+.me-flush--compact .me-flush__track {
+  background: var(--c-bg);
+}
+
+.me-flush__fill {
+  display: block;
+  height: 100%;
+  background: var(--c-accent);
+  transition: width var(--dur) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .me-flush__fill {
+    transition: none;
+  }
+}
+
+/* A control held back by the edit gate is legible, not greyed into nothing:
+   it still reads as a control, and its title says why it cannot fire. */
+.me-held,
+.me-btn:disabled.me-held,
+.me-iconbtn:disabled.me-held {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* A field held while its element is rebuilt on the replica. */
+.me-input[readonly],
+.me-select:disabled {
+  background: var(--c-surface-2);
+  color: var(--c-fg-muted);
+  cursor: progress;
+}

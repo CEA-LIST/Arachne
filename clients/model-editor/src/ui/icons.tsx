@@ -26,6 +26,7 @@ export {
   FileWarning,
   Folder,
   FolderOpen,
+  Hourglass,
   Key,
   Keyboard,
   Link2,
