@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ApiError, getHealth, getMetamodel, getState, postOp } from '../api/client';
-import type { Descriptor, JsonOp, Path, PlainJson } from '../api/types';
-import { decodeState } from '../crdt/decode';
+import type { Descriptor, JsonOp, ModelHeader, Path, PlainJson } from '../api/types';
+import { MODEL_HEADER_REFUSAL, opTouchesModelHeader } from '../crdt/ops';
 import { setAtPath } from '../crdt/path';
+import { applyModel, describeBinding, isRefusal, sameBinding, type Binding } from '../model/binding';
 import { initialState, reducer, type AppState } from '../state/store';
 import { FieldRegistry } from './fieldRegistry';
 import { OpQueue, type BatchOutcome } from './opQueue';
@@ -31,7 +32,9 @@ export interface SyncApi {
   /**
    * Post an op batch (one edit intent). Logs the attempt with its outcome;
    * refused/error outcomes also raise the error banner. `optimistic` patches
-   * the local doc immediately (the poll reconciles the truth).
+   * the local doc immediately (the poll reconciles the truth). A batch that
+   * would write the model header, or any batch while the binding check
+   * refuses the document, is refused here before anything is posted.
    */
   sendOps: (
     description: string,
@@ -59,15 +62,60 @@ export function useSync(): SyncApi {
 
   const setUrl = useCallback((url: string) => dispatch({ type: 'set-url', url }), []);
 
-  const refreshOnce = useCallback(async (url: string) => {
-    const wire = await getState(url);
-    let doc = decodeState(wire);
-    doc = registry.overlay(doc);
-    dispatch({ type: 'state', doc, ts: Date.now() });
-  }, [registry]);
+  // The binding check's memory (model/binding.ts): the header recorded at the
+  // first apply that carried one, and the last verdict, so a change is
+  // reported once rather than on every poll. Both reset with the connection.
+  const recordedRef = useRef<ModelHeader | null>(null);
+  const bindingRef = useRef<Binding | null>(null);
+
+  /**
+   * One apply: fetch the state, check its binding against `descriptor`, the
+   * one the document would be rendered under, and dispatch the document only
+   * when the check lets it through. Runs on connect and on every poll, since
+   * a header can arrive by transfer after connect.
+   */
+  const refreshOnce = useCallback(
+    async (url: string, descriptor: Descriptor | null) => {
+      const wire = await getState(url);
+      const result = await applyModel(wire, descriptor, recordedRef.current);
+      const changed =
+        bindingRef.current === null || !sameBinding(bindingRef.current, result.binding);
+      bindingRef.current = result.binding;
+      if (changed) dispatch({ type: 'binding', binding: result.binding });
+      const ts = Date.now();
+      if (!result.applied) {
+        // Applies nothing. The view is emptied rather than left showing a
+        // document the log no longer vouches for, and the poll's own clock
+        // still advances so the chip does not call a refusing replica silent.
+        dispatch({ type: 'state', doc: null, ts });
+        if (changed) {
+          dispatch({
+            type: 'log',
+            entry: {
+              id: logIdRef.current++,
+              ts,
+              description: 'apply model',
+              ops: [],
+              outcome: 'refused',
+              detail: result.message,
+            },
+          });
+          dispatch({ type: 'banner', message: result.message });
+        }
+        return;
+      }
+      if (recordedRef.current === null && result.binding.kind !== 'unbound') {
+        recordedRef.current = result.binding.header;
+      }
+      dispatch({ type: 'state', doc: registry.overlay(result.doc), ts });
+    },
+    [registry],
+  );
 
   const connect = useCallback(async () => {
     const url = urlRef.current;
+    recordedRef.current = null;
+    bindingRef.current = null;
     dispatch({ type: 'connecting' });
     try {
       const health = await getHealth(url);
@@ -82,8 +130,9 @@ export function useSync(): SyncApi {
         (count) => dispatch({ type: 'pending', count }),
       );
       // Metamodel discovery: the node serves it, or 404 -> file-load fallback.
+      let descriptor: Descriptor | null = null;
       try {
-        const descriptor = await getMetamodel(url);
+        descriptor = await getMetamodel(url);
         dispatch({ type: 'metamodel', descriptor, source: descriptor ? 'node' : null });
       } catch (err) {
         dispatch({ type: 'metamodel', descriptor: null, source: null });
@@ -92,7 +141,7 @@ export function useSync(): SyncApi {
           message: `metamodel fetch failed: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
-      await refreshOnce(url);
+      await refreshOnce(url, descriptor);
     } catch (err) {
       dispatch({
         type: 'connect-error',
@@ -103,6 +152,8 @@ export function useSync(): SyncApi {
 
   const disconnect = useCallback(() => {
     queueRef.current = null;
+    recordedRef.current = null;
+    bindingRef.current = null;
     dispatch({ type: 'disconnected' });
   }, []);
 
@@ -110,10 +161,13 @@ export function useSync(): SyncApi {
   useEffect(() => {
     if (state.connection.status !== 'connected') return;
     const url = state.connection.url;
+    // The descriptor the document is rendered under: the node's, or a loaded
+    // file. A change re-arms the loop, so the next poll checks against it.
+    const descriptor = state.metamodel;
     const timer = setInterval(() => {
       if (pollingRef.current) return;
       pollingRef.current = true;
-      refreshOnce(url)
+      refreshOnce(url, descriptor)
         .catch((err) => {
           dispatch({
             type: 'banner',
@@ -125,7 +179,7 @@ export function useSync(): SyncApi {
         });
     }, pollMs);
     return () => clearInterval(timer);
-  }, [state.connection.status, state.connection.url, pollMs, refreshOnce]);
+  }, [state.connection.status, state.connection.url, state.metamodel, pollMs, refreshOnce]);
 
   const sendOps = useCallback(
     async (
@@ -133,16 +187,25 @@ export function useSync(): SyncApi {
       ops: JsonOp[],
       optimistic?: { path: Path; value: PlainJson },
     ): Promise<BatchOutcome> => {
-      const queue = queueRef.current;
-      if (queue === null) {
-        const outcome: BatchOutcome = { outcome: 'error', applied: 0, detail: 'not connected' };
+      const refuse = (outcome: BatchOutcome['outcome'], detail: string): BatchOutcome => {
         dispatch({
           type: 'log',
-          entry: { id: logIdRef.current++, ts: Date.now(), description, ops, outcome: 'error', detail: 'not connected' },
+          entry: { id: logIdRef.current++, ts: Date.now(), description, ops, outcome, detail },
         });
-        dispatch({ type: 'banner', message: `${description}: not connected` });
-        return outcome;
-      }
+        dispatch({ type: 'banner', message: `${description}: ${detail}` });
+        return { outcome, applied: 0, detail };
+      };
+      // The funnel: every op the editor posts passes here, so a write into the
+      // model header is refused here too, whatever built it (the builders in
+      // crdt/ops.ts already throw; this is the guard behind them).
+      if (ops.some(opTouchesModelHeader)) return refuse('refused', MODEL_HEADER_REFUSAL);
+      // Nothing may be edited while the binding check refuses the document:
+      // the edit gate holds every control, and this is the same rule at the
+      // wire, for a caller that did not come through a control.
+      const binding = bindingRef.current;
+      if (binding !== null && isRefusal(binding)) return refuse('refused', describeBinding(binding));
+      const queue = queueRef.current;
+      if (queue === null) return refuse('error', 'not connected');
       if (optimistic !== undefined) {
         dispatch({
           type: 'state',

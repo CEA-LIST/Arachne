@@ -32,6 +32,8 @@ interface ExplorerPanelProps {
   loadDescriptorFile: (descriptor: Descriptor) => void;
   doc: PlainJson;
   connected: boolean;
+  /** The binding check's refusal when the document was not applied (model/binding.ts); null otherwise. */
+  refusal: string | null;
   collapsed: ReadonlySet<string>;
   setCollapsed: (update: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void;
   selectedPath: Path;
@@ -59,6 +61,7 @@ export function ExplorerPanel({
   loadDescriptorFile,
   doc,
   connected,
+  refusal,
   collapsed,
   setCollapsed,
   selectedPath,
@@ -153,6 +156,17 @@ export function ExplorerPanel({
               <p className="me-panel__placeholder">
                 Not connected — the model tree appears once a replica answers.
               </p>
+            ) : refusal !== null ? (
+              <EmptyState
+                icon={FileWarning}
+                title="Model not applied"
+                body={refusal}
+                tone="warn"
+              >
+                <button type="button" className="me-btn" onClick={() => setTab('metamodel')}>
+                  Open Metamodel tab
+                </button>
+              </EmptyState>
             ) : descriptor === null ? (
               <EmptyState
                 icon={FileWarning}

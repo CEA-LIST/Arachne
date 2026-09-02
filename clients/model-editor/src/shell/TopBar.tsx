@@ -3,9 +3,12 @@
  *
  * The document-context chip names the metamodel PACKAGE read from the
  * descriptor at runtime, with its provenance (node or file) — the editor never
- * hard-codes what it is editing.
+ * hard-codes what it is editing — and, once a state has been fetched, the
+ * binding check's verdict on the document (model/binding.ts): unbound, bound,
+ * or not applied.
  */
 
+import { bindingLabel, describeBinding, isRefusal } from '../model/binding';
 import type { AppState } from '../state/store';
 import type { FlushProgress } from '../ui/editGate';
 import { FlushBar } from '../ui/FlushBar';
@@ -43,7 +46,7 @@ export function TopBar({
   progress,
   onShowHelp,
 }: TopBarProps) {
-  const { connection, metamodel, metamodelSource, pendingOps } = state;
+  const { connection, metamodel, metamodelSource, pendingOps, binding } = state;
   const connected = connection.status === 'connected';
 
   return (
@@ -63,6 +66,14 @@ export function TopBar({
               {metamodelSource === 'node' ? 'from node' : 'from file'}
             </span>
           </>
+        )}
+        {connected && binding !== null && (
+          <span
+            className={isRefusal(binding) ? 'me-chip me-chip--danger' : 'me-subtle'}
+            title={describeBinding(binding)}
+          >
+            {bindingLabel(binding)}
+          </span>
         )}
       </div>
 

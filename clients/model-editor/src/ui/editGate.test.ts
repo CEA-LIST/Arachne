@@ -16,6 +16,7 @@ function quiet(overrides: Partial<QueueSnapshot> = {}): QueueSnapshot {
     settledAt: null,
     lastSyncAt: NOW - 100,
     now: NOW,
+    refused: null,
     ...overrides,
   };
 }
@@ -150,5 +151,25 @@ describe('editGate', () => {
     expect(landed.progress).toBeNull();
     expect(readBack.canEditStructure).toBe(true);
     expect(readBack.canEditValues).toBe(true);
+  });
+
+  it('holds EVERYTHING while the binding check refuses the document, saying why', () => {
+    // model/binding.ts refused to apply the state: there is nothing an edit
+    // could be computed from, whatever the queue is doing.
+    const why = 'apply refused: the header binds this model to bt but the descriptor loaded for it is uml';
+    const gate = editGate(quiet({ refused: why }));
+    expect(gate.canEditStructure).toBe(false);
+    expect(gate.canReorder).toBe(false);
+    expect(gate.canEditValues).toBe(false);
+    expect(gate.structureHeldReason).toBe(why);
+    expect(gate.reorderHeldReason).toBe(why);
+    expect(gate.valuesHeldReason).toBe(why);
+    expect(gate.progress).toBeNull();
+    // A batch in flight still reports its progress underneath the refusal.
+    const busy = editGate(quiet({ refused: why, pendingOps: 2, batch: { description: 'add x', total: 4 } }));
+    expect(busy.progress?.done).toBe(2);
+    expect(busy.structureBusy).toBe(true);
+    expect(busy.canEditValues).toBe(false);
+    expect(busy.valuesHeldReason).toBe(why);
   });
 });

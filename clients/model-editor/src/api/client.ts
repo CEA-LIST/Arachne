@@ -3,7 +3,8 @@
  *
  * Endpoints (this base): GET /api/health, GET /api/state, POST /api/op,
  * GET /api/metamodel (404 when the node serves no descriptor),
- * GET /api/metamodels (the descriptors the node holds, each with its digest).
+ * GET /api/metamodels (the descriptors the node holds, each with its digest),
+ * and the model-scoped GET /api/model/{id}/state and /metamodel.
  *
  * Error contract: network failures and non-OK statuses throw ApiError;
  * POST /api/op additionally returns {"success": false, ...} with HTTP 200 for
@@ -11,7 +12,7 @@
  * queue turns that case into a visible error (never swallowed).
  */
 
-import type { Descriptor, JsonOp, MetamodelListing, OpResult, WireNode } from './types';
+import type { Descriptor, JsonOp, MetamodelListing, ModelId, OpResult, WireNode } from './types';
 
 export class ApiError extends Error {
   readonly status: number | null;
@@ -60,25 +61,67 @@ export async function getHealth(base: string): Promise<HealthInfo> {
   return { replicaId: typeof id === 'string' || typeof id === 'number' ? String(id) : 'unknown', raw: body };
 }
 
-/** GET /api/state — unwraps the {"json": ...} envelope. */
-export async function getState(base: string): Promise<WireNode> {
-  const response = await request(base, '/api/state');
-  if (!response.ok) throw new ApiError(`/api/state returned ${response.status}`, response.status);
-  const body = (await readJson(response, '/api/state')) as Record<string, unknown>;
-  if (!('json' in body)) throw new ApiError('/api/state body has no "json" field');
+/** A non-OK reply as an ApiError, carrying the body's `error` text when it has one. */
+async function failure(response: Response, path: string): Promise<ApiError> {
+  const text = await response.text();
+  let detail = '';
+  try {
+    const body = JSON.parse(text) as Record<string, unknown>;
+    if (typeof body['error'] === 'string') detail = `: ${body['error']}`;
+  } catch {
+    // Not JSON: the status is the message.
+  }
+  return new ApiError(`${path} returned ${response.status}${detail}`, response.status);
+}
+
+/** The scoped route for one hosted model. */
+function modelPath(id: ModelId, leaf: 'state' | 'metamodel'): string {
+  return `/api/model/${encodeURIComponent(id)}/${leaf}`;
+}
+
+/** The state routes share one envelope: {"json": <WireNode>}. */
+async function readState(base: string, path: string): Promise<WireNode> {
+  const response = await request(base, path);
+  if (!response.ok) throw await failure(response, path);
+  const body = (await readJson(response, path)) as Record<string, unknown>;
+  if (!('json' in body)) throw new ApiError(`${path} body has no "json" field`);
   return body['json'] as WireNode;
+}
+
+/** The descriptor routes: a formatVersion-1 descriptor, or null on 404. */
+async function readDescriptor(base: string, path: string): Promise<Descriptor | null> {
+  const response = await request(base, path);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(response, path);
+  return validateDescriptor(await readJson(response, path));
+}
+
+/** GET /api/state — the node's default log. */
+export function getState(base: string): Promise<WireNode> {
+  return readState(base, '/api/state');
+}
+
+/** GET /api/model/{id}/state — one hosted model. A malformed id (400) and an unhosted one (404) both throw. */
+export function getModelState(base: string, id: ModelId): Promise<WireNode> {
+  return readState(base, modelPath(id, 'state'));
 }
 
 /**
  * GET /api/metamodel — the node's descriptor, or null when the node serves
  * none (404). Validates formatVersion so a future format fails loudly.
  */
-export async function getMetamodel(base: string): Promise<Descriptor | null> {
-  const response = await request(base, '/api/metamodel');
-  if (response.status === 404) return null;
-  if (!response.ok) throw new ApiError(`/api/metamodel returned ${response.status}`, response.status);
-  const body = await readJson(response, '/api/metamodel');
-  return validateDescriptor(body);
+export function getMetamodel(base: string): Promise<Descriptor | null> {
+  return readDescriptor(base, '/api/metamodel');
+}
+
+/**
+ * GET /api/model/{id}/metamodel — the descriptor the model was registered
+ * under, or null when the node holds none for it (404). An id the node does
+ * not host is 404 as well; fetch the model's state first, which tells the two
+ * apart by throwing.
+ */
+export function getModelMetamodel(base: string, id: ModelId): Promise<Descriptor | null> {
+  return readDescriptor(base, modelPath(id, 'metamodel'));
 }
 
 /**

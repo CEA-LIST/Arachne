@@ -6,6 +6,8 @@
  * - Every populated node is wrapped: {"Value": {...}}; strings are char arrays.
  * - POST /api/op takes {"JsonKind": <JsonOp>} and answers {"success": bool, "message": string}.
  * - GET /api/metamodel returns a formatVersion-1 descriptor, or 404 when the node serves none.
+ * - GET /api/model/{id}/state and /metamodel are the same, scoped to one hosted model;
+ *   a malformed id is 400, an id the node does not host is 404.
  */
 
 /* ---------- CRDT state as serialized by the node ---------- */

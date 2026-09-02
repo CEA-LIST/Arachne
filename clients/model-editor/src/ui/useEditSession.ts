@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useState } from 'react';
+import { refusalOf } from '../model/binding';
 import type { SyncApi } from '../sync/useSync';
 import { editGate, type EditGate, type StructuralBatch } from './editGate';
 
@@ -53,6 +54,7 @@ export function useEditSession(sync: SyncApi, now: number): EditSession {
     settledAt,
     lastSyncAt: sync.state.lastSyncAt,
     now,
+    refused: refusalOf(sync.state.binding),
   });
 
   return { ...gate, runStructural, sendOps };

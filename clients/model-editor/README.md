@@ -62,6 +62,10 @@ Every action lands in the action log with its exact op payloads and the node's v
 
 Every edit intent is mapped by `src/crdt/ops.ts` to a sequence of `JsonKind` ops posted **one at a time** (`POST /api/op` takes exactly one op — `moirai-network/src/http_api.rs`); string edits are diffed into at most one `DeleteRange` plus single-character `Insert`s (the wire accepts one character per op), numbers commit as a single relative `Inc`, array/containment creation uses the insert-then-update idiom with the mandatory `eClass` field first. A single global FIFO queue serializes all batches so sequences never interleave. The UI polls `GET /api/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are surfaced three ways — at the field, in the alert dock, and in the log — and the log is exportable.
 
+### The binding check at apply
+
+A model's document carries `__model` — its id and the `{nsURI, digest}` of the metamodel it is bound to — written once by the node that created it. Before a fetched state reaches the model view, `src/model/binding.ts` hashes the descriptor the document would be rendered under (the SHA-256 over canonical JSON the node computes, `src/model/digest.ts`) and compares it with the header's digest; it also compares the header with the one it recorded at the first apply, because the header is immutable by rule. On a match the state is applied. On a mismatch nothing is: the alert dock and the action log name both pairs, the model panel says so, the top bar reads `not applied`, and the edit gate holds every control with the same sentence; `sendOps` refuses batches at the wire for as long as it lasts, and refuses any batch that would write `__model` regardless. A log with no header — every step-1 log — is applied under the loaded descriptor exactly as before, and the top bar reads `unbound`. The digest is always computed over the descriptor's bytes, never read from a label the node reports, so a node that serves the wrong file under the right name is caught too.
+
 ### The edit gate, and why edits are held
 
 Measured on the rig: the replica answers a single-character `POST /api/op` in ~400 ms, and one reorder is ~133 ops — so a structural edit can take the better part of a minute. Two consequences the UI has to be honest about.
@@ -76,7 +80,7 @@ This is a guard, not a cure. **The fix belongs on the wire** — a move op, so a
 
 `react`, `react-dom`, and `lucide-react` (pinned exact at 1.38.0: one package, zero transitive dependencies, no install hooks, no network at runtime, ISC). All icons are re-exported from `src/ui/icons.tsx`, so the set can be swapped for inline SVGs in one file if that audit ever sours. `npm audit`: 0 vulnerabilities.
 
-Measured production bundle: **JS 273.6 kB raw / 83.6 kB gzip, CSS 27.5 kB / 5.5 kB gzip** (`dist` 302 kB). React and react-dom are ~68 kB gzip of that; lucide-react is ~2.7 kB for the 30 glyphs used; the rest is this app.
+Measured production bundle: **JS 279.6 kB raw / 85.4 kB gzip, CSS 27.8 kB / 5.5 kB gzip** (`dist` 320 kB). React and react-dom are ~68 kB gzip of that; lucide-react is ~2.7 kB for the 30 glyphs used; the rest is this app.
 
 ## Out of scope (this phase)
 

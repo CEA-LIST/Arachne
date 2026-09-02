@@ -7,6 +7,8 @@ import {
   createRootOps,
   createSingleContainmentOps,
   insertIntoArrayOps,
+  MODEL_HEADER_REFUSAL,
+  opTouchesModelHeader,
   removeFromArrayOps,
   reorderArrayOps,
   setBooleanOps,
@@ -336,5 +338,48 @@ describe('the model header is never targeted', () => {
   it('a sibling key is untouched by the rule', () => {
     expect(setStringOps(['name'], '', 'x')).toHaveLength(1);
     expect(unsetFeatureOps([], 'name')).toEqual([{ Object: { Remove: 'name' } }]);
+  });
+
+  it('the builders and the sync funnel refuse with one sentence', () => {
+    expect(() => wrapPath(['__model'], { Boolean: 'Enable' })).toThrow(MODEL_HEADER_REFUSAL);
+  });
+});
+
+describe('opTouchesModelHeader (the funnel guard sees ops, not paths)', () => {
+  it('names a root Update or Remove of __model, and a root Clear', () => {
+    expect(opTouchesModelHeader({ Object: { Update: ['__model', { Boolean: 'Enable' }] } })).toBe(true);
+    expect(
+      opTouchesModelHeader({
+        Object: { Update: ['__model', { Object: { Update: ['modelId', { String: { Delete: { pos: 0 } } }] } }] },
+      }),
+    ).toBe(true);
+    expect(opTouchesModelHeader({ Object: { Remove: '__model' } })).toBe(true);
+    expect(opTouchesModelHeader({ Object: 'Clear' })).toBe(true);
+  });
+
+  it('lets every other op through, including a nested key of the same name', () => {
+    expect(opTouchesModelHeader({ Object: { Update: ['name', { Boolean: 'Enable' }] } })).toBe(false);
+    expect(opTouchesModelHeader({ Object: { Remove: 'name' } })).toBe(false);
+    expect(opTouchesModelHeader({ String: { Insert: { content: 'x', pos: 0 } } })).toBe(false);
+    expect(opTouchesModelHeader({ Number: { Inc: 1 } })).toBe(false);
+    expect(opTouchesModelHeader({ Array: { Delete: { pos: 0 } } })).toBe(false);
+    // A key called __model below the root is an ordinary key: the rule is about the root.
+    expect(
+      opTouchesModelHeader({
+        Object: { Update: ['children', { Object: { Update: ['__model', { Boolean: 'Enable' }] } }] },
+      }),
+    ).toBe(false);
+  });
+
+  it('agrees with every builder: what they emit never touches the header', () => {
+    const emitted = [
+      ...setStringOps(['name'], '', 'x'),
+      ...createRootOps('Root'),
+      ...addChildOps(['children'], 0, 'Node'),
+      ...removeFromArrayOps(['children'], 0),
+      ...unsetFeatureOps([], 'name'),
+    ];
+    expect(emitted.length).toBeGreaterThan(0);
+    expect(emitted.some(opTouchesModelHeader)).toBe(false);
   });
 });

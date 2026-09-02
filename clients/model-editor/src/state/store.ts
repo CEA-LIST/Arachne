@@ -1,4 +1,5 @@
 import type { Descriptor, JsonOp, PlainJson } from '../api/types';
+import type { Binding } from '../model/binding';
 
 /** One row of the action log: what was attempted, what was sent, what came back. */
 export interface LogEntry {
@@ -22,8 +23,10 @@ export interface AppState {
   };
   metamodel: Descriptor | null;
   metamodelSource: 'node' | 'file' | null;
-  /** Decoded document; null = "Unset" (fresh replica) or not yet fetched. */
+  /** Decoded document; null = "Unset" (fresh replica), not yet fetched, or refused by the binding check. */
   doc: PlainJson;
+  /** The binding check's last verdict on the document (model/binding.ts); null before the first apply. */
+  binding: Binding | null;
   lastSyncAt: number | null;
   pendingOps: number;
   banner: string | null;
@@ -38,6 +41,7 @@ export function initialState(url: string): AppState {
     metamodel: null,
     metamodelSource: null,
     doc: null,
+    binding: null,
     lastSyncAt: null,
     pendingOps: 0,
     banner: null,
@@ -53,6 +57,7 @@ export type Action =
   | { type: 'disconnected' }
   | { type: 'metamodel'; descriptor: Descriptor | null; source: 'node' | 'file' | null }
   | { type: 'state'; doc: PlainJson; ts: number }
+  | { type: 'binding'; binding: Binding }
   | { type: 'pending'; count: number }
   | { type: 'log'; entry: LogEntry }
   | { type: 'banner'; message: string | null };
@@ -82,6 +87,7 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         connection: { ...state.connection, status: 'idle', replicaId: null, error: null },
         doc: null,
+        binding: null,
         lastSyncAt: null,
         pendingOps: 0,
         metamodel: state.metamodelSource === 'node' ? null : state.metamodel,
@@ -91,6 +97,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, metamodel: action.descriptor, metamodelSource: action.source };
     case 'state':
       return { ...state, doc: action.doc, lastSyncAt: action.ts };
+    case 'binding':
+      return { ...state, binding: action.binding };
     case 'pending':
       return { ...state, pendingOps: action.count };
     case 'log': {

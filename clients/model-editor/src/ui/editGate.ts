@@ -62,6 +62,12 @@ export interface QueueSnapshot {
   lastSyncAt: number | null;
   /** The UI ticker, so the reconcile window cannot hang on a dead poll. */
   now: number;
+  /**
+   * Why the document may not be edited at all: the binding check refused to
+   * apply it (model/binding.ts), so there is nothing an edit could be computed
+   * from. Null while the binding holds.
+   */
+  refused: string | null;
 }
 
 export interface FlushProgress {
@@ -124,7 +130,7 @@ export function flushLabel(progress: FlushProgress): string {
 }
 
 export function editGate(snapshot: QueueSnapshot): EditGate {
-  const { pendingOps, batch, settledAt, lastSyncAt, now } = snapshot;
+  const { pendingOps, batch, settledAt, lastSyncAt, now, refused } = snapshot;
 
   const progress = batch === null ? null : flushProgress(batch, pendingOps);
 
@@ -138,6 +144,22 @@ export function editGate(snapshot: QueueSnapshot): EditGate {
     now - settledAt < RECONCILE_MAX_MS;
 
   const structureBusy = batch !== null || reconciling;
+
+  // A refused document holds every control with the refusal itself, whatever
+  // the queue is doing: the batch in flight still reports its progress, and
+  // nothing new may be computed from a document that was not applied.
+  if (refused !== null) {
+    return {
+      progress,
+      structureBusy,
+      canEditStructure: false,
+      canReorder: false,
+      canEditValues: false,
+      structureHeldReason: refused,
+      reorderHeldReason: refused,
+      valuesHeldReason: refused,
+    };
+  }
 
   const structureHeldReason =
     progress !== null

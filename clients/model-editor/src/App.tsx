@@ -16,6 +16,7 @@ import { exportLog } from './console/exportLog';
 import { addChildOps, createRootOps, createSingleContainmentOps, removeFromArrayOps } from './crdt/ops';
 import { getAtPath } from './crdt/path';
 import { ExplorerPanel, type ExplorerTab } from './explorer/ExplorerPanel';
+import { refusalOf } from './model/binding';
 import { isPresent } from './model/instance';
 import type { EditControls } from './properties/fields';
 import { PropertiesPanel } from './properties/PropertiesPanel';
@@ -56,6 +57,8 @@ export default function App() {
   const sync = useSync();
   const { state } = sync;
   const connected = state.connection.status === 'connected';
+  // The binding check's refusal, when the document was not applied (model/binding.ts).
+  const refusal = refusalOf(state.binding);
   const now = useNow();
   const view = useMemo(
     () => syncView(state, sync.pollMs, now),
@@ -291,6 +294,7 @@ export default function App() {
         loadDescriptorFile={sync.loadDescriptorFile}
         doc={state.doc}
         connected={connected}
+        refusal={refusal}
         collapsed={collapsed}
         setCollapsed={setCollapsed}
         selectedPath={effectivePath}

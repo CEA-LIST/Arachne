@@ -23,16 +23,31 @@ import { MODEL_HEADER_KEY, type JsonOp, type Path, type PlainJson } from '../api
 
 /* ---------- the header ---------- */
 
+/** Why a header write is refused, said once: by the builders here and by the sync funnel. */
+export const MODEL_HEADER_REFUSAL = `${MODEL_HEADER_KEY} is the model header, written once by the node that created the model; the editor never targets it`;
+
 /** Whether an op at `path` would land in the model header. */
 export function targetsModelHeader(path: Path): boolean {
   return path[0] === MODEL_HEADER_KEY;
 }
 
+/**
+ * Whether a built op, posted at the root, would land in the model header: an
+ * Object.Update or Object.Remove of the key, or a root Object.Clear, which
+ * resets every root key and the header with them. The op-level counterpart of
+ * `targetsModelHeader`, for the sync funnel that sees ops and not paths.
+ */
+export function opTouchesModelHeader(op: JsonOp): boolean {
+  if (!('Object' in op)) return false;
+  const inner = op.Object;
+  if (inner === 'Clear') return true;
+  if ('Update' in inner) return inner.Update[0] === MODEL_HEADER_KEY;
+  return inner.Remove === MODEL_HEADER_KEY;
+}
+
 function refuseHeaderTarget(path: Path): void {
   if (targetsModelHeader(path)) {
-    throw new Error(
-      `${MODEL_HEADER_KEY} is the model header, written once by the node that created the model; the editor never targets it`,
-    );
+    throw new Error(MODEL_HEADER_REFUSAL);
   }
 }
 
