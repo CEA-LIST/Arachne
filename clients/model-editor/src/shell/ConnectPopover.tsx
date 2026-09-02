@@ -88,8 +88,8 @@ export function ConnectPopover({
           </span>
         </label>
         <p className="me-connect__hint">
-          The editor re-reads <code>/api/state</code> on this interval and reconciles it with
-          whatever you are typing.
+          Every open model re-reads its <code>/api/model/&#123;id&#125;/state</code> on this interval
+          and reconciles it with whatever you are typing.
         </p>
         <button type="submit" className="me-btn me-btn--primary" disabled={busy}>
           {connected ? 'Disconnect' : busy ? 'Connecting…' : 'Connect'}

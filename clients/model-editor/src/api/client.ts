@@ -1,18 +1,31 @@
 /**
  * Typed client for the moirai node HTTP API.
  *
- * Endpoints (this base): GET /api/health, GET /api/state, POST /api/op,
- * GET /api/metamodel (404 when the node serves no descriptor),
- * GET /api/metamodels (the descriptors the node holds, each with its digest),
- * and the model-scoped GET /api/model/{id}/state and /metamodel.
+ * Endpoints (this base): GET /api/health; the model routes GET /api/models,
+ * POST /api/models, GET /api/metamodels (the descriptors the node holds, each
+ * with its digest), GET /api/model/{id}/state, POST /api/model/{id}/op and
+ * GET /api/model/{id}/metamodel; and the unscoped GET /api/state, POST /api/op
+ * and GET /api/metamodel, which serve the node's default log and stay for the
+ * compatibility step the design names.
  *
- * Error contract: network failures and non-OK statuses throw ApiError;
- * POST /api/op additionally returns {"success": false, ...} with HTTP 200 for
- * well-formed but refused ops — callers MUST branch on `.success`, and the op
- * queue turns that case into a visible error (never swallowed).
+ * Error contract: network failures and non-OK statuses throw ApiError, the
+ * status on it and the node's own `error` text in the message; the op routes
+ * additionally return {"success": false, ...} with HTTP 200 for well-formed
+ * but refused ops — callers MUST branch on `.success`, and the op queue turns
+ * that case into a visible error (never swallowed).
  */
 
-import type { Descriptor, JsonOp, MetamodelListing, ModelId, OpResult, WireNode } from './types';
+import type {
+  Descriptor,
+  HostedModel,
+  JsonOp,
+  MetamodelId,
+  MetamodelListing,
+  ModelId,
+  OpResult,
+  Registration,
+  WireNode,
+} from './types';
 
 export class ApiError extends Error {
   readonly status: number | null;
@@ -75,7 +88,7 @@ async function failure(response: Response, path: string): Promise<ApiError> {
 }
 
 /** The scoped route for one hosted model. */
-function modelPath(id: ModelId, leaf: 'state' | 'metamodel'): string {
+function modelPath(id: ModelId, leaf: 'state' | 'metamodel' | 'op'): string {
   return `/api/model/${encodeURIComponent(id)}/${leaf}`;
 }
 
@@ -150,6 +163,97 @@ export function validateMetamodelListing(entry: unknown): MetamodelListing {
   return { nsURI, digest, package: typeof pkg === 'string' ? pkg : '' };
 }
 
+/**
+ * A `metamodel_id` as the node echoes it: the {nsURI, digest} pair it was
+ * registered with, a bare digest string (which the node also accepts, and is
+ * listed with an empty nsURI), or null for the default log, which has none.
+ */
+function readMetamodelId(raw: unknown, where: string): MetamodelId | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'string') return { nsURI: '', digest: raw };
+  if (typeof raw === 'object') {
+    const { nsURI, digest } = raw as Partial<MetamodelId>;
+    if (typeof digest === 'string') return { nsURI: typeof nsURI === 'string' ? nsURI : '', digest };
+  }
+  throw new ApiError(`${where} has a metamodel_id that is neither a {nsURI, digest} pair nor a digest`);
+}
+
+/** GET /api/models — the models the node hosts, the default log among them with a null metamodel. */
+export async function getModels(base: string): Promise<HostedModel[]> {
+  const response = await request(base, '/api/models');
+  if (!response.ok) throw await failure(response, '/api/models');
+  const body = (await readJson(response, '/api/models')) as Record<string, unknown>;
+  const entries = body['models'];
+  if (!Array.isArray(entries)) throw new ApiError('/api/models body has no "models" array');
+  return entries.map((entry): HostedModel => {
+    if (typeof entry !== 'object' || entry === null) throw new ApiError('/api/models entry is not a JSON object');
+    const record = entry as Record<string, unknown>;
+    const modelId = record['model_id'];
+    if (typeof modelId !== 'string') throw new ApiError('/api/models entry has no model_id string');
+    return { modelId, metamodelId: readMetamodelId(record['metamodel_id'], '/api/models entry') };
+  });
+}
+
+/**
+ * POST /api/models — register a model on the node. Without `modelId` the node
+ * creates one and mints its id (201): the editor never chooses an id. With
+ * `modelId` the node joins that model by id (200) and writes no header, since
+ * the header travels with the log. A 409 (already hosted), 422 (a metamodel
+ * the node does not hold) or 400 throws an ApiError carrying the status and
+ * the node's sentence.
+ */
+export async function registerModel(
+  base: string,
+  registration: { modelId?: ModelId; metamodelId: MetamodelId },
+): Promise<Registration> {
+  const body: Record<string, unknown> = { metamodel_id: registration.metamodelId };
+  if (registration.modelId !== undefined) body['model_id'] = registration.modelId;
+  const response = await request(base, '/api/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw await failure(response, '/api/models');
+  const reply = (await readJson(response, '/api/models')) as Record<string, unknown>;
+  const modelId = reply['model_id'];
+  if (typeof modelId !== 'string') throw new ApiError('/api/models reply has no model_id string');
+  const metamodelId = readMetamodelId(reply['metamodel_id'], '/api/models reply');
+  if (metamodelId === null) throw new ApiError('/api/models reply has no metamodel_id');
+  return { modelId, metamodelId, created: reply['created'] === true };
+}
+
+/** The op routes share one envelope, {"JsonKind": op}, and one answer, {"success", "message"}. */
+async function submitOp(base: string, path: string, op: JsonOp): Promise<OpResult> {
+  const response = await request(base, path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ JsonKind: op }),
+  });
+  const body = (await readJson(response, path)) as Record<string, unknown>;
+  if (!response.ok) {
+    const detail = typeof body['error'] === 'string' ? body['error'] : JSON.stringify(body);
+    throw new ApiError(`${path} returned ${response.status}: ${detail}`, response.status);
+  }
+  if (typeof body['success'] !== 'boolean') {
+    throw new ApiError(`${path} body has no boolean "success" field`);
+  }
+  return { success: body['success'], message: typeof body['message'] === 'string' ? body['message'] : '' };
+}
+
+/**
+ * POST /api/op — the default log. Malformed ops are HTTP 400 (throws
+ * ApiError); refused ops come back HTTP 200 with success:false — returned
+ * as-is for the caller to surface.
+ */
+export function postOp(base: string, op: JsonOp): Promise<OpResult> {
+  return submitOp(base, '/api/op', op);
+}
+
+/** POST /api/model/{id}/op — one hosted model, the same contract as postOp; an unhosted id is 404 and throws. */
+export function postModelOp(base: string, id: ModelId, op: JsonOp): Promise<OpResult> {
+  return submitOp(base, modelPath(id, 'op'), op);
+}
+
 /** Validate a descriptor loaded from the node or from a file. */
 export function validateDescriptor(body: unknown): Descriptor {
   if (typeof body !== 'object' || body === null) {
@@ -163,26 +267,4 @@ export function validateDescriptor(body: unknown): Descriptor {
     throw new ApiError('metamodel descriptor missing classes/rootClasses');
   }
   return desc as Descriptor;
-}
-
-/**
- * POST /api/op with the {"JsonKind": op} envelope.
- * Malformed ops are HTTP 400 (throws ApiError); refused ops come back
- * HTTP 200 with success:false — returned as-is for the caller to surface.
- */
-export async function postOp(base: string, op: JsonOp): Promise<OpResult> {
-  const response = await request(base, '/api/op', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ JsonKind: op }),
-  });
-  const body = (await readJson(response, '/api/op')) as Record<string, unknown>;
-  if (!response.ok) {
-    const detail = typeof body['error'] === 'string' ? body['error'] : JSON.stringify(body);
-    throw new ApiError(`/api/op returned ${response.status}: ${detail}`, response.status);
-  }
-  if (typeof body['success'] !== 'boolean') {
-    throw new ApiError('/api/op body has no boolean "success" field');
-  }
-  return { success: body['success'], message: typeof body['message'] === 'string' ? body['message'] : '' };
 }

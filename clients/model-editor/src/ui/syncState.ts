@@ -11,7 +11,7 @@
  * 1s ticker), which is what makes every state below unit-testable.
  */
 
-import type { AppState } from '../state/store';
+import { selectedTab, type AppState } from '../state/store';
 
 /** How many poll intervals of silence before we stop claiming "live". */
 export const STALE_POLLS = 3;
@@ -58,11 +58,15 @@ export function relativeAge(ms: number): string {
 
 /**
  * The chip's truth. `pollMs` scales the staleness thresholds so a deliberately
- * slow poll is not misreported as a broken one.
+ * slow poll is not misreported as a broken one. The poll judged is the
+ * selected tab's, each open model having its own; with no tab open a
+ * connected editor is simply live.
  */
 export function syncView(state: AppState, pollMs: number, now: number): SyncView {
   const { status, error } = state.connection;
-  const { lastSyncAt, pendingOps } = state;
+  const tab = selectedTab(state);
+  const lastSyncAt = tab?.lastSyncAt ?? null;
+  const pendingOps = tab?.pendingOps ?? 0;
 
   if (status === 'idle') {
     return {

@@ -56,6 +56,83 @@
   gap: var(--sp-1);
 }
 
+/* ---------- document tabs: one per open model ---------- */
+
+.me-doctabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-1);
+  height: var(--h-tabs);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+  overflow-x: auto;
+}
+
+.me-doctabs__tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.me-doctabs__tab--active {
+  border-bottom-color: var(--c-accent);
+}
+
+.me-doctabs__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: 0 var(--sp-2) 0 var(--sp-3);
+  border: 0;
+  background: none;
+  color: var(--c-fg-muted);
+  font: inherit;
+  font-size: var(--fs-200);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.me-doctabs__tab--active .me-doctabs__name {
+  color: var(--c-fg);
+  font-weight: 600;
+}
+
+.me-doctabs__name:hover {
+  color: var(--c-fg);
+}
+
+.me-doctabs__close {
+  margin-right: var(--sp-1);
+  opacity: 0.6;
+}
+
+.me-doctabs__tab:hover .me-doctabs__close,
+.me-doctabs__tab--active .me-doctabs__close {
+  opacity: 1;
+}
+
+.me-doctabs__empty {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  white-space: nowrap;
+}
+
+.me-doctabs__spacer {
+  flex: 1;
+}
+
+.me-doctabs .me-btn {
+  align-self: center;
+}
+
+.me-topbar__model {
+  gap: var(--sp-1);
+}
+
 /* ---------- sync chip ---------- */
 
 .me-syncchip {

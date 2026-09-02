@@ -4,6 +4,24 @@
 // the Node fs backend in a temporary directory, the level-1 form of M-A6;
 // mp28 is its level-4 form against live nodes.
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { addChildOps, createRootOps, createSingleContainmentOps, setStringOps } from '../crdt/ops';
+import { getAtPath } from '../crdt/path';
+import { modelHeaderOf } from './instance';
+import { ModelSession } from '../sync/modelSession';
+import {
+  applyOps,
+  createModel,
+  joinModel,
+  modelState,
+  modelWire,
+  scratchDir,
+  skipReason,
+  startNodes,
+  waitFor,
+  waitForAgreement,
+  writeMetamodelDir,
+} from '../testing/liveNodes';
+import { recordSession } from '../testing/sessionRecorder';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -14,7 +32,7 @@ import { canonicalJson, sha256Hex } from './digest';
 import { fsModelStore } from './fsStore';
 import { describeProjection, projectModel, projectionLabel, sameProjection, type Projection } from './projection';
 import { StoreError, type ModelStore } from './store';
-import { bt, btDocument, btHeader, encodeWire, MODEL_ID, uml, umlHeader } from './testFixtures';
+import { bt, btDocument, btHeader, btId, encodeWire, MODEL_ID, uml, umlHeader } from './testFixtures';
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'model-projection-'));
 afterAll(() => rmSync(tempRoot, { recursive: true, force: true }));
@@ -48,6 +66,10 @@ function applied(result: ApplyResult): Extract<ApplyResult, { applied: true }> {
 
 /** A store that counts what the adaptation layer asks of it. */
 function counting(inner: ModelStore): { store: ModelStore; calls: string[] } {
+  return countingStore(inner);
+}
+
+function countingStore(inner: ModelStore): { store: ModelStore; calls: string[] } {
   const calls: string[] = [];
   const store: ModelStore = {
     get location() {
@@ -311,12 +333,92 @@ describe('the outcome as the UI reads it', () => {
 });
 
 describe('level 4, against live nodes', () => {
-  it('mp28_the_store_file_matches_the_converged_model_and_a_restart_trusts_the_log', (ctx) => {
-    // A converged behaviour-tree model on live nodes: read the store file and
-    // compare it with the decoded GET /api/model/a1b2…/state; overwrite the
-    // file with a document holding one empty Root and reconnect; the rendered
-    // tree is the full one and the file is rewritten to match. The level-1
-    // form above runs today; this one runs the real connect path.
-    ctx.skip('needs the level-4 harness, step 6');
-  });
+  it(
+    'mp28_the_store_file_matches_the_converged_model_and_a_restart_trusts_the_log',
+    { timeout: 120_000 },
+    async (ctx) => {
+      const skip = skipReason('mp28');
+      if (skip !== null) return ctx.skip(skip);
+      const run = scratchDir('mp28');
+      const good = writeMetamodelDir(join(run, 'metamodels'), { 'bt.metamodel.json': bt, 'uml.metamodel.json': uml });
+      const [a, b] = await startNodes(
+        [
+          { name: 'editor-a', metamodelDir: good },
+          { name: 'editor-b', metamodelDir: good },
+        ],
+        run,
+      );
+      try {
+        // A behaviour-tree model created on editor-a, joined on editor-b, and
+        // grown on editor-a until both agree: a Root, a BehaviorTree named
+        // main, a Sequence named root.
+        const id = await createModel(a, btId);
+        await joinModel(b, id, btId);
+        await applyOps(a, id, [
+          ...createRootOps('Root'),
+          ...addChildOps(['behaviortrees'], 0, 'BehaviorTree'),
+          ...setStringOps(['behaviortrees', 0, 'ID'], '', 'main'),
+          ...createSingleContainmentOps(['behaviortrees', 0], 'child', 'Sequence'),
+          ...setStringOps(['behaviortrees', 0, 'child', 'name'], '', 'root'),
+        ]);
+        const converged = await waitForAgreement([a, b], id);
+        expect(converged).toMatchObject({
+          __model: { modelId: id, metamodelId: btId },
+          eClass: 'Root',
+          behaviortrees: [{ eClass: 'BehaviorTree', ID: 'main', child: { eClass: 'Sequence', name: 'root' } }],
+        });
+
+        // Session one, on editor-b, with a directory store: the file for the
+        // model equals the decoded GET /api/model/{id}/state.
+        const dir = join(run, 'store');
+        const file = join(dir, `${id}.json`);
+        const one = recordSession();
+        const first = new ModelSession({ id, nodeUrl: b.url, store: fsModelStore(dir), pollMs: 200, events: one.events });
+        await first.open();
+        await waitFor('the projection to be written', () =>
+          one.patches.some((patch) => patch.projection?.kind === 'written') ? true : null,
+        );
+        first.close();
+        const nodeState = decodeState(await modelWire(b, id));
+        expect(nodeState).toEqual(converged);
+        expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(nodeState);
+        expect(readFileSync(file, 'utf8')).toBe(canonicalJson(nodeState));
+        expect(one.tab(id, b.url).doc).toEqual(nodeState);
+
+        // Between sessions the file is replaced by a document holding one
+        // empty Root: the tamper of M-A6 and (f).
+        const header = modelHeaderOf(nodeState);
+        const tampered: PlainJson = { __model: header as unknown as PlainJson, eClass: 'Root', behaviortrees: [] };
+        writeFileSync(file, JSON.stringify(tampered));
+        expect(JSON.parse(readFileSync(file, 'utf8'))).not.toEqual(nodeState);
+
+        // Session two, the restart: the same store, the real connect path.
+        // The rendered tree is the full one, from the log, and the file is
+        // rewritten to match; the store was never read.
+        const { store, calls } = countingStore(fsModelStore(dir));
+        const two = recordSession();
+        const second = new ModelSession({ id, nodeUrl: b.url, store, pollMs: 200, events: two.events });
+        await second.open();
+        try {
+          const tab = two.tab(id, b.url);
+          expect(tab.status).toBe('open');
+          expect(tab.binding?.kind).toBe('bound');
+          expect(tab.doc).toEqual(nodeState);
+          expect(tab.doc).not.toEqual(tampered);
+          expect(getAtPath(tab.doc, ['behaviortrees', 0, 'child', 'name'])).toBe('root');
+          await waitFor('the file to be rewritten', () =>
+            readFileSync(file, 'utf8') === canonicalJson(nodeState) ? true : null,
+          );
+          expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(await modelState(b, id));
+          expect(calls.filter((call) => call !== 'write')).toEqual([]);
+          expect(calls.length).toBeGreaterThan(0);
+        } finally {
+          second.close();
+        }
+      } finally {
+        await Promise.all([a.stop(), b.stop()]);
+        rmSync(run, { recursive: true, force: true });
+      }
+    },
+  );
 });

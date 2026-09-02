@@ -14,7 +14,7 @@ import { getAtPath } from '../crdt/path';
 import { removeFromArrayOps } from '../crdt/ops';
 import { flattenFeatures, idAttributeOf, isPresent, labelFor } from '../model/instance';
 import type { FieldRegistry } from '../sync/fieldRegistry';
-import { Box, Copy, Hourglass, MousePointerClick, Plug, Trash2, TriangleAlert } from '../ui/icons';
+import { Box, Copy, Hourglass, Layers, MousePointerClick, Plug, Trash2, TriangleAlert } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { AttributeRow } from './AttributeRow';
 import { ContainmentBlock } from './ContainmentBlock';
@@ -25,6 +25,8 @@ interface PropertiesPanelProps {
   descriptor: Descriptor | null;
   doc: PlainJson;
   connected: boolean;
+  /** False while no model tab is open: the form has nothing to show yet. */
+  modelOpen: boolean;
   path: Path;
   registry: FieldRegistry;
   /** Senders plus the edit gate (ui/editGate.ts). */
@@ -105,6 +107,7 @@ export function PropertiesPanel({
   descriptor,
   doc,
   connected,
+  modelOpen,
   path,
   registry,
   edit,
@@ -128,6 +131,18 @@ export function PropertiesPanel({
             Connect…
           </button>
         </EmptyState>
+      </section>
+    );
+  }
+
+  if (!modelOpen) {
+    return (
+      <section className="me-panel me-props" aria-label="Properties">
+        <EmptyState
+          icon={Layers}
+          title="No model open"
+          body="Open a model from the Models tab; its elements are edited here."
+        />
       </section>
     );
   }

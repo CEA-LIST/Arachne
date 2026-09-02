@@ -3,7 +3,10 @@ import {
   ApiError,
   getMetamodels,
   getModelMetamodel,
+  getModels,
   getModelState,
+  postModelOp,
+  registerModel,
   validateMetamodelListing,
 } from './client';
 
@@ -97,5 +100,110 @@ describe('validateMetamodelListing', () => {
 
   it('rejects a non-object', () => {
     expect(() => validateMetamodelListing('x')).toThrow(ApiError);
+  });
+});
+
+/* ---------- the registration and listing routes (mp29's client half) ---------- */
+
+function capturing(status: number, body: unknown) {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  });
+  return { fetch, calls };
+}
+
+describe('registerModel', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('creates by posting the metamodel alone and takes the id the node minted, never one of its own', async () => {
+    const { fetch, calls } = capturing(201, { model_id: ID, metamodel_id: bt, created: true });
+    vi.stubGlobal('fetch', fetch);
+    const registered = await registerModel('http://node:8081', { metamodelId: { nsURI: bt.nsURI, digest: bt.digest } });
+    expect(registered).toEqual({ modelId: ID, metamodelId: { nsURI: bt.nsURI, digest: bt.digest }, created: true });
+    expect(calls[0].url).toBe('http://node:8081/api/models');
+    expect(calls[0].init?.method).toBe('POST');
+    const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>;
+    expect(Object.keys(body)).toEqual(['metamodel_id']);
+    expect(body['metamodel_id']).toEqual({ nsURI: bt.nsURI, digest: bt.digest });
+  });
+
+  it('joins by posting the id beside the metamodel, and reads created:false back', async () => {
+    const { fetch, calls } = capturing(200, { model_id: ID, metamodel_id: bt, created: false });
+    vi.stubGlobal('fetch', fetch);
+    const registered = await registerModel('http://node:8081/', {
+      modelId: ID,
+      metamodelId: { nsURI: bt.nsURI, digest: bt.digest },
+    });
+    expect(registered.created).toBe(false);
+    expect(registered.modelId).toBe(ID);
+    const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>;
+    expect(body).toEqual({ metamodel_id: { nsURI: bt.nsURI, digest: bt.digest }, model_id: ID });
+  });
+
+  it("carries the node's refusals as ApiErrors with the status and its sentence: 409 hosted, 422 unknown metamodel", async () => {
+    vi.stubGlobal('fetch', answering(409, { error: `model ${ID} is already hosted` }));
+    const dup = await registerModel('http://node:8081', { modelId: ID, metamodelId: bt }).catch((e: unknown) => e);
+    expect(dup).toBeInstanceOf(ApiError);
+    expect((dup as ApiError).status).toBe(409);
+    expect((dup as ApiError).message).toContain('already hosted');
+    vi.stubGlobal('fetch', answering(422, { error: 'no descriptor with that digest' }));
+    const unknown = await registerModel('http://node:8081', { metamodelId: bt }).catch((e: unknown) => e);
+    expect((unknown as ApiError).status).toBe(422);
+    expect((unknown as ApiError).message).toContain('no descriptor');
+  });
+
+  it('refuses a reply without a model id', async () => {
+    vi.stubGlobal('fetch', answering(201, { created: true }));
+    await expect(registerModel('http://node:8081', { metamodelId: bt })).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('getModels', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lists the hosted models, the default log with a null metamodel and a bare digest as a pair with no nsURI', async () => {
+    const other = 'c3d4e5f6c3d4e5f6c3d4e5f6c3d4e5f6';
+    const dflt = 'c0113c7ed10c0113c7ed10c0113c7ed1';
+    const { fetch, calls } = capturing(200, {
+      models: [
+        { model_id: dflt, metamodel_id: null },
+        { model_id: ID, metamodel_id: { nsURI: bt.nsURI, digest: bt.digest } },
+        { model_id: other, metamodel_id: bt.digest },
+      ],
+    });
+    vi.stubGlobal('fetch', fetch);
+    expect(await getModels('http://node:8081')).toEqual([
+      { modelId: dflt, metamodelId: null },
+      { modelId: ID, metamodelId: { nsURI: bt.nsURI, digest: bt.digest } },
+      { modelId: other, metamodelId: { nsURI: '', digest: bt.digest } },
+    ]);
+    expect(calls[0].url).toBe('http://node:8081/api/models');
+  });
+
+  it('throws on a body without a models array and on a non-OK status', async () => {
+    vi.stubGlobal('fetch', answering(200, { hosted: [] }));
+    await expect(getModels('http://node:8081')).rejects.toBeInstanceOf(ApiError);
+    vi.stubGlobal('fetch', answering(500, { error: 'down' }));
+    await expect(getModels('http://node:8081')).rejects.toMatchObject({ status: 500 });
+  });
+});
+
+describe('postModelOp', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("posts the {JsonKind} envelope to the model's own op route and returns the node's verdict", async () => {
+    const { fetch, calls } = capturing(200, { success: false, message: 'operation not enabled' });
+    vi.stubGlobal('fetch', fetch);
+    const op = { Number: { Inc: 1 } } as const;
+    expect(await postModelOp('http://node:8081', ID, op)).toEqual({ success: false, message: 'operation not enabled' });
+    expect(calls[0].url).toBe(`http://node:8081/api/model/${ID}/op`);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ JsonKind: op });
+  });
+
+  it('throws with the status on an id the node does not host', async () => {
+    vi.stubGlobal('fetch', answering(404, { error: 'not hosted' }));
+    await expect(postModelOp('http://node:8081', ID, { Number: { Inc: 1 } })).rejects.toMatchObject({ status: 404 });
   });
 });

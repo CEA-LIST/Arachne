@@ -15,12 +15,13 @@
   position: relative;
   display: grid;
   grid-template-columns: var(--explorer-w) auto minmax(420px, 1fr);
-  grid-template-rows: var(--h-topbar) minmax(0, 1fr) auto;
+  grid-template-rows: var(--h-topbar) var(--h-tabs) minmax(0, 1fr) auto;
   height: 100dvh;
   background: var(--c-bg);
 }
 
-.me-topbar {
+.me-topbar,
+.me-doctabs {
   grid-column: 1 / -1;
 }
 
@@ -34,7 +35,7 @@
    cover the controls for the element it is complaining about. */
 .me-app__alerts {
   position: absolute;
-  top: calc(var(--h-topbar) + var(--h-props-header) + var(--sp-3));
+  top: calc(var(--h-topbar) + var(--h-tabs) + var(--h-props-header) + var(--sp-3));
   right: var(--sp-5);
   z-index: 30;
   max-width: 640px;
@@ -153,7 +154,7 @@
 
 .me-help {
   position: absolute;
-  top: calc(var(--h-topbar) + var(--sp-3));
+  top: calc(var(--h-topbar) + var(--h-tabs) + var(--sp-3));
   right: var(--sp-5);
   z-index: 50;
 }

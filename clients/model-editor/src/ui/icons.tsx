@@ -32,6 +32,7 @@ export {
   Link2,
   // Not ChevronsDownUp: two chevrons meeting render as an ✕ at 16px, and an ✕
   // beside a filter field reads as "clear the filter".
+  Layers,
   ListCollapse,
   MousePointerClick,
   Plug,

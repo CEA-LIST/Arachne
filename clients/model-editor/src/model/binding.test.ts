@@ -1,15 +1,33 @@
 /// <reference types="node" />
 // Over the repository's descriptors and the digests Rust recorded for them
 // (model/testFixtures.ts): the check is over real descriptor bytes.
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { getMetamodels } from '../api/client';
+import { createRootOps } from '../crdt/ops';
+import { ModelSession } from '../sync/modelSession';
+import {
+  createModel,
+  joinModel,
+  modelState,
+  scratchDir,
+  skipReason,
+  startNodes,
+  waitFor,
+  writeMetamodelDir,
+} from '../testing/liveNodes';
+import { recordSession } from '../testing/sessionRecorder';
+import { editGate } from '../ui/editGate';
 import type { Descriptor, ModelHeader } from '../api/types';
+import { metamodelIdOf } from './digest';
+import { modelHeaderOf } from './instance';
 import {
   applyModel,
   bindingLabel,
   checkBinding,
+  type Binding,
   describeBinding,
   isRefusal,
   refusalOf,
@@ -237,11 +255,118 @@ describe('the verdict as the UI reads it', () => {
 });
 
 describe('level 4, against live nodes', () => {
-  it('mp27_the_editor_refuses_to_open_a_model_under_the_wrong_descriptor', (ctx) => {
-    // A node whose METAMODEL_DIR file for the recorded bt digest was edited so
-    // the bytes it serves no longer hash to it; open the model there and
-    // assert the tab shows both pairs, editing is disabled and the store
-    // recorded nothing. Needs the multi-model sync path and its harness.
-    ctx.skip('needs the multi-model UI, step 6');
+  it('mp27_the_editor_refuses_to_open_a_model_under_the_wrong_descriptor', { timeout: 120_000 }, async (ctx) => {
+    const skip = skipReason('mp27');
+    if (skip !== null) return ctx.skip(skip);
+    const run = scratchDir('mp27');
+    // The bt descriptor as shipped, and the same file edited after the fact
+    // so that TreeNode.name is required: the same nsURI and package, another
+    // digest. editor-b's METAMODEL_DIR holds the edited copy, so the bytes it
+    // serves for the behaviour-tree digest no longer hash to it; a check that
+    // trusted the label would open the model there.
+    const edited = structuredClone(bt);
+    const name = edited.classes['TreeNode'].attributes.find((attr) => attr.name === 'name');
+    if (name === undefined) throw new Error('bt.metamodel.json has no TreeNode.name');
+    name.required = true;
+    const editedId = await metamodelIdOf(edited);
+    expect(editedId.nsURI).toBe(btId.nsURI);
+    expect(editedId.digest).not.toBe(btId.digest);
+    const good = writeMetamodelDir(join(run, 'good'), { 'bt.metamodel.json': bt, 'uml.metamodel.json': uml });
+    const wrong = writeMetamodelDir(join(run, 'edited'), { 'bt.metamodel.json': edited, 'uml.metamodel.json': uml });
+    const [a, b] = await startNodes(
+      [
+        { name: 'editor-a', metamodelDir: good },
+        { name: 'editor-b', metamodelDir: wrong },
+      ],
+      run,
+    );
+    try {
+      // editor-b lists the edited digest under the behaviour-tree nsURI and
+      // package: the label is right and the bytes are wrong.
+      const listed = (await getMetamodels(b.url)).find((entry) => entry.nsURI === btId.nsURI);
+      expect(listed).toMatchObject({ package: 'behaviortree', digest: editedId.digest });
+
+      // The model is created on editor-a, whose header names the shipped
+      // digest, and joined by id on editor-b under the edited one; the header
+      // reaches editor-b by transfer.
+      const id = await createModel(a, btId);
+      await joinModel(b, id, editedId);
+      await waitFor('the header to reach editor-b', async () =>
+        modelHeaderOf(await modelState(b, id)) === null ? null : true,
+      );
+
+      // Open the model on editor-b, with a store beside it.
+      const storeDir = join(run, 'store-b');
+      const store = fsModelStore(storeDir);
+      const recorder = recordSession();
+      const session = new ModelSession({ id, nodeUrl: b.url, store, pollMs: 200, events: recorder.events });
+      await session.open();
+      try {
+        // The tab shows both pairs, in one sentence, everywhere the user looks.
+        const tab = recorder.tab(id, b.url);
+        expect(tab.status).toBe('open');
+        expect(tab.metamodel).toEqual(edited);
+        expect(tab.binding?.kind).toBe('mismatch');
+        const sentence = refusalOf(tab.binding);
+        expect(sentence).not.toBeNull();
+        expect(sentence).toContain(`${btId.nsURI} (digest ${btId.digest})`);
+        expect(sentence).toContain(`${editedId.nsURI} (digest ${editedId.digest})`);
+        expect(sentence).toContain('editing is disabled');
+        expect(bindingLabel(tab.binding as Binding)).toBe('not applied');
+        expect(tab.doc).toBeNull();
+        expect(recorder.banners).toContain(sentence);
+        expect(recorder.rows).toContainEqual(
+          expect.objectContaining({ description: 'apply model', outcome: 'refused', detail: sentence }),
+        );
+
+        // Editing is disabled: every control is held with that sentence, and
+        // the wire refuses with it too, before anything is posted.
+        const gate = editGate({
+          pendingOps: 0,
+          batch: null,
+          settledAt: null,
+          lastSyncAt: tab.lastSyncAt,
+          now: Date.now(),
+          refused: sentence,
+        });
+        expect([gate.canEditStructure, gate.canReorder, gate.canEditValues]).toEqual([false, false, false]);
+        expect(gate.structureHeldReason).toBe(sentence);
+        const outcome = await session.sendOps('create root Root', createRootOps('Root'));
+        expect(outcome).toMatchObject({ outcome: 'refused', applied: 0, detail: sentence });
+        expect(await modelState(b, id)).toEqual(await modelState(a, id));
+
+        // The store recorded nothing.
+        expect(await store.list()).toEqual([]);
+        expect(existsSync(storeDir) ? readdirSync(storeDir) : []).toEqual([]);
+        expect(tab.projection).toEqual({ kind: 'not-written', why: 'refused' });
+
+        // The poll keeps refusing without repeating itself.
+        const refusals = recorder.rows.filter((row) => row.description === 'apply model').length;
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        expect(recorder.rows.filter((row) => row.description === 'apply model')).toHaveLength(refusals);
+      } finally {
+        session.close();
+      }
+
+      // The control: the same model on editor-a, whose bytes hash to what the
+      // header names, opens bound and renders.
+      const control = recordSession();
+      const onA = new ModelSession({
+        id,
+        nodeUrl: a.url,
+        store: fsModelStore(join(run, 'store-a')),
+        pollMs: 200,
+        events: control.events,
+      });
+      await onA.open();
+      onA.close();
+      const tabA = control.tab(id, a.url);
+      expect(tabA.binding?.kind).toBe('bound');
+      expect(modelHeaderOf(tabA.doc)).toEqual({ modelId: id, metamodelId: btId });
+      expect(tabA.projection).toMatchObject({ kind: 'written', file: { modelId: id } });
+    } finally {
+      await Promise.all([a.stop(), b.stop()]);
+      rmSync(run, { recursive: true, force: true });
+    }
   });
 });

@@ -8,11 +8,15 @@ import type { PlainJson } from '../api/types';
 interface DocumentJsonViewProps {
   doc: PlainJson;
   connected: boolean;
+  modelOpen: boolean;
 }
 
-export function DocumentJsonView({ doc, connected }: DocumentJsonViewProps) {
+export function DocumentJsonView({ doc, connected, modelOpen }: DocumentJsonViewProps) {
   if (!connected) {
     return <p className="me-log__empty">Connect to a replica to inspect its state.</p>;
+  }
+  if (!modelOpen) {
+    return <p className="me-log__empty">Open a model to inspect its state.</p>;
   }
   if (doc === null) {
     return (

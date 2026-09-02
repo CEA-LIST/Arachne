@@ -1,16 +1,16 @@
 /**
- * The app shell: top bar, explorer, properties, console — a modelling IDE
- * layout in the EMF/Theia tradition.
+ * The app shell: top bar, the document tabs, explorer, properties, console —
+ * a modelling IDE layout in the EMF/Theia tradition.
  *
- * Everything below the UI is untouched. Every new piece of state here is
- * either view-local (which panel is open, what is collapsed) or DERIVED from
- * what the store already carries, so the reducer, the sync engine and their
- * tests needed no changes at all.
+ * The panels show the SELECTED model tab (state/store.ts): its document, its
+ * descriptor, its binding verdict. Every piece of state here is either
+ * view-local (which panel is open, what is collapsed, which element is
+ * selected, per tab) or derived from what the store carries.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import type { ContainmentDesc, Path } from './api/types';
+import type { ContainmentDesc, ModelId, Path } from './api/types';
 import { ConsolePanel, type ConsoleTab } from './console/ConsolePanel';
 import { exportLog } from './console/exportLog';
 import { addChildOps, createRootOps, createSingleContainmentOps, removeFromArrayOps } from './crdt/ops';
@@ -21,10 +21,13 @@ import { isPresent } from './model/instance';
 import type { EditControls } from './properties/fields';
 import { PropertiesPanel } from './properties/PropertiesPanel';
 import { AlertDock } from './shell/AlertDock';
+import { ModelTabStrip } from './shell/ModelTabStrip';
 import { TopBar } from './shell/TopBar';
+import type { ModelTab } from './state/store';
 import { useSync } from './sync/useSync';
 import { Keyboard, X } from './ui/icons';
 import { ICON } from './ui/iconProps';
+import { modelLabel } from './ui/modelLabel';
 import { Popover } from './ui/Popover';
 import { Resizer } from './ui/Resizer';
 import { syncView } from './ui/syncState';
@@ -55,21 +58,25 @@ const SHORTCUTS: readonly [string, string][] = [
 
 export default function App() {
   const sync = useSync();
-  const { state } = sync;
+  const { state, selected } = sync;
   const connected = state.connection.status === 'connected';
-  // The binding check's refusal, when the document was not applied (model/binding.ts).
-  const refusal = refusalOf(state.binding);
+  const doc = selected?.doc ?? null;
+  const descriptor = selected?.metamodel ?? null;
+  // The binding check's refusal, when the selected document was not applied (model/binding.ts).
+  const refusal = refusalOf(selected?.binding ?? null);
   const now = useNow();
   const view = useMemo(
     () => syncView(state, sync.pollMs, now),
     [state, sync.pollMs, now],
   );
 
-  // Which edits may run right now, and how far the batch in flight has got.
-  // The rule and the data-loss defect behind it: ui/editGate.ts.
+  // Which edits may run right now on the selected model, and how far the
+  // batch in flight has got. The rule and the data-loss defect behind it:
+  // ui/editGate.ts.
   const edit = useEditSession(sync, now);
   const {
     runStructural,
+    sendOps,
     canEditStructure,
     canReorder,
     canEditValues,
@@ -79,7 +86,7 @@ export default function App() {
   } = edit;
   const controls: EditControls = useMemo(
     () => ({
-      sendOps: sync.sendOps,
+      sendOps,
       runStructural,
       lock: { locked: !canEditValues, reason: valuesHeldReason },
       structureEnabled: canEditStructure,
@@ -88,7 +95,7 @@ export default function App() {
       reorderReason: reorderHeldReason,
     }),
     [
-      sync.sendOps,
+      sendOps,
       runStructural,
       canEditValues,
       valuesHeldReason,
@@ -101,7 +108,7 @@ export default function App() {
 
   const [selectedPath, setSelectedPath] = useState<Path>([]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-  const [explorerTab, setExplorerTab] = useState<ExplorerTab>('model');
+  const [explorerTab, setExplorerTab] = useState<ExplorerTab>('models');
   const [filter, setFilter] = useState('');
   const [visibleRows, setVisibleRows] = useState(0);
   const [consoleOpen, setConsoleOpen] = useState(false);
@@ -140,13 +147,28 @@ export default function App() {
   if (lastStatus !== state.connection.status) {
     setLastStatus(state.connection.status);
     if (state.connection.status === 'error') setConnectOpen(true);
-    if (state.connection.status === 'connected') setConnectOpen(false);
+    if (state.connection.status === 'connected') {
+      setConnectOpen(false);
+      setExplorerTab('models');
+    }
+  }
+
+  // The tree selection and the collapsed set belong to one document: a
+  // switch of tab starts them over, and a tab that opens is what the user
+  // came for, so the explorer shows its tree.
+  const [lastSelected, setLastSelected] = useState<ModelId | null>(state.selected);
+  if (lastSelected !== state.selected) {
+    setLastSelected(state.selected);
+    setSelectedPath([]);
+    setCollapsed(new Set());
+    setFilter('');
+    if (state.selected !== null) setExplorerTab('model');
   }
 
   // If the selected element vanished (removed, reordered away), fall back to
   // the closest present ancestor — derived at render time, no effect needed.
   let effectivePath = selectedPath;
-  while (effectivePath.length > 0 && !isPresent(getAtPath(state.doc, effectivePath))) {
+  while (effectivePath.length > 0 && !isPresent(getAtPath(doc, effectivePath))) {
     effectivePath = effectivePath.slice(0, -1);
   }
 
@@ -169,7 +191,7 @@ export default function App() {
       const label = `${feature.name}`;
       if (feature.many) {
         const arrayPath = [...elementPath, feature.name];
-        const raw = getAtPath(state.doc, arrayPath);
+        const raw = getAtPath(doc, arrayPath);
         const children = Array.isArray(raw) ? raw : [];
         void runStructural(
           `add ${className} to ${label}[${children.length}]`,
@@ -184,7 +206,7 @@ export default function App() {
         );
       }
     },
-    [runStructural, canEditStructure, state.doc],
+    [runStructural, canEditStructure, doc],
   );
 
   const onRemoveElement = useCallback(
@@ -193,7 +215,7 @@ export default function App() {
       const index = path[path.length - 1];
       if (typeof index !== 'number') return;
       const arrayPath = path.slice(0, -1);
-      const siblings = getAtPath(state.doc, arrayPath);
+      const siblings = getAtPath(doc, arrayPath);
       setSelectedPath(arrayPath.slice(0, -1));
       void runStructural(
         `remove element at /${path.join('/')}`,
@@ -203,7 +225,7 @@ export default function App() {
           : undefined,
       );
     },
-    [runStructural, canEditStructure, state.doc],
+    [runStructural, canEditStructure, doc],
   );
 
   const focusForm = useCallback(() => {
@@ -212,6 +234,11 @@ export default function App() {
     );
     first?.focus();
   }, []);
+
+  const labelOf = useCallback(
+    (tab: ModelTab) => modelLabel(tab.id, tab, state.hosted, state.metamodels),
+    [state.hosted, state.metamodels],
+  );
 
   // Global shortcuts. Nothing here overrides a browser default a participant
   // would miss, and none of them fire while a text field has focus except the
@@ -260,6 +287,7 @@ export default function App() {
     >
       <TopBar
         state={state}
+        tab={selected}
         pollMs={sync.pollMs}
         setPollMs={sync.setPollMs}
         setUrl={sync.setUrl}
@@ -270,6 +298,16 @@ export default function App() {
         setConnectOpen={setConnectOpen}
         progress={edit.progress}
         onShowHelp={() => setHelpOpen(true)}
+      />
+
+      <ModelTabStrip
+        tabs={state.tabs.map((id) => state.models[id])}
+        selected={state.selected}
+        labelOf={labelOf}
+        onSelect={sync.selectModel}
+        onClose={sync.closeModel}
+        onShowModels={() => setExplorerTab('models')}
+        connected={connected}
       />
 
       <div className="me-app__alerts">
@@ -289,10 +327,18 @@ export default function App() {
       <ExplorerPanel
         tab={explorerTab}
         setTab={setExplorerTab}
-        descriptor={state.metamodel}
-        metamodelSource={state.metamodelSource}
+        hosted={state.hosted}
+        metamodels={state.metamodels}
+        openIds={state.tabs}
+        selectedModel={state.selected}
+        onRefreshModels={() => void sync.refreshModels()}
+        onCreateModel={(metamodelId) => void sync.createModel(metamodelId)}
+        onJoinModel={(id, metamodelId) => void sync.joinModel(id, metamodelId)}
+        onOpenModel={sync.openModel}
+        descriptor={descriptor}
+        metamodelSource={selected?.metamodelSource ?? null}
         loadDescriptorFile={sync.loadDescriptorFile}
-        doc={state.doc}
+        doc={doc}
         connected={connected}
         refusal={refusal}
         collapsed={collapsed}
@@ -323,9 +369,10 @@ export default function App() {
       />
 
       <PropertiesPanel
-        descriptor={state.metamodel}
-        doc={state.doc}
+        descriptor={descriptor}
+        doc={doc}
         connected={connected}
+        modelOpen={selected !== null}
         path={effectivePath}
         registry={sync.registry}
         edit={controls}
@@ -338,8 +385,9 @@ export default function App() {
 
       <ConsolePanel
         log={state.log}
-        doc={state.doc}
+        doc={doc}
         connected={connected}
+        modelOpen={selected !== null}
         open={consoleOpen}
         setOpen={setConsoleOpen}
         tab={consoleTab}

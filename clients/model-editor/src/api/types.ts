@@ -6,8 +6,12 @@
  * - Every populated node is wrapped: {"Value": {...}}; strings are char arrays.
  * - POST /api/op takes {"JsonKind": <JsonOp>} and answers {"success": bool, "message": string}.
  * - GET /api/metamodel returns a formatVersion-1 descriptor, or 404 when the node serves none.
- * - GET /api/model/{id}/state and /metamodel are the same, scoped to one hosted model;
- *   a malformed id is 400, an id the node does not host is 404.
+ * - GET /api/model/{id}/state, POST /api/model/{id}/op and GET /api/model/{id}/metamodel are
+ *   the same, scoped to one hosted model; a malformed id is 400, an id the node does not host is 404.
+ * - GET /api/models lists the hosted models as {"models": [{model_id, metamodel_id}]}, the
+ *   metamodel_id null for the default log; POST /api/models registers one: {metamodel_id} creates
+ *   (201, the node mints the id), {model_id, metamodel_id} joins (200); 409 already hosted, 422
+ *   unknown metamodel, both with an "error" text.
  */
 
 /* ---------- CRDT state as serialized by the node ---------- */
@@ -157,4 +161,17 @@ export interface ModelHeader {
 /** One entry of GET /api/metamodels: a descriptor the node holds, keyed by its digest. */
 export interface MetamodelListing extends MetamodelId {
   package: string;
+}
+
+/** One entry of GET /api/models: a hosted model and the metamodel it was registered under, null for the default log. */
+export interface HostedModel {
+  modelId: ModelId;
+  metamodelId: MetamodelId | null;
+}
+
+/** What POST /api/models answers: the model's id, minted by the node on a create, and the metamodel it was registered under. */
+export interface Registration {
+  modelId: ModelId;
+  metamodelId: MetamodelId;
+  created: boolean;
 }

@@ -28,6 +28,8 @@ interface ConsolePanelProps {
   log: LogEntry[];
   doc: PlainJson;
   connected: boolean;
+  /** False while no model tab is open. */
+  modelOpen: boolean;
   open: boolean;
   setOpen: (open: boolean) => void;
   tab: ConsoleTab;
@@ -47,6 +49,7 @@ export function ConsolePanel({
   log,
   doc,
   connected,
+  modelOpen,
   open,
   setOpen,
   tab,
@@ -152,7 +155,7 @@ export function ConsolePanel({
             progress={progress}
           />
         ) : (
-          <DocumentJsonView doc={doc} connected={connected} />
+          <DocumentJsonView doc={doc} connected={connected} modelOpen={modelOpen} />
         )}
       </div>
     </section>

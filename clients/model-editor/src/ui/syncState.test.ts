@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { initialState, type AppState } from '../state/store';
+import { initialState, newTab, type AppState, type ModelTab } from '../state/store';
 import { relativeAge, syncView } from './syncState';
 
 const POLL = 500;
 const NOW = 1_000_000;
 
-function connected(overrides: Partial<AppState> = {}): AppState {
+const ID = 'a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4';
+
+/** A connected editor with one open tab, whose poll is what the chip judges. */
+function connected(overrides: Partial<ModelTab> = {}): AppState {
   const base = initialState('http://127.0.0.1:8081');
+  const tab: ModelTab = { ...newTab(ID, base.connection.url), status: 'open', lastSyncAt: NOW, ...overrides };
   return {
     ...base,
     connection: { ...base.connection, status: 'connected', replicaId: 'editor-a' },
-    lastSyncAt: NOW,
-    ...overrides,
+    models: { [ID]: tab },
+    tabs: [ID],
+    selected: ID,
   };
 }
 

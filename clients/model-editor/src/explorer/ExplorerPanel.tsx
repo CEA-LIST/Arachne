@@ -1,25 +1,39 @@
 /**
- * The left panel: Model / Metamodel tabs, a filter toolbar, and the tree.
+ * The left panel: Models / Model / Metamodel tabs, a filter toolbar, and the
+ * tree. The Models tab is the node's hosted list with create and join; the
+ * other two are the selected document tab's.
  *
- * Every state this panel can be in instructs — not connected, no metamodel,
- * empty document, no filter match — so the left column is never simply blank.
+ * Every state this panel can be in instructs — not connected, no model open,
+ * no metamodel, empty document, no filter match — so the left column is never
+ * simply blank.
  */
 
 import { useMemo, type RefObject } from 'react';
-import type { ContainmentDesc, Descriptor, Path, PlainJson } from '../api/types';
+import type {
+  ContainmentDesc,
+  Descriptor,
+  HostedModel,
+  MetamodelId,
+  MetamodelListing,
+  ModelId,
+  Path,
+  PlainJson,
+} from '../api/types';
 import { EmptyState } from '../common/EmptyState';
 import { buildTree, rootCandidates, type ModelNode } from '../model/instance';
 import { AddControl } from '../properties/AddControl';
 import { countElements, flattenTree } from '../ui/flattenTree';
-import { Box, FileWarning, ListCollapse, Search, X } from '../ui/icons';
+import { Box, FileWarning, Layers, ListCollapse, Search, X } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 import { Tabs, type TabSpec } from '../ui/Tabs';
 import { MetamodelBrowser } from './MetamodelBrowser';
+import { ModelsPanel } from './ModelsPanel';
 import { ModelTree } from './ModelTree';
 
-export type ExplorerTab = 'model' | 'metamodel';
+export type ExplorerTab = 'models' | 'model' | 'metamodel';
 
 const TABS: readonly TabSpec<ExplorerTab>[] = [
+  { id: 'models', label: 'Models' },
   { id: 'model', label: 'Model' },
   { id: 'metamodel', label: 'Metamodel' },
 ];
@@ -27,6 +41,15 @@ const TABS: readonly TabSpec<ExplorerTab>[] = [
 interface ExplorerPanelProps {
   tab: ExplorerTab;
   setTab: (tab: ExplorerTab) => void;
+  /** The node's hosted list and descriptors, and the actions of the Models tab. */
+  hosted: HostedModel[] | null;
+  metamodels: MetamodelListing[];
+  openIds: readonly ModelId[];
+  selectedModel: ModelId | null;
+  onRefreshModels: () => void;
+  onCreateModel: (metamodelId: MetamodelId) => void;
+  onJoinModel: (id: ModelId, metamodelId: MetamodelId) => void;
+  onOpenModel: (id: ModelId) => void;
   descriptor: Descriptor | null;
   metamodelSource: 'node' | 'file' | null;
   loadDescriptorFile: (descriptor: Descriptor) => void;
@@ -56,6 +79,14 @@ interface ExplorerPanelProps {
 export function ExplorerPanel({
   tab,
   setTab,
+  hosted,
+  metamodels,
+  openIds,
+  selectedModel,
+  onRefreshModels,
+  onCreateModel,
+  onJoinModel,
+  onOpenModel,
   descriptor,
   metamodelSource,
   loadDescriptorFile,
@@ -97,7 +128,21 @@ export function ExplorerPanel({
     <section className="me-panel me-explorer" aria-label="Model explorer">
       <Tabs tabs={TABS} active={tab} onSelect={setTab} label="Explorer views" />
 
-      {tab === 'metamodel' ? (
+      {tab === 'models' ? (
+        <div className="me-panel__body" id="panel-models" role="tabpanel" aria-labelledby="tab-models">
+          <ModelsPanel
+            connected={connected}
+            hosted={hosted}
+            metamodels={metamodels}
+            openIds={openIds}
+            selected={selectedModel}
+            onRefresh={onRefreshModels}
+            onCreate={onCreateModel}
+            onJoin={onJoinModel}
+            onOpen={onOpenModel}
+          />
+        </div>
+      ) : tab === 'metamodel' ? (
         <div className="me-panel__body" id="panel-metamodel" role="tabpanel" aria-labelledby="tab-metamodel">
           <MetamodelBrowser
             metamodel={descriptor}
@@ -156,6 +201,16 @@ export function ExplorerPanel({
               <p className="me-panel__placeholder">
                 Not connected — the model tree appears once a replica answers.
               </p>
+            ) : selectedModel === null ? (
+              <EmptyState
+                icon={Layers}
+                title="No model open"
+                body="Open one of the models this node hosts, create a new one, or join one by id."
+              >
+                <button type="button" className="me-btn me-btn--primary" onClick={() => setTab('models')}>
+                  Open Models tab
+                </button>
+              </EmptyState>
             ) : refusal !== null ? (
               <EmptyState
                 icon={FileWarning}
@@ -211,7 +266,7 @@ export function ExplorerPanel({
               </EmptyState>
             ) : null}
 
-            {connected && descriptor !== null && tree !== null && (
+            {connected && selectedModel !== null && descriptor !== null && tree !== null && (
               <ModelTree
                 descriptor={descriptor}
                 root={tree}
