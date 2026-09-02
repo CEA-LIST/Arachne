@@ -1,6 +1,7 @@
 //! Network node for the generated json CRDT.
 //!
-//! Runs a single replica with TCP peer-to-peer sync and an HTTP API.
+//! Runs one replica with TCP peer-to-peer sync and an HTTP API, hosting one
+//! log per model it is asked to.
 //!
 //! # Usage
 //!
@@ -54,14 +55,18 @@
 //!
 //! # Metamodel discovery
 //!
-//! The node can serve the crate's metamodel descriptor on
-//! `GET /api/metamodel`, so a metamodel-agnostic client can shape itself to
-//! whatever node it connects to. `METAMODEL_PATH` names the descriptor file;
-//! unset, the node tries `metamodel.json` in the working directory (the
-//! generator writes one next to the crate manifest). Without a readable
-//! descriptor the endpoint answers 404, exactly like any unknown path.
+//! The node serves metamodel descriptors, so a metamodel-agnostic client can
+//! shape itself to whatever node it connects to. `METAMODEL_PATH` names one
+//! descriptor file, served on `GET /api/metamodel`; unset, the node tries
+//! `metamodel.json` in the working directory (the generator writes one next to
+//! the crate manifest). `METAMODEL_DIR` names a directory whose `.json` files
+//! are all served, listed on `GET /api/metamodels` and offered at model
+//! registration. Every descriptor is keyed by its `nsURI`, which is what a
+//! registration's `metamodel_id` names. Without a readable descriptor the
+//! endpoints answer 404, exactly like any unknown path.
 //!
 //! - `METAMODEL_PATH` — descriptor file, default `metamodel.json`
+//! - `METAMODEL_DIR`  — directory of descriptors, unset means none
 //!
 //! # Log identity
 //!
@@ -69,15 +74,24 @@
 //! 32 lowercase hex characters, the same value on every replica. Unset, the
 //! replica mints a fresh id and prints it — right for the replica that
 //! creates a session, wrong for one joining it, whose peers would refuse its
-//! events as belonging to another log.
+//! events as belonging to another log. This is the node's *default* log, the
+//! one the unscoped routes serve; every other log it hosts is registered
+//! through `POST /api/models`.
 //!
-//! - `LOG_ID` — the log this replica hosts; unset mints a fresh one
+//! - `LOG_ID` — the default log this replica hosts; unset mints a fresh one
 //!
 //! # HTTP API
 //!
-//! - `POST /api/op`        — submit a JSON-serialised operation
-//! - `GET  /api/state`     — query the current CRDT state
-//! - `GET  /api/metamodel` — metamodel descriptor, when configured
+//! - `GET  /api/models`               — the hosted models
+//! - `POST /api/models`               — register a model: create, or join by id
+//! - `GET  /api/metamodels`           — the descriptors this node holds
+//! - `GET  /api/model/<id>/state`     — that model's state
+//! - `POST /api/model/<id>/op`        — submit an operation to that model
+//! - `GET  /api/model/<id>/metamodel` — that model's descriptor
+//! - `GET  /api/model/<id>/metrics`   — that model's counters
+//! - `POST /api/op`        — submit a JSON-serialised operation to the default log
+//! - `GET  /api/state`     — query the default log's state
+//! - `GET  /api/metamodel` — the first metamodel descriptor, when configured
 //! - `GET  /api/metrics`   — causal-stability and log-size counters
 //! - `GET  /api/health`    — health check
 //! - `GET  /api/peers`     — list connected peers
@@ -88,6 +102,7 @@
 //! - `POST /api/resume-all`  — resume all peers
 
 use std::env;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
@@ -95,8 +110,10 @@ use json_crdt::package::JsonLog;
 use moirai_network::HashMap;
 use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
-use moirai_network::generic::Node;
+use moirai_network::generic::{Node, ServedDescriptor};
 use moirai_protocol::log_id::LogId;
+use moirai_protocol::state::log::IsLog;
+use serde_json::{Value, json};
 
 /// How other replicas reach this one's replication listener.
 ///
@@ -113,6 +130,55 @@ fn advertise_addr(listen_port: u16) -> String {
             .unwrap_or_else(|| "127.0.0.1".to_string());
         format!("{host}:{listen_port}")
     })
+}
+
+/// A descriptor as the node serves it: keyed by its `nsURI`, which is what a
+/// registration's `metamodel_id` names for now, and listed with its `package`.
+fn describe_descriptor(text: &str) -> Result<ServedDescriptor, String> {
+    let parsed: Value = serde_json::from_str(text).map_err(|err| format!("not JSON: {err}"))?;
+    let ns_uri = parsed
+        .get("nsURI")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "no `nsURI`".to_string())?;
+    let package = parsed
+        .get("package")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Ok(ServedDescriptor {
+        key: ns_uri.to_string(),
+        listing: json!({ "nsURI": ns_uri, "package": package }),
+        text: text.to_string(),
+    })
+}
+
+/// The descriptor files of `dir`, in name order.
+fn descriptor_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    paths.sort();
+    Ok(paths)
+}
+
+/// The key a registration's `metamodel_id` names: its `nsURI`, given either as
+/// `{"nsURI": ...}` or as a bare string.
+fn descriptor_key(metamodel_id: &Value) -> Option<String> {
+    match metamodel_id {
+        Value::String(ns_uri) => Some(ns_uri.clone()),
+        Value::Object(fields) => fields
+            .get("nsURI")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
+/// The operations that open a newly created model's log. None yet: the
+/// `__model` header that binds a model to its metamodel is the next step.
+fn header_ops(_model_id: &LogId, _metamodel_id: &Value) -> Vec<<JsonLog as IsLog>::Op> {
+    Vec::new()
 }
 
 fn main() {
@@ -139,10 +205,10 @@ fn main() {
 
     let member_refs: Vec<&str> = all_members.iter().map(|s| s.as_str()).collect();
 
-    // The log this replica hosts. Set, `LOG_ID` means join that log; unset,
-    // a fresh id is minted and printed, which is right only for the replica
-    // that creates the session — peers hosting a different log refuse each
-    // other's events.
+    // The default log this replica hosts. Set, `LOG_ID` means join that log;
+    // unset, a fresh id is minted and printed, which is right only for the
+    // replica that creates the session — peers hosting a different log refuse
+    // each other's events.
     let log_id = match env::var("LOG_ID") {
         Ok(raw) => LogId::parse(&raw).unwrap_or_else(|err| {
             eprintln!("[{replica_id}] invalid LOG_ID `{raw}`: {err}");
@@ -169,15 +235,26 @@ fn main() {
     // Metamodel discovery is opt-in on the same terms as everything below:
     // no readable descriptor, no `/api/metamodel` — the endpoint answers 404
     // exactly as it always has. Must run before `start_http`, which
-    // snapshots the descriptor.
+    // snapshots the descriptors. `METAMODEL_PATH` comes first, so the
+    // unscoped `/api/metamodel` keeps answering with it; `METAMODEL_DIR`
+    // adds the rest.
+    let mut descriptors: Vec<ServedDescriptor> = Vec::new();
     let metamodel_path = env::var("METAMODEL_PATH").ok();
     let metamodel_explicit = metamodel_path.is_some();
     let metamodel_path = metamodel_path.unwrap_or_else(|| "metamodel.json".to_string());
     match std::fs::read_to_string(&metamodel_path) {
-        Ok(descriptor) => {
-            eprintln!("[{replica_id}] serving metamodel descriptor from `{metamodel_path}`");
-            node.serve_metamodel(descriptor);
-        }
+        Ok(text) => match describe_descriptor(&text) {
+            Ok(descriptor) => {
+                eprintln!("[{replica_id}] serving metamodel descriptor from `{metamodel_path}`");
+                descriptors.push(descriptor);
+            }
+            Err(why) => {
+                eprintln!(
+                    "[{replica_id}] METAMODEL_PATH `{metamodel_path}` is not a descriptor \
+                     ({why}); not served"
+                );
+            }
+        },
         Err(err) if metamodel_explicit => {
             eprintln!(
                 "[{replica_id}] cannot read METAMODEL_PATH `{metamodel_path}`: {err}; \
@@ -186,6 +263,40 @@ fn main() {
         }
         Err(_) => {}
     }
+    if let Some(dir) = env::var("METAMODEL_DIR").ok().filter(|dir| !dir.is_empty()) {
+        match descriptor_files(Path::new(&dir)) {
+            Ok(paths) => {
+                for path in paths {
+                    let described = std::fs::read_to_string(&path)
+                        .map_err(|err| err.to_string())
+                        .and_then(|text| describe_descriptor(&text));
+                    match described {
+                        // Usually the METAMODEL_PATH file seen again through
+                        // its directory; the first copy is the one served.
+                        Ok(descriptor) if descriptors.iter().any(|d| d.key == descriptor.key) => {}
+                        Ok(descriptor) => {
+                            eprintln!(
+                                "[{replica_id}] serving metamodel descriptor from `{}`",
+                                path.display()
+                            );
+                            descriptors.push(descriptor);
+                        }
+                        Err(why) => {
+                            eprintln!(
+                                "[{replica_id}] skipping `{}` in METAMODEL_DIR: {why}",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("[{replica_id}] cannot read METAMODEL_DIR `{dir}`: {err}");
+            }
+        }
+    }
+    node.serve_metamodels(descriptors);
+    node.enable_registration(descriptor_key, header_ops);
 
     if let Some(port) = http_port {
         node.start_http(port);
