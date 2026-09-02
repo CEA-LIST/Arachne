@@ -120,6 +120,16 @@ export type Path = (string | number)[];
 export type ModelId = string;
 
 /**
+ * Whether a string has the shape of a `ModelId`: exactly 32 lowercase hex
+ * characters, as `LogId::parse` on the node accepts. The header's `modelId`
+ * arrives over the wire from whoever wrote it, so anything that turns it into
+ * a file name or a route checks the shape first.
+ */
+export function isModelId(value: string): boolean {
+  return /^[0-9a-f]{32}$/.test(value);
+}
+
+/**
  * The identity of a metamodel: the descriptor's nsURI beside the SHA-256,
  * lowercase hex, of its canonical JSON (compact, keys sorted at every level).
  * `model/digest.ts` computes it; the node computes the same for what it serves

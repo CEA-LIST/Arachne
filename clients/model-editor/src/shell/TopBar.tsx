@@ -5,10 +5,12 @@
  * descriptor at runtime, with its provenance (node or file) — the editor never
  * hard-codes what it is editing — and, once a state has been fetched, the
  * binding check's verdict on the document (model/binding.ts): unbound, bound,
- * or not applied.
+ * or not applied; then the model store's word (model/projection.ts): stored,
+ * with the file and its digest in the title, or why not.
  */
 
 import { bindingLabel, describeBinding, isRefusal } from '../model/binding';
+import { describeProjection, projectionLabel } from '../model/projection';
 import type { AppState } from '../state/store';
 import type { FlushProgress } from '../ui/editGate';
 import { FlushBar } from '../ui/FlushBar';
@@ -46,7 +48,7 @@ export function TopBar({
   progress,
   onShowHelp,
 }: TopBarProps) {
-  const { connection, metamodel, metamodelSource, pendingOps, binding } = state;
+  const { connection, metamodel, metamodelSource, pendingOps, binding, projection } = state;
   const connected = connection.status === 'connected';
 
   return (
@@ -73,6 +75,14 @@ export function TopBar({
             title={describeBinding(binding)}
           >
             {bindingLabel(binding)}
+          </span>
+        )}
+        {connected && projection !== null && (
+          <span
+            className={projection.kind === 'failed' ? 'me-chip me-chip--danger' : 'me-subtle'}
+            title={describeProjection(projection)}
+          >
+            {projectionLabel(projection)}
           </span>
         )}
       </div>

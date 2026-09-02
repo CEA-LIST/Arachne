@@ -1,9 +1,11 @@
 /// <reference types="node" />
-// Reads the repository's descriptors, like model/digest.test.ts: the check is
-// over real descriptor bytes and the digests Rust recorded for them.
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import type { Descriptor, MetamodelId, ModelHeader, PlainJson, WireNode } from '../api/types';
+// Over the repository's descriptors and the digests Rust recorded for them
+// (model/testFixtures.ts): the check is over real descriptor bytes.
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, describe, expect, it } from 'vitest';
+import type { Descriptor, ModelHeader } from '../api/types';
 import {
   applyModel,
   bindingLabel,
@@ -15,49 +17,9 @@ import {
   type ApplyResult,
   type Refused,
 } from './binding';
-
-const examples = new URL('../../../../examples/', import.meta.url);
-
-function readExample(file: string): unknown {
-  return JSON.parse(readFileSync(new URL(file, examples), 'utf8'));
-}
-
-const fixture = readExample('fixtures/metamodel-digests.json') as Record<string, MetamodelId>;
-const bt = readExample('bt.metamodel.json') as Descriptor;
-const uml = readExample('uml.metamodel.json') as Descriptor;
-const btId = fixture['bt.metamodel.json'];
-const umlId = fixture['uml.metamodel.json'];
-
-const MODEL_ID = 'a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4';
-const btHeader: ModelHeader = { modelId: MODEL_ID, metamodelId: btId };
-const umlHeader: ModelHeader = { modelId: MODEL_ID, metamodelId: umlId };
-
-/** A behaviour-tree document under `header`: a Root, a BehaviorTree, a Sequence. */
-function btDocument(header: ModelHeader | null): PlainJson {
-  return {
-    ...(header === null ? {} : { __model: header as unknown as PlainJson }),
-    eClass: 'Root',
-    behaviortrees: [
-      {
-        eClass: 'BehaviorTree',
-        ID: 'main',
-        child: { eClass: 'Sequence', name: 'root' },
-      },
-    ],
-  };
-}
-
-/** The node's wire encoding of a plain document (strings as char arrays, every node wrapped). */
-function encode(value: PlainJson): WireNode {
-  if (value === null) return 'Unset';
-  if (typeof value === 'string') return { Value: { String: Array.from(value) } };
-  if (typeof value === 'number') return { Value: { Number: value } };
-  if (typeof value === 'boolean') return { Value: { Boolean: value } };
-  if (Array.isArray(value)) return { Value: { Array: value.map(encode) } };
-  return {
-    Value: { Object: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encode(v)])) },
-  };
-}
+import { fsModelStore } from './fsStore';
+import { projectModel } from './projection';
+import { bt, btDocument, btHeader, btId, encodeWire as encode, MODEL_ID, uml, umlHeader, umlId } from './testFixtures';
 
 function refused(result: ApplyResult): Refused {
   if (result.applied) throw new Error('expected the apply to be refused');
@@ -118,6 +80,9 @@ describe('checkBinding', () => {
 });
 
 describe('mp9 the binding check at apply', () => {
+  const storeDir = mkdtempSync(join(tmpdir(), 'model-binding-'));
+  afterAll(() => rmSync(storeDir, { recursive: true, force: true }));
+
   it('mp9_apply_refuses_a_descriptor_whose_digest_differs_from_the_header', async () => {
     // A behaviour-tree state whose header names the bt digest, served the uml
     // descriptor: the bad day of M-A5, in which Sequence matches no class and
@@ -132,18 +97,26 @@ describe('mp9 the binding check at apply', () => {
     expect(result.message).toContain(umlId.digest);
     expect(result.message).toContain('editing is disabled');
 
-    // The document is untouched: a refusal carries nothing to render. (The
-    // store backend that must record no write is step 5's; there is no write
-    // path yet, which is the strongest form of "recorded nothing".)
+    // The document is untouched: a refusal carries nothing to render.
     expect('doc' in result).toBe(false);
 
-    // Control: the same state under the descriptor its header names applies.
+    // The store backend recorded no write: the projection follows Applied
+    // and never Refused (model/projection.ts), so the directory stays empty.
+    const store = fsModelStore(storeDir);
+    expect(await projectModel(store, result)).toEqual({ kind: 'not-written', why: 'refused' });
+    expect(await store.list()).toEqual([]);
+    expect(readdirSync(storeDir)).toEqual([]);
+
+    // Control: the same state under the descriptor its header names applies,
+    // and that apply is what the store records.
     const control = await applyModel(encode(btDocument(btHeader)), bt, null);
     expect(control.applied).toBe(true);
     if (control.applied) {
       expect(control.binding.kind).toBe('bound');
       expect(control.doc).toEqual(btDocument(btHeader));
     }
+    expect((await projectModel(store, control)).kind).toBe('written');
+    expect(await store.list()).toEqual([MODEL_ID]);
   });
 
   it('hashes the descriptor it is given rather than trusting a label on it', async () => {

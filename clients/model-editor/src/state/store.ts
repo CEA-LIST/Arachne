@@ -1,5 +1,6 @@
 import type { Descriptor, JsonOp, PlainJson } from '../api/types';
 import type { Binding } from '../model/binding';
+import type { Projection } from '../model/projection';
 
 /** One row of the action log: what was attempted, what was sent, what came back. */
 export interface LogEntry {
@@ -27,6 +28,8 @@ export interface AppState {
   doc: PlainJson;
   /** The binding check's last verdict on the document (model/binding.ts); null before the first apply. */
   binding: Binding | null;
+  /** The model store's last outcome after an apply (model/projection.ts); null before the first apply. */
+  projection: Projection | null;
   lastSyncAt: number | null;
   pendingOps: number;
   banner: string | null;
@@ -42,6 +45,7 @@ export function initialState(url: string): AppState {
     metamodelSource: null,
     doc: null,
     binding: null,
+    projection: null,
     lastSyncAt: null,
     pendingOps: 0,
     banner: null,
@@ -58,6 +62,7 @@ export type Action =
   | { type: 'metamodel'; descriptor: Descriptor | null; source: 'node' | 'file' | null }
   | { type: 'state'; doc: PlainJson; ts: number }
   | { type: 'binding'; binding: Binding }
+  | { type: 'projection'; projection: Projection }
   | { type: 'pending'; count: number }
   | { type: 'log'; entry: LogEntry }
   | { type: 'banner'; message: string | null };
@@ -88,6 +93,7 @@ export function reducer(state: AppState, action: Action): AppState {
         connection: { ...state.connection, status: 'idle', replicaId: null, error: null },
         doc: null,
         binding: null,
+        projection: null,
         lastSyncAt: null,
         pendingOps: 0,
         metamodel: state.metamodelSource === 'node' ? null : state.metamodel,
@@ -99,6 +105,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, doc: action.doc, lastSyncAt: action.ts };
     case 'binding':
       return { ...state, binding: action.binding };
+    case 'projection':
+      return { ...state, projection: action.projection };
     case 'pending':
       return { ...state, pendingOps: action.count };
     case 'log': {

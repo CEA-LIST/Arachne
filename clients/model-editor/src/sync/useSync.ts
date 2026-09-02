@@ -3,7 +3,16 @@ import { ApiError, getHealth, getMetamodel, getState, postOp } from '../api/clie
 import type { Descriptor, JsonOp, ModelHeader, Path, PlainJson } from '../api/types';
 import { MODEL_HEADER_REFUSAL, opTouchesModelHeader } from '../crdt/ops';
 import { setAtPath } from '../crdt/path';
-import { applyModel, describeBinding, isRefusal, sameBinding, type Binding } from '../model/binding';
+import {
+  applyModel,
+  describeBinding,
+  isRefusal,
+  sameBinding,
+  type ApplyResult,
+  type Binding,
+} from '../model/binding';
+import { describeProjection, projectModel, sameProjection, type Projection } from '../model/projection';
+import { openBrowserStore, type ModelStore } from '../model/store';
 import { initialState, reducer, type AppState } from '../state/store';
 import { FieldRegistry } from './fieldRegistry';
 import { OpQueue, type BatchOutcome } from './opQueue';
@@ -44,10 +53,22 @@ export interface SyncApi {
   clearBanner: () => void;
 }
 
-export function useSync(): SyncApi {
+export interface SyncOptions {
+  /**
+   * The model store the projection is written to (model/store.ts). Absent,
+   * the browser's origin-private file system; null, no store at all, which is
+   * reported and never blocks an apply.
+   */
+  store?: ModelStore | null;
+}
+
+export function useSync(options: SyncOptions = {}): SyncApi {
   const [state, dispatch] = useReducer(reducer, loadStoredUrl(), initialState);
   const [pollMs, setPollMs] = useState(DEFAULT_POLL_MS);
   const [registry] = useState(() => new FieldRegistry());
+  const [store] = useState<ModelStore | null>(() =>
+    options.store === undefined ? openBrowserStore() : options.store,
+  );
   const queueRef = useRef<OpQueue | null>(null);
   const logIdRef = useRef(0);
   const pollingRef = useRef(false);
@@ -67,12 +88,51 @@ export function useSync(): SyncApi {
   // reported once rather than on every poll. Both reset with the connection.
   const recordedRef = useRef<ModelHeader | null>(null);
   const bindingRef = useRef<Binding | null>(null);
+  // The store's last outcome (model/projection.ts), for the same reason.
+  const projectionRef = useRef<Projection | null>(null);
+
+  /**
+   * The projection after an apply: written on `bound`, nothing otherwise. A
+   * change is reported once; a failure reaches the log and the alert dock
+   * and leaves the view alone, since the file is a projection of the log
+   * and never what the view is built from.
+   */
+  const project = useCallback(
+    async (result: ApplyResult) => {
+      const projection = await projectModel(store, result);
+      const changed =
+        projectionRef.current === null || !sameProjection(projectionRef.current, projection);
+      projectionRef.current = projection;
+      if (!changed) return;
+      dispatch({ type: 'projection', projection });
+      const detail = describeProjection(projection);
+      if (projection.kind === 'unavailable') {
+        console.warn(detail);
+      } else if (projection.kind === 'failed') {
+        dispatch({
+          type: 'log',
+          entry: {
+            id: logIdRef.current++,
+            ts: projection.ts,
+            description: 'write model file',
+            ops: [],
+            outcome: 'error',
+            detail,
+          },
+        });
+        dispatch({ type: 'banner', message: detail });
+      }
+    },
+    [store],
+  );
 
   /**
    * One apply: fetch the state, check its binding against `descriptor`, the
-   * one the document would be rendered under, and dispatch the document only
-   * when the check lets it through. Runs on connect and on every poll, since
-   * a header can arrive by transfer after connect.
+   * one the document would be rendered under, dispatch the document only
+   * when the check lets it through, then write the projection. Runs on
+   * connect and on every poll, since a header can arrive by transfer after
+   * connect. The document always comes from the node: the store is written
+   * after the dispatch and read by nothing here.
    */
   const refreshOnce = useCallback(
     async (url: string, descriptor: Descriptor | null) => {
@@ -102,20 +162,23 @@ export function useSync(): SyncApi {
           });
           dispatch({ type: 'banner', message: result.message });
         }
+        await project(result);
         return;
       }
       if (recordedRef.current === null && result.binding.kind !== 'unbound') {
         recordedRef.current = result.binding.header;
       }
       dispatch({ type: 'state', doc: registry.overlay(result.doc), ts });
+      await project(result);
     },
-    [registry],
+    [registry, project],
   );
 
   const connect = useCallback(async () => {
     const url = urlRef.current;
     recordedRef.current = null;
     bindingRef.current = null;
+    projectionRef.current = null;
     dispatch({ type: 'connecting' });
     try {
       const health = await getHealth(url);
@@ -154,6 +217,7 @@ export function useSync(): SyncApi {
     queueRef.current = null;
     recordedRef.current = null;
     bindingRef.current = null;
+    projectionRef.current = null;
     dispatch({ type: 'disconnected' });
   }, []);
 
