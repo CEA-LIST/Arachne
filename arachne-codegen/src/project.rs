@@ -183,7 +183,7 @@ fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> String {
     let moirai_network = moirai_root.join("moirai-network");
 
     format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\", features = [\"serde\"] }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\nmoirai-network = {{ path = \"{}\" }}\nserde = {{ version = \"1.0\", features = [\"derive\"] }}\nserde_json = \"1.0\"\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\", \"serde\"]\nfuzz = []\nserde = [\"moirai-protocol/serde\", \"moirai-macros/serde\", \"moirai-crdt/serde\"]\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
+        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\", features = [\"serde\"] }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\nmoirai-network = {{ path = \"{}\" }}\nserde = {{ version = \"1.0\", features = [\"derive\"] }}\nserde_json = \"1.0\"\nsha2 = \"0.10\"\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\", \"serde\"]\nfuzz = []\nserde = [\"moirai-protocol/serde\", \"moirai-macros/serde\", \"moirai-crdt/serde\"]\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
         to_path_string(&moirai_crdt),
         to_path_string(&moirai_protocol),
         to_path_string(&moirai_macros),

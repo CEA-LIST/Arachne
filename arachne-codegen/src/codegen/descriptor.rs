@@ -47,6 +47,13 @@
 //!   under `enums`.
 //! - The class set is the one code generation reaches from the root classes,
 //!   so descriptor and generated crate describe the same metamodel slice.
+//!
+//! # Identity
+//!
+//! A descriptor's identity on the model plane is `{nsURI, digest}`, where the
+//! digest is [`metamodel_digest`]: a function of the descriptor's content and
+//! nothing else, so a reformatted file keeps its models and an edited one
+//! does not.
 
 use std::collections::HashSet;
 
@@ -56,6 +63,7 @@ use ecore_rs::{
 };
 use log::warn;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::error::{ArachneError, Result};
 
@@ -125,6 +133,21 @@ pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
         "classes": classes,
         "enums": enums,
     }))
+}
+
+/// The digest half of a metamodel's identity: SHA-256, lowercase hex, over
+/// the compact `serde_json` serialization of the parsed descriptor.
+///
+/// Taken over the parsed value and never over file bytes, so pretty and
+/// compact renderings of one descriptor agree. `serde_json` runs without
+/// `preserve_order` in this crate, so every object serializes with its keys
+/// sorted and the order a file lists them in cannot reach the digest either;
+/// a changed class, attribute, enum or `nsURI` can. The generated node binary
+/// carries a copy of this rule and the editor computes it with a key-sorted
+/// stringify, and `examples/fixtures/metamodel-digests.json` is where the
+/// three are held to agree.
+pub fn metamodel_digest(descriptor: &Value) -> String {
+    format!("{:x}", Sha256::digest(descriptor.to_string()))
 }
 
 /// Describes one class: declared features partitioned into attributes,
@@ -257,17 +280,36 @@ fn attribute_kind(
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
-    use serde_json::{Value, json};
+    use serde_json::{Map, Value, json};
 
+    use super::metamodel_digest;
     use crate::EcoreParser;
 
-    fn bt_descriptor() -> Value {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/bt.ecore");
-        let parser = EcoreParser::from_file(path).expect("bt.ecore should parse");
-        let pack = crate::find_user_package(&parser.ctx).expect("bt has a user package");
+    fn example(file: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../examples")
+            .join(file)
+    }
+
+    /// The descriptor `arachne describe` renders for an example metamodel.
+    fn descriptor_of(ecore: &str) -> Value {
+        let parser = EcoreParser::from_file(example(ecore))
+            .unwrap_or_else(|e| panic!("{ecore} should parse: {e}"));
+        let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         super::descriptor_json(&parser.ctx, pack).expect("descriptor should build")
+    }
+
+    fn bt_descriptor() -> Value {
+        descriptor_of("bt.ecore")
+    }
+
+    fn read_json(path: &Path) -> Value {
+        let text = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("{} should be readable: {e}", path.display()));
+        serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("{} should be JSON: {e}", path.display()))
     }
 
     #[test]
@@ -314,6 +356,80 @@ mod tests {
                  "required": false, "ordered": true},
             ])
         );
+    }
+
+    /// The digest is a function of the descriptor's content: rendering it
+    /// pretty, compact or with its keys in another order gives one digest, a
+    /// second generation from the same `.ecore` gives the same one, and one
+    /// changed attribute gives another.
+    #[test]
+    fn mp5_the_descriptor_digest_is_stable_under_reformatting_and_changes_under_edits() {
+        let descriptor = bt_descriptor();
+        let digest = metamodel_digest(&descriptor);
+
+        let pretty: Value = serde_json::from_str(&format!("{descriptor:#}")).unwrap();
+        let compact: Value = serde_json::from_str(&descriptor.to_string()).unwrap();
+        let reversed = Value::Object(descriptor.as_object().unwrap().iter().rev().fold(
+            Map::new(),
+            |mut map, (key, value)| {
+                map.insert(key.clone(), value.clone());
+                map
+            },
+        ));
+        assert_eq!(
+            [
+                metamodel_digest(&pretty),
+                metamodel_digest(&compact),
+                metamodel_digest(&reversed),
+                metamodel_digest(&bt_descriptor()),
+            ],
+            [
+                digest.clone(),
+                digest.clone(),
+                digest.clone(),
+                digest.clone()
+            ],
+            "a formatter or a second generation moved the digest"
+        );
+
+        let mut edited = descriptor.clone();
+        let name = edited["classes"]["TreeNode"]["attributes"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|attribute| attribute["name"] == "name")
+            .expect("TreeNode declares `name`");
+        name["required"] = json!(true);
+        assert_ne!(
+            metamodel_digest(&edited),
+            digest,
+            "making `TreeNode.name` required left the digest unchanged"
+        );
+    }
+
+    /// The fixture the editor (mp6) and the generated crate (mp13) read: the
+    /// checked-in descriptors and their digests, as this crate computes them.
+    #[test]
+    fn the_digest_fixture_names_the_checked_in_descriptors() {
+        let fixture = read_json(&example("fixtures/metamodel-digests.json"));
+        for (file, ecore) in [
+            ("bt.metamodel.json", "bt.ecore"),
+            ("uml.metamodel.json", "SimpleUML.ecore"),
+        ] {
+            let generated = descriptor_of(ecore);
+            let checked_in = read_json(&example(file));
+            let digest = metamodel_digest(&generated);
+            assert_eq!(
+                metamodel_digest(&checked_in),
+                digest,
+                "examples/{file} differs from `arachne describe examples/{ecore}`"
+            );
+            assert_eq!(
+                fixture[file],
+                json!({ "nsURI": generated["nsURI"], "digest": digest }),
+                "the fixture entry for {file} is stale; `arachne digest examples/{file}` prints the current one"
+            );
+        }
     }
 
     #[test]

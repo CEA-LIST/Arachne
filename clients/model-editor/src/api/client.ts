@@ -2,7 +2,8 @@
  * Typed client for the moirai node HTTP API.
  *
  * Endpoints (this base): GET /api/health, GET /api/state, POST /api/op,
- * GET /api/metamodel (404 when the node serves no descriptor).
+ * GET /api/metamodel (404 when the node serves no descriptor),
+ * GET /api/metamodels (the descriptors the node holds, each with its digest).
  *
  * Error contract: network failures and non-OK statuses throw ApiError;
  * POST /api/op additionally returns {"success": false, ...} with HTTP 200 for
@@ -10,7 +11,7 @@
  * queue turns that case into a visible error (never swallowed).
  */
 
-import type { Descriptor, JsonOp, OpResult, WireNode } from './types';
+import type { Descriptor, JsonOp, MetamodelListing, OpResult, WireNode } from './types';
 
 export class ApiError extends Error {
   readonly status: number | null;
@@ -78,6 +79,32 @@ export async function getMetamodel(base: string): Promise<Descriptor | null> {
   if (!response.ok) throw new ApiError(`/api/metamodel returned ${response.status}`, response.status);
   const body = await readJson(response, '/api/metamodel');
   return validateDescriptor(body);
+}
+
+/**
+ * GET /api/metamodels — the descriptors the node holds, each listed as
+ * {nsURI, package, digest}. A registration names one by its `{nsURI, digest}`,
+ * and a model's header records the same pair.
+ */
+export async function getMetamodels(base: string): Promise<MetamodelListing[]> {
+  const response = await request(base, '/api/metamodels');
+  if (!response.ok) throw new ApiError(`/api/metamodels returned ${response.status}`, response.status);
+  const body = (await readJson(response, '/api/metamodels')) as Record<string, unknown>;
+  const entries = body['metamodels'];
+  if (!Array.isArray(entries)) throw new ApiError('/api/metamodels body has no "metamodels" array');
+  return entries.map(validateMetamodelListing);
+}
+
+/** Validate one entry of the metamodel listing. */
+export function validateMetamodelListing(entry: unknown): MetamodelListing {
+  if (typeof entry !== 'object' || entry === null) {
+    throw new ApiError('metamodel listing entry is not a JSON object');
+  }
+  const { nsURI, digest, package: pkg } = entry as Partial<MetamodelListing>;
+  if (typeof nsURI !== 'string' || typeof digest !== 'string') {
+    throw new ApiError('metamodel listing entry has no nsURI/digest strings');
+  }
+  return { nsURI, digest, package: typeof pkg === 'string' ? pkg : '' };
 }
 
 /** Validate a descriptor loaded from the node or from a file. */

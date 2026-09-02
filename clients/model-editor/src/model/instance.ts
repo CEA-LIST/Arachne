@@ -8,18 +8,58 @@
  * - every EObject carries an `eClass` string field; a slot is "present" iff
  *   that string is non-empty (Object.Remove resets to defaults, it never
  *   deletes the key, so emptiness is the only honest absence marker);
+ * - the document root also carries `__model`, the model header
+ *   ({modelId, metamodelId}), written once by the node that created the
+ *   model. It is the second reserved key beside `eClass`: it is not a model
+ *   element, never a feature, and every walker over root children skips it;
  * - many-features are arrays, single containments objects under the feature
  *   key, references strings holding the target's id-attribute value.
  */
 
-import type {
-  AttributeDesc,
-  ContainmentDesc,
-  Descriptor,
-  Path,
-  PlainJson,
-  ReferenceDesc,
+import {
+  MODEL_HEADER_KEY,
+  type AttributeDesc,
+  type ContainmentDesc,
+  type Descriptor,
+  type ModelHeader,
+  type Path,
+  type PlainJson,
+  type ReferenceDesc,
 } from '../api/types';
+
+/* ---------- reserved keys ---------- */
+
+/** The keys of the encoding itself, never model features: the eClass tag and the header. */
+export function isReservedKey(key: string): boolean {
+  return key === 'eClass' || key === MODEL_HEADER_KEY;
+}
+
+/**
+ * The model header, when the document carries one. Null for a document with
+ * no `__model` (a headerless step-1 log, which is unbound) or no root object;
+ * throws when the key is present but not a header, which is a wire-contract
+ * violation and is surfaced like a failed decode rather than guessed around.
+ */
+export function modelHeaderOf(doc: PlainJson): ModelHeader | null {
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return null;
+  const raw = doc[MODEL_HEADER_KEY];
+  if (raw === undefined) return null;
+  const malformed = (why: string) =>
+    new Error(`${MODEL_HEADER_KEY} is not a model header (${why}): ${JSON.stringify(raw).slice(0, 200)}`);
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw malformed('not an object');
+  const modelId = raw['modelId'];
+  const metamodelId = raw['metamodelId'];
+  if (typeof modelId !== 'string') throw malformed('no modelId string');
+  if (metamodelId === null || typeof metamodelId !== 'object' || Array.isArray(metamodelId)) {
+    throw malformed('no metamodelId object');
+  }
+  const nsURI = metamodelId['nsURI'];
+  const digest = metamodelId['digest'];
+  if (typeof nsURI !== 'string' || typeof digest !== 'string') {
+    throw malformed('metamodelId has no nsURI/digest strings');
+  }
+  return { modelId, metamodelId: { nsURI, digest } };
+}
 
 /* ---------- inheritance ---------- */
 
@@ -210,7 +250,9 @@ function buildNode(
 ): ModelNode {
   const eClass = element['eClass'] as string;
   const flat = flattenFeatures(descriptor, eClass);
-  const features: FeatureNode[] = flat.containments.map((desc) => {
+  // A reserved key is never a feature, whatever a descriptor says.
+  const containments = flat.containments.filter((desc) => !isReservedKey(desc.name));
+  const features: FeatureNode[] = containments.map((desc) => {
     const raw = element[desc.name];
     const children: ModelNode[] = [];
     if (desc.many) {
@@ -259,6 +301,7 @@ export function collectInstances(
       result.push({ path, eClass, id: idValueOf(descriptor, value), label: labelFor(descriptor, value) });
     }
     for (const desc of flattenFeatures(descriptor, eClass).containments) {
+      if (isReservedKey(desc.name)) continue;
       const raw = value[desc.name];
       if (desc.many) {
         if (Array.isArray(raw)) {

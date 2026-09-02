@@ -13,19 +13,38 @@
  * - Object.Remove resets a key to its type default; it does not delete the key.
  * - Numbers only support relative Inc; setting a value means Inc by the delta.
  * - There is no move op: reorder = Delete + full re-create at the target index.
+ * - The root key `__model` is the model header, written once by the node that
+ *   created the model: no builder here targets it, and one asked to throws.
  *
  * Every function returns the ops in the exact order they must be POSTed.
  */
 
-import type { JsonOp, Path, PlainJson } from '../api/types';
+import { MODEL_HEADER_KEY, type JsonOp, type Path, type PlainJson } from '../api/types';
+
+/* ---------- the header ---------- */
+
+/** Whether an op at `path` would land in the model header. */
+export function targetsModelHeader(path: Path): boolean {
+  return path[0] === MODEL_HEADER_KEY;
+}
+
+function refuseHeaderTarget(path: Path): void {
+  if (targetsModelHeader(path)) {
+    throw new Error(
+      `${MODEL_HEADER_KEY} is the model header, written once by the node that created the model; the editor never targets it`,
+    );
+  }
+}
 
 /* ---------- path wrapping ---------- */
 
 /**
  * Wrap an op targeting a nested location so it can be posted at the root.
- * Object keys wrap as Object.Update, array indices as Array.Update.
+ * Object keys wrap as Object.Update, array indices as Array.Update. Every
+ * builder below funnels through here, which is where the header is refused.
  */
 export function wrapPath(path: Path, op: JsonOp): JsonOp {
+  refuseHeaderTarget(path);
   let wrapped = op;
   for (let i = path.length - 1; i >= 0; i--) {
     const seg = path[i];
@@ -214,6 +233,7 @@ export function removeFromArrayOps(arrayPath: Path, pos: number): JsonOp[] {
  * object slot counts as absent only when its eClass string is empty.
  */
 export function unsetFeatureOps(parentPath: Path, feature: string): JsonOp[] {
+  refuseHeaderTarget([...parentPath, feature]);
   return [wrapPath(parentPath, { Object: { Remove: feature } })];
 }
 

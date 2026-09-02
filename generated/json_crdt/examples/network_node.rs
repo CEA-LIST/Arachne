@@ -60,13 +60,25 @@
 //! descriptor file, served on `GET /api/metamodel`; unset, the node tries
 //! `metamodel.json` in the working directory (the generator writes one next to
 //! the crate manifest). `METAMODEL_DIR` names a directory whose `.json` files
-//! are all served, listed on `GET /api/metamodels` and offered at model
-//! registration. Every descriptor is keyed by its `nsURI`, which is what a
-//! registration's `metamodel_id` names. Without a readable descriptor the
-//! endpoints answer 404, exactly like any unknown path.
+//! are all served, listed on `GET /api/metamodels` as `{nsURI, package,
+//! digest}` and offered at model registration. Every descriptor is keyed by
+//! its digest, which is what a registration's `metamodel_id` names. Without a
+//! readable descriptor the endpoints answer 404, exactly like any unknown path.
 //!
 //! - `METAMODEL_PATH` — descriptor file, default `metamodel.json`
 //! - `METAMODEL_DIR`  — directory of descriptors, unset means none
+//!
+//! # Model identity and the header
+//!
+//! A model is its log: `ModelId` is the log id. A metamodel is its
+//! descriptor: `MetamodelId` is `{nsURI, digest}`, the digest being SHA-256
+//! over the compact serialization of the parsed descriptor, so formatting
+//! never changes an identity and an edit always does. `POST /api/models`
+//! names a metamodel by that pair (or by the bare digest); a create writes
+//! the header `__model = {modelId, metamodelId}` as the log's first
+//! operations, a join writes nothing and receives it by transfer. The header
+//! is written once: a local operation on `__model` is refused at the intake
+//! and answered `success: false`. The CRDT itself stays model-blind.
 //!
 //! # Log identity
 //!
@@ -111,9 +123,31 @@ use moirai_network::HashMap;
 use moirai_network::dashboard::DashboardConfig;
 use moirai_network::discovery::DiscoveryConfig;
 use moirai_network::generic::{Node, ServedDescriptor};
+use moirai_network::workload::ops;
 use moirai_protocol::log_id::LogId;
 use moirai_protocol::state::log::IsLog;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+
+/// The operation type of the generated log.
+type Op = <JsonLog as IsLog>::Op;
+
+/// A model is its log: the id the wire carries, seen from the application.
+type ModelId = LogId;
+
+/// The identity of a metamodel: the descriptor's `nsURI` beside its digest
+/// (see [`metamodel_digest`]). What a registration names, what the header
+/// records, and what `GET /api/metamodels` lists beside the package.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct MetamodelId {
+    #[serde(rename = "nsURI")]
+    ns_uri: String,
+    digest: String,
+}
+
+/// The reserved root key every model carries its header under.
+const MODEL_HEADER_KEY: &str = "__model";
 
 /// How other replicas reach this one's replication listener.
 ///
@@ -132,8 +166,21 @@ fn advertise_addr(listen_port: u16) -> String {
     })
 }
 
-/// A descriptor as the node serves it: keyed by its `nsURI`, which is what a
-/// registration's `metamodel_id` names for now, and listed with its `package`.
+/// The digest half of a [`MetamodelId`]: SHA-256, lowercase hex, over the
+/// compact `serde_json` serialization of the parsed descriptor.
+///
+/// Over the parsed value and never over file bytes, so pretty and compact
+/// renderings of one descriptor agree; `serde_json` runs without
+/// `preserve_order`, so a file's key order cannot reach the digest either. A
+/// copy of `arachne_codegen::metamodel_digest`, which this crate does not
+/// depend on; `examples/fixtures/metamodel-digests.json` holds the two, and
+/// the editor's, to one answer.
+fn metamodel_digest(descriptor: &Value) -> String {
+    format!("{:x}", Sha256::digest(descriptor.to_string()))
+}
+
+/// A descriptor as the node serves it: keyed by its digest, which is what a
+/// registration's `metamodel_id` names, and listed as `{nsURI, package, digest}`.
 fn describe_descriptor(text: &str) -> Result<ServedDescriptor, String> {
     let parsed: Value = serde_json::from_str(text).map_err(|err| format!("not JSON: {err}"))?;
     let ns_uri = parsed
@@ -144,11 +191,26 @@ fn describe_descriptor(text: &str) -> Result<ServedDescriptor, String> {
         .get("package")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let digest = metamodel_digest(&parsed);
     Ok(ServedDescriptor {
-        key: ns_uri.to_string(),
-        listing: json!({ "nsURI": ns_uri, "package": package }),
+        listing: json!({ "nsURI": ns_uri, "package": package, "digest": digest }),
+        key: digest,
         text: text.to_string(),
     })
+}
+
+/// The identity a served descriptor is registered under: its key is the
+/// digest and its listing carries the `nsURI`.
+fn metamodel_id_of(descriptor: &ServedDescriptor) -> MetamodelId {
+    MetamodelId {
+        ns_uri: descriptor
+            .listing
+            .get("nsURI")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        digest: descriptor.key.clone(),
+    }
 }
 
 /// The descriptor files of `dir`, in name order.
@@ -162,23 +224,77 @@ fn descriptor_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-/// The key a registration's `metamodel_id` names: its `nsURI`, given either as
-/// `{"nsURI": ...}` or as a bare string.
+/// The key a registration's `metamodel_id` names: the digest, given either as
+/// `{"nsURI": ..., "digest": ...}` or as a bare string. An `nsURI` beside it
+/// is not checked: the header is written from the descriptor the digest
+/// names, never from what the caller said.
 fn descriptor_key(metamodel_id: &Value) -> Option<String> {
     match metamodel_id {
-        Value::String(ns_uri) => Some(ns_uri.clone()),
+        Value::String(digest) => Some(digest.clone()),
         Value::Object(fields) => fields
-            .get("nsURI")
+            .get("digest")
             .and_then(Value::as_str)
             .map(str::to_string),
         _ => None,
     }
 }
 
-/// The operations that open a newly created model's log. None yet: the
-/// `__model` header that binds a model to its metamodel is the next step.
-fn header_ops(_model_id: &LogId, _metamodel_id: &Value) -> Vec<<JsonLog as IsLog>::Op> {
-    Vec::new()
+/// The operations that open a newly created model's log: the header
+/// `__model = {modelId, metamodelId: {nsURI, digest}}`, written as the log's
+/// first operations by the creating node and by nobody else — a joiner
+/// receives it by transfer. Built in the wire shape the editor posts, one
+/// `String.Insert` per character under `Object.Update` keys, and
+/// deserialized, so no generated operation type is named here.
+fn header_ops(model_id: &ModelId, descriptor: &ServedDescriptor) -> Vec<Op> {
+    let metamodel_id = metamodel_id_of(descriptor);
+    let fields = [
+        (vec!["modelId"], model_id.to_string()),
+        (vec!["metamodelId", "nsURI"], metamodel_id.ns_uri),
+        (vec!["metamodelId", "digest"], metamodel_id.digest),
+    ];
+    fields
+        .iter()
+        .flat_map(|(path, text)| header_string_ops(path, text))
+        .filter_map(|value| {
+            serde_json::from_value::<Op>(value.clone())
+                .inspect_err(|err| {
+                    eprintln!("a header operation does not deserialize ({err}): {value}");
+                })
+                .ok()
+        })
+        .collect()
+}
+
+/// The operations that write `text` into the string at `path` under the
+/// header, one character each.
+fn header_string_ops<'a>(path: &'a [&'a str], text: &'a str) -> impl Iterator<Item = Value> + 'a {
+    text.chars().enumerate().map(move |(pos, ch)| {
+        let inner = path.iter().rev().fold(
+            ops::string_insert(ch, pos),
+            |inner, key| json!({ "Object": { "Update": [key, inner] } }),
+        );
+        ops::object_update(MODEL_HEADER_KEY, inner)
+    })
+}
+
+/// The intake guard: the header is written once, so a local operation that
+/// would touch `__model` — an update or a removal of that root key, or a
+/// clear of the root object, which resets every key — is refused. Remote
+/// operations are not this node's to refuse; the adaptation layer compares
+/// the header it reads with the one it recorded.
+fn refuse_header_writes(op: &Op) -> Result<(), String> {
+    let value = serde_json::to_value(op)
+        .map_err(|err| format!("the operation does not serialize: {err}"))?;
+    let root = &value["JsonKind"]["Object"];
+    let touches_header = root["Update"][0] == MODEL_HEADER_KEY
+        || root["Remove"] == MODEL_HEADER_KEY
+        || *root == json!("Clear");
+    if touches_header {
+        return Err(format!(
+            "`{MODEL_HEADER_KEY}` is the model header, written once when the model was created"
+        ));
+    }
+    Ok(())
 }
 
 fn main() {
@@ -297,6 +413,7 @@ fn main() {
     }
     node.serve_metamodels(descriptors);
     node.enable_registration(descriptor_key, header_ops);
+    node.enable_op_guard(refuse_header_writes);
 
     if let Some(port) = http_port {
         node.start_http(port);

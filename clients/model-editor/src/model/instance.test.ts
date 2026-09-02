@@ -10,9 +10,12 @@ import {
   flattenFeatures,
   idAttributeOf,
   isPresent,
+  isReservedKey,
   isSubtypeOf,
   labelFor,
+  modelHeaderOf,
   rootCandidates,
+  type ModelNode,
 } from './instance';
 
 /** A compact bt-shaped descriptor exercising every concept the module handles. */
@@ -289,5 +292,84 @@ describe('collectInstances', () => {
   it('returns [] on empty docs and unknown targets', () => {
     expect(collectInstances(bt, null, 'TreeNode')).toEqual([]);
     expect(collectInstances(bt, doc, 'Nope')).toEqual([]);
+  });
+});
+
+describe('the model header, the second reserved key (mp11)', () => {
+  const header = {
+    modelId: 'a1b2a1b2a1b2a1b2a1b2a1b2a1b2a1b2',
+    metamodelId: { nsURI: 'http://www.example.org/behaviortree', digest: 'f'.repeat(64) },
+  };
+  /** A Root carrying its header and one BehaviorTree. */
+  const doc: PlainJson = {
+    eClass: 'Root',
+    __model: header,
+    main: { eClass: 'BehaviorTree', ID: 'main' },
+    behaviortrees: [],
+  };
+
+  /** Every string a tree exposes: classes, labels, path segments, feature names. */
+  function everything(node: ModelNode): string[] {
+    return [
+      node.eClass,
+      node.label,
+      ...node.path.map(String),
+      ...node.features.flatMap((f) => [f.desc.name, ...f.children.flatMap(everything)]),
+    ];
+  }
+
+  it('mp11: rootCandidates, buildTree and collectInstances see the two objects and never __model', () => {
+    expect(rootCandidates(bt)).toEqual(['Root']);
+    const tree = buildTree(bt, doc);
+    if (tree === null) throw new Error('the Root is present');
+    expect(everything(tree)).not.toContain('__model');
+    expect(tree.features.flatMap((f) => f.children).map((c) => c.eClass)).toEqual(['BehaviorTree']);
+    expect(collectInstances(bt, doc, 'BehaviorTree').map((i) => i.path)).toEqual([['main']]);
+    expect(collectInstances(bt, doc, 'Root').map((i) => i.eClass)).toEqual(['Root']);
+  });
+
+  it('the header is not a present element', () => {
+    expect(isPresent(header)).toBe(false);
+    expect(eClassOf(header)).toBeNull();
+  });
+
+  it('a descriptor naming a reserved key as a containment does not make it a feature', () => {
+    const odd: Descriptor = {
+      ...bt,
+      classes: {
+        ...bt.classes,
+        Root: {
+          ...bt.classes['Root'],
+          containments: [
+            ...bt.classes['Root'].containments,
+            { name: '__model', target: 'BehaviorTree', many: false, required: false, ordered: true },
+          ],
+        },
+      },
+    };
+    const tree = buildTree(odd, doc);
+    if (tree === null) throw new Error('the Root is present');
+    expect(tree.features.map((f) => f.desc.name)).toEqual(['behaviortrees', 'main']);
+    expect(collectInstances(odd, doc, 'BehaviorTree').map((i) => i.path)).toEqual([['main']]);
+  });
+
+  it('isReservedKey names eClass and __model only', () => {
+    expect(['eClass', '__model', 'main', 'ID'].map(isReservedKey)).toEqual([true, true, false, false]);
+  });
+
+  it('modelHeaderOf reads the header', () => {
+    expect(modelHeaderOf(doc)).toEqual(header);
+  });
+
+  it('modelHeaderOf is null for a headerless document, an empty document and an array', () => {
+    expect(modelHeaderOf({ eClass: 'Root' })).toBeNull();
+    expect(modelHeaderOf(null)).toBeNull();
+    expect(modelHeaderOf([])).toBeNull();
+  });
+
+  it('modelHeaderOf throws on a header that is not one', () => {
+    expect(() => modelHeaderOf({ __model: 'x' })).toThrow(/__model/);
+    expect(() => modelHeaderOf({ __model: { modelId: 'a' } })).toThrow(/metamodelId/);
+    expect(() => modelHeaderOf({ __model: { modelId: 'a', metamodelId: { nsURI: 'u' } } })).toThrow(/digest/);
   });
 });

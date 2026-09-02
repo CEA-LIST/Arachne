@@ -13,6 +13,7 @@ import {
   setNumberOps,
   setStringOps,
   stringDiffOps,
+  targetsModelHeader,
   unsetFeatureOps,
   wrapPath,
 } from './ops';
@@ -306,5 +307,34 @@ describe('addManyReferenceOps', () => {
       { Object: { Update: ['refs', { Array: { Insert: { pos: 1, op: { String: { Insert: { content: 'n', pos: 0 } } } } } }] } },
       { Object: { Update: ['refs', { Array: { Update: { pos: 1, op: { String: { Insert: { content: '1', pos: 1 } } } } } }] } },
     ]);
+  });
+});
+
+describe('the model header is never targeted', () => {
+  it('wrapPath refuses a path rooted at __model', () => {
+    expect(() => wrapPath(['__model', 'modelId'], { Boolean: 'Enable' })).toThrow(/__model/);
+  });
+
+  it('every path-taking builder refuses it before producing an op', () => {
+    expect(() => setStringOps(['__model', 'metamodelId', 'digest'], 'a', 'b')).toThrow(/__model/);
+    expect(() => clearStringOps(['__model', 'modelId'], 'a')).toThrow(/__model/);
+    expect(() => setNumberOps(['__model'], 0, 1)).toThrow(/__model/);
+    expect(() => insertIntoArrayOps(['__model'], 0, 'x')).toThrow(/__model/);
+    expect(() => createSingleContainmentOps([], '__model', 'Root')).toThrow(/__model/);
+  });
+
+  it('unsetFeatureOps refuses the header key at the root', () => {
+    expect(() => unsetFeatureOps([], '__model')).toThrow(/__model/);
+  });
+
+  it('targetsModelHeader is about the root key only', () => {
+    expect(targetsModelHeader(['__model'])).toBe(true);
+    expect(targetsModelHeader(['children', 0, '__model'])).toBe(false);
+    expect(targetsModelHeader([])).toBe(false);
+  });
+
+  it('a sibling key is untouched by the rule', () => {
+    expect(setStringOps(['name'], '', 'x')).toHaveLength(1);
+    expect(unsetFeatureOps([], 'name')).toEqual([{ Object: { Remove: 'name' } }]);
   });
 });

@@ -1,0 +1,276 @@
+{
+  "classes": {
+    "Association": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "many": false,
+          "name": "source",
+          "required": true,
+          "target": "Class"
+        },
+        {
+          "many": false,
+          "name": "target",
+          "required": true,
+          "target": "Class"
+        }
+      ],
+      "superTypes": [
+        "ModelElement",
+        "Packageable"
+      ]
+    },
+    "Class": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "bool",
+          "many": false,
+          "name": "abstract",
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "many": true,
+          "name": "generalizations",
+          "ordered": true,
+          "required": false,
+          "target": "Generalization"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "DataType"
+      ]
+    },
+    "Classifier": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "ModelElement"
+      ]
+    },
+    "DataType": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "attributes",
+          "ordered": true,
+          "required": false,
+          "target": "Property"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TType"
+      ]
+    },
+    "Enumeration": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "ownedLiteral",
+          "ordered": true,
+          "required": false,
+          "target": "EnumerationLiteral"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "TType"
+      ]
+    },
+    "EnumerationLiteral": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "name",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Generalization": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "bool",
+          "many": false,
+          "name": "isSubstitutable",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "many": false,
+          "name": "general",
+          "required": false,
+          "target": "Class"
+        }
+      ],
+      "superTypes": []
+    },
+    "Model": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Package"
+      ]
+    },
+    "ModelElement": {
+      "abstract": true,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "name",
+          "required": true
+        },
+        {
+          "isId": false,
+          "kind": "string",
+          "many": true,
+          "name": "stereotype",
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "many": true,
+          "name": "taggedValue",
+          "ordered": true,
+          "required": false,
+          "target": "TaggedValue"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Package": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "many": true,
+          "name": "ownedElements",
+          "ordered": true,
+          "required": false,
+          "target": "Packageable"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "Classifier",
+        "Packageable"
+      ]
+    },
+    "Packageable": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "many": false,
+          "name": "owner",
+          "required": false,
+          "target": "Package"
+        }
+      ],
+      "superTypes": []
+    },
+    "PrimitiveType": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "TType"
+      ]
+    },
+    "Property": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "many": false,
+          "name": "ttype",
+          "required": true,
+          "target": "TType"
+        },
+        {
+          "many": false,
+          "name": "owner",
+          "required": true,
+          "target": "DataType"
+        }
+      ],
+      "superTypes": [
+        "ModelElement"
+      ]
+    },
+    "TType": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "Classifier",
+        "Packageable"
+      ]
+    },
+    "TaggedValue": {
+      "abstract": false,
+      "attributes": [
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "name",
+          "required": true
+        },
+        {
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "name": "value",
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {},
+  "formatVersion": 1,
+  "nsURI": "http:///SimpleUML.ecore",
+  "package": "simpleuml",
+  "rootClasses": [
+    "Classifier",
+    "ModelElement",
+    "Packageable",
+    "TType"
+  ]
+}

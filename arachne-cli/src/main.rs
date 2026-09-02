@@ -29,6 +29,11 @@ enum Command {
     /// Emit the JSON metamodel descriptor a node serves on `GET /api/metamodel`
     #[command(name = "describe")]
     Describe(DescribeArgs),
+
+    /// Print the identity of a metamodel descriptor file: its `nsURI` and
+    /// the digest a node keys it by
+    #[command(name = "digest")]
+    Digest(DigestArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -121,6 +126,13 @@ struct DescribeArgs {
     output: Option<PathBuf>,
 }
 
+#[derive(Debug, clap::Args)]
+struct DigestArgs {
+    /// Path to a metamodel descriptor (`.metamodel.json`)
+    #[arg(value_name = "FILE")]
+    input: PathBuf,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -128,6 +140,7 @@ fn main() -> ExitCode {
         Command::Parse(args) => run_parse(args),
         Command::Generate(args) => run_generate(args),
         Command::Describe(args) => run_describe(args),
+        Command::Digest(args) => run_digest(args),
     };
 
     match result {
@@ -221,8 +234,29 @@ fn run_describe(args: DescribeArgs) -> Result<()> {
             .map_err(|e| anyhow!("Failed to write '{}': {}", path.display(), e))?,
         None => print!("{rendered}"),
     }
+    // On stderr, so the descriptor on stdout stays a descriptor.
+    eprintln!("{}", metamodel_id(&descriptor));
 
     Ok(())
+}
+
+/// `{nsURI, digest}` for a descriptor file, as a registration names it.
+fn run_digest(args: DigestArgs) -> Result<()> {
+    let text = fs::read_to_string(&args.input)
+        .map_err(|e| anyhow!("Failed to read '{}': {}", args.input.display(), e))?;
+    let descriptor: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| anyhow!("'{}' is not a JSON descriptor: {}", args.input.display(), e))?;
+    println!("{}", metamodel_id(&descriptor));
+    Ok(())
+}
+
+/// The identity of a parsed descriptor: its `nsURI` beside the digest a node
+/// keys it by.
+fn metamodel_id(descriptor: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "nsURI": descriptor.get("nsURI").cloned().unwrap_or(serde_json::Value::Null),
+        "digest": arachne_codegen::metamodel_digest(descriptor),
+    })
 }
 
 fn init_logger(verbosity: u8) {

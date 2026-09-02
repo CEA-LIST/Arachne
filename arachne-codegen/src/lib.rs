@@ -8,7 +8,7 @@ mod utils;
 
 use std::path::PathBuf;
 
-pub use codegen::descriptor::descriptor_json;
+pub use codegen::descriptor::{descriptor_json, metamodel_digest};
 pub use config::{Config, MoiraiPathStyle};
 use ecore_rs::repr::{Class, Pack, idx, structural};
 pub use error::{ArachneError, Result};

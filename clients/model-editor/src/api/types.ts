@@ -111,3 +111,38 @@ export interface Descriptor {
 
 /** A location inside the decoded document: object keys and array indices. */
 export type Path = (string | number)[];
+
+/* ---------- Model identity and the header (the model plane) ---------- */
+
+/** A model is its log: the 32 lowercase hex characters the wire carries as the log id. */
+export type ModelId = string;
+
+/**
+ * The identity of a metamodel: the descriptor's nsURI beside the SHA-256,
+ * lowercase hex, of its canonical JSON (compact, keys sorted at every level).
+ * `model/digest.ts` computes it; the node computes the same for what it serves
+ * and lists it on GET /api/metamodels.
+ */
+export interface MetamodelId {
+  nsURI: string;
+  digest: string;
+}
+
+/**
+ * The reserved root key every model carries its header under. Written once by
+ * the node that created the model, received by transfer everywhere else, and
+ * never the target of an op the editor emits (crdt/ops.ts refuses); the root
+ * walkers in model/instance.ts skip it.
+ */
+export const MODEL_HEADER_KEY = '__model';
+
+/** The header under MODEL_HEADER_KEY: the model's id and the metamodel it is bound to. */
+export interface ModelHeader {
+  modelId: ModelId;
+  metamodelId: MetamodelId;
+}
+
+/** One entry of GET /api/metamodels: a descriptor the node holds, keyed by its digest. */
+export interface MetamodelListing extends MetamodelId {
+  package: string;
+}
