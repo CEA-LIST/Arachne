@@ -1,6 +1,6 @@
 # Model Editor
 
-A metamodel-agnostic web editor for models hosted on a moirai replica. It talks only to the node's existing HTTP API, discovers the metamodel at load time, and shapes its UI accordingly — the same binary serves different metamodels, and the editor follows. No class name from any sample metamodel appears anywhere in `src/`.
+A metamodel-agnostic web editor for the models a moirai node hosts. It talks only to the node's HTTP API, lists the node's models, opens any number of them in tabs, discovers each one's metamodel from the node, and shapes its UI accordingly — the same binary serves different metamodels, and the editor follows. No class name from any sample metamodel appears anywhere in `src/`.
 
 ## Run
 
@@ -11,24 +11,26 @@ cd ../../../moirai-modelsward/docker && ./rig.sh --edit --no-load
 npm install && npm run dev      # in this directory
 ```
 
-Then open the printed URL and connect to `http://127.0.0.1:8081` (or `:8082` for the second replica — two browser windows on the two replicas is how convergence is demonstrated).
+Then open the printed URL, connect to `http://127.0.0.1:8081` (or `:8082` for the second replica — two browser windows on the two replicas is how convergence is demonstrated), and open a model from the **Models** tab: the rig's pinned default log is listed there as `default log`, and any model created on one replica can be joined by its id on the other.
 
-`editor-a` and `editor-b` join the same cluster as the scaled replicas and serve the baked-in metamodel descriptor on `/api/metamodel` (`METAMODEL_PATH` overrides which one). `--no-load` keeps the load driver's random writes out of the document during a session with people. `./rig.sh down` removes everything.
+`editor-a` and `editor-b` join the same cluster as the scaled replicas and serve the descriptors under `/metamodels` (`METAMODEL_DIR`), the baked-in one on `/api/metamodel` as well (`METAMODEL_PATH` overrides which one). `--no-load` keeps the load driver's random writes out of the document during a session with people. `./rig.sh down` removes everything.
 
-A single replica without Docker, when that is all you need (from `generated/json_crdt`):
+Two peered nodes without Docker, when that is all you need (from `generated/json_crdt`; `nice -n 10 … -j 2` is the machine discipline for a build, not a requirement of the binary):
 
 ```sh
-cargo build --example network_node
-REPLICA_ID=replica-a LISTEN_PORT=7101 HTTP_PORT=3101 \
-METAMODEL_PATH=../../examples/bt.metamodel.json \
-  ./target/debug/examples/network_node
+nice -n 10 cargo build --example network_node -j 2
+REPLICA_ID=a LISTEN_PORT=7101 HTTP_PORT=3101 PEERS=b:127.0.0.1:7102 \
+  METAMODEL_DIR=../../examples ./target/debug/examples/network_node &
+REPLICA_ID=b LISTEN_PORT=7102 HTTP_PORT=3102 PEERS=a:127.0.0.1:7101 \
+  METAMODEL_DIR=../../examples ./target/debug/examples/network_node &
 ```
 
 Scripts in this directory:
 
 ```sh
 npm run dev        # dev server
-npm test           # unit tests (vitest)
+npm test           # unit tests (vitest), plus mp27 and mp28 against two live nodes when the binary above exists
+npm run e2e        # the level-4 harness: mp26 in headless Chrome against two live nodes (see below)
 npm run lint       # oxlint
 npm run build      # type-check + production bundle in dist/
 ```
@@ -37,20 +39,31 @@ npm run build      # type-check + production bundle in dist/
 
 A four-region modelling IDE layout; one light theme, print-worthy for paper figures (`@media print` drops the chrome, so print-to-PDF gives a clean figure).
 
-- **Top bar** — app identity, then the document context read from the descriptor at runtime (`package`, and whether it came from the node or from a file). On the right: the batch in flight as a determinate bar, the sync chip, the replica id from `/api/health`, keyboard help, and Connect. **The node URL and poll interval live in the Connect popover**, not on the page.
-- **Explorer** (left) — `Model` and `Metamodel` tabs. The model tab is an ARIA tree with structural type icons, indent guides, expand/collapse, a filter that highlights matches and keeps their ancestors, an element count, and per-row add/remove actions. The metamodel tab is a searchable class browser (supertypes, abstract marker, feature counts) and hosts the descriptor-file fallback.
+- **Top bar** — app identity, then the context of the selected model tab: its id, the metamodel `package` read from its descriptor at runtime and whether it came from the node or from a file, the binding check's verdict and the store's word. On the right: the batch in flight as a determinate bar, the sync chip (the selected tab's poll), the replica id from `/api/health`, keyboard help, and Connect. **The node URL and poll interval live in the Connect popover**, not on the page.
+- **Document tabs** — one per open model, under the top bar: the metamodel package and the first eight characters of the id, a status dot while it opens or when it is refused, a close button, and `Models…` to get back to the list. The panels below show the selected tab.
+- **Explorer** (left) — `Models`, `Model` and `Metamodel` tabs. The models tab lists what the node hosts (`GET /api/models`), opens any of it, creates a model against one of the node's descriptors, and joins a model by id. The model tab is an ARIA tree with structural type icons, indent guides, expand/collapse, a filter that highlights matches and keeps their ancestors, an element count, and per-row add/remove actions. The metamodel tab is a searchable class browser (supertypes, abstract marker, feature counts) and hosts the descriptor-file fallback.
 - **Properties** (right) — the selected element: kind icon, label, eClass badge, a clickable path breadcrumb, Copy path and Delete element; then `Attributes`, `Containments` and `References` as collapsible sections in the descriptor's own feature order. Required features carry `*`, the id attribute carries a key icon, every attribute carries a type chip.
 - **Console** (bottom, `⌘/Ctrl + J`) — collapsed to a bar that still reports the entry count, the newest line and a danger dot; open on `Action log` or `Document JSON`.
 
-Every empty surface instructs rather than sitting blank: not connected, no metamodel, empty document, no filter match, nothing selected, no operations yet.
+Every empty surface instructs rather than sitting blank: not connected, no model open, no metamodel, empty document, no filter match, nothing selected, no operations yet.
 
 Keyboard: `↑ ↓` move, `→ ←` expand/collapse or step in and out, `Home`/`End`, `Enter` selects and jumps into the form, `Space` selects in place, type-ahead by name, `*` expands the level, `F2` jumps to the id field, `Delete` removes, `Esc` reverts the focused field to the last synced value, `⌘/Ctrl + K` filter, `⌘/Ctrl + J` console, `⌘/Ctrl + ⇧ + E` export the log, `?` for the full map.
 
+## Many models, in tabs
+
+A model is its log: the node hosts any number, each under a 32-hex `ModelId`, and `GET /api/models` lists them with the `{nsURI, digest}` of the metamodel each was registered under (`null` for the node's default log, which the unscoped routes serve and which the list shows as `default log`). The Models tab is that list, refreshed on connect, after every registration and on demand, and three things can be done from it:
+
+- **Open** a hosted model in a tab.
+- **New model**: choose one of the descriptors the node holds (`GET /api/metamodels`, shown as package and nsURI) and `POST /api/models {metamodel_id}`. The node mints the id and writes the `__model` header as the log's first operations; the editor never chooses an id. The model opens in a tab.
+- **Join by id**: paste an id learned out of band and choose the metamodel it is bound to, then `POST /api/models {model_id, metamodel_id}`. The node hosts the id with no history and asks its peers for the model; the header arrives with it. There is no cluster-wide catalog: a node lists what it hosts and nothing else, and a model's replication factor is the number of nodes that registered it.
+
+Each open tab is one `ModelSession` (`src/sync/modelSession.ts`) addressed to its model's routes on the node it was opened against: its own document, its own descriptor (`GET /api/model/{id}/metamodel`), its own poll of `GET /api/model/{id}/state` on every interval whether or not it is the selected tab, its own op queue posting to `POST /api/model/{id}/op`, its own field registry so one tab's caret never writes into another's document, and its own binding verdict, store outcome and recorded header. The reducer (`src/state/store.ts`) holds the tabs as a map keyed by id; a session's event for a tab that has been closed is dropped. Disconnecting closes every tab, since every tab was opened against that connection.
+
 ## Metamodel discovery
 
-On connect the editor calls `GET /api/metamodel`. The node answers with a formatVersion-1 descriptor (classes with attributes/containments/references, root classes, enums) that `arachne-codegen` emits as `metamodel.json` beside every generated crate; `network_node` serves the file named by `METAMODEL_PATH` (default `./metamodel.json`).
+When a model is opened the editor calls `GET /api/model/{id}/metamodel`, which serves the descriptor the model was registered under. The node answers with a formatVersion-1 descriptor (classes with attributes/containments/references, root classes, enums) that `arachne-codegen` emits as `metamodel.json` beside every generated crate; `network_node` holds every `.json` descriptor found under `METAMODEL_DIR`, keyed by digest, and the file named by `METAMODEL_PATH` (default `./metamodel.json`) beside them.
 
-If the node answers 404 (a node without a descriptor), the Metamodel tab offers the labelled fallback: load a descriptor file produced by `arachne describe <file.ecore>`.
+If the node answers 404 (a model with no descriptor to serve), the Metamodel tab offers the labelled fallback: load a descriptor file produced by `arachne describe <file.ecore>`; the binding check then runs against that file.
 
 ## Editing
 
@@ -60,15 +73,21 @@ Every action lands in the action log with its exact op payloads and the node's v
 
 ## How edits reach the wire
 
-Every edit intent is mapped by `src/crdt/ops.ts` to a sequence of `JsonKind` ops posted **one at a time** (`POST /api/op` takes exactly one op — `moirai-network/src/http_api.rs`); string edits are diffed into at most one `DeleteRange` plus single-character `Insert`s (the wire accepts one character per op), numbers commit as a single relative `Inc`, array/containment creation uses the insert-then-update idiom with the mandatory `eClass` field first. A single global FIFO queue serializes all batches so sequences never interleave. The UI polls `GET /api/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are surfaced three ways — at the field, in the alert dock, and in the log — and the log is exportable.
+Every edit intent is mapped by `src/crdt/ops.ts` to a sequence of `JsonKind` ops posted **one at a time** (`POST /api/model/{id}/op` takes exactly one op — `moirai-network/src/http_api.rs`); string edits are diffed into at most one `DeleteRange` plus single-character `Insert`s (the wire accepts one character per op), numbers commit as a single relative `Inc`, array/containment creation uses the insert-then-update idiom with the mandatory `eClass` field first. One FIFO queue per open model serializes that model's batches so sequences never interleave. Every open tab polls its `GET /api/model/{id}/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are surfaced three ways — at the field, in the alert dock, and in the log, where the row names its model — and the log is exportable.
 
 ### The binding check at apply
 
-A model's document carries `__model` — its id and the `{nsURI, digest}` of the metamodel it is bound to — written once by the node that created it. Before a fetched state reaches the model view, `src/model/binding.ts` hashes the descriptor the document would be rendered under (the SHA-256 over canonical JSON the node computes, `src/model/digest.ts`) and compares it with the header's digest; it also compares the header with the one it recorded at the first apply, because the header is immutable by rule. On a match the state is applied. On a mismatch nothing is: the alert dock and the action log name both pairs, the model panel says so, the top bar reads `not applied`, and the edit gate holds every control with the same sentence; `sendOps` refuses batches at the wire for as long as it lasts, and refuses any batch that would write `__model` regardless. A log with no header — every step-1 log — is applied under the loaded descriptor exactly as before, and the top bar reads `unbound`. The digest is always computed over the descriptor's bytes, never read from a label the node reports, so a node that serves the wrong file under the right name is caught too.
+A model's document carries `__model` — its id and the `{nsURI, digest}` of the metamodel it is bound to — written once by the node that created it. Before a fetched state reaches a tab, `src/model/binding.ts` hashes the descriptor the document would be rendered under (the SHA-256 over canonical JSON the node computes, `src/model/digest.ts`) and compares it with the header's digest; it also compares the header with the one it recorded at the first apply, because the header is immutable by rule. On a match the state is applied. On a mismatch nothing is: the alert dock and the action log name both pairs, the tab's model panel says so, the top bar reads `not applied`, and the edit gate holds every control with the same sentence; the tab's session refuses batches at the wire for as long as it lasts, and refuses any batch that would write `__model` regardless. The check is per tab: a refused model in one tab leaves the others editable. A log with no header — the default log of a step-1 deployment — is applied under the loaded descriptor exactly as before, and the top bar reads `unbound`. The digest is always computed over the descriptor's bytes, never read from a label the node reports, so a node that serves the wrong file under the right name is caught too; the editor keeps no descriptor cache keyed by a reported digest for the same reason, each tab fetching its own descriptor once when it opens.
 
 ### The model store as projection
 
 After an apply the binding check lets through as `bound`, `src/model/projection.ts` writes the decoded document to the model store (`src/model/store.ts`): one file per model, `<modelId>.json`, holding the document as canonical JSON (compact, keys sorted at every level, the same text `src/model/digest.ts` hashes, no trailing newline), so the file's bytes digest to the value the top bar reports and two editors' files for one model can be compared. In the browser the store is the origin-private file system, directory `models` under the origin's root: no permission prompt, no user gesture, works in headless Chrome, private to the origin; it needs the same secure context (https, localhost, 127.0.0.1) the digest already does. The file is a projection: it is regenerated from the log at every apply and nothing reads it to build state. On connect the document comes from the node and the file is overwritten, so a stale or tampered file never survives a reconnect as rendered state, and a restart trusts the log. A refused apply writes nothing, and so does a log with no header, which has no id to file under. A store that fails or is absent never touches the view: the top bar reads `stored` with the file, its size and its digest in the title, or `not stored`, `store failed` or `no store` with the reason, and a failed write lands once in the alert dock and the action log. `src/model/fsStore.ts` is the same store over a directory, for the tests and the level-4 harness. Exporting the file to a folder of the user's choice (the File System Access API) is not built.
+
+### The level-4 harness
+
+`npm run e2e` runs the validation plan's mp26 end to end (`e2e/mp26.e2e.ts`, under `vitest.e2e.config.ts`): it builds the editor with `vite build` and serves it with `vite preview` on the loopback interface (a secure context, which the store's OPFS and the digest's `crypto.subtle` need), starts two `network_node` processes peered with each other with `METAMODEL_DIR` holding both `bt.metamodel.json` and `uml.metamodel.json` (`src/testing/liveNodes.ts`, the e2e process backend's recipe), launches the system Chrome headless through `puppeteer-core` with a throwaway profile, and drives two pages in two browser contexts through the editor's own controls: connect each to its node; create a behaviour-tree model on editor-a and join it by id on editor-b; create a SimpleUML model on editor-b and join it by id on editor-a; four tabs; rename a Sequence in the behaviour-tree tab and add a Class named Door in the UML tab. It asserts per-model convergence through `GET /api/model/{id}/state` on both nodes and through what each tab renders (the console's Document JSON view), no cross-talk (the behaviour-tree document never holds a `Class` or a UML key, the UML document never a `Sequence` or a behaviour-tree key), that each tab was served the descriptor its header names, and that each browser context's store holds exactly one file per model whose bytes are the canonical JSON of that model's converged state. Nodes, Chrome and the preview server are killed however the run ends.
+
+It needs the node binary (`generated/json_crdt/target/debug/examples/network_node`, or `MOIRAI_E2E_NODE_BIN`) and Chrome (`/usr/bin/google-chrome`, or `CHROME_BIN`); without either it prints an `E2E-SKIP` line and skips, the discipline the e2e suite uses. `npm test` follows the same rule for mp27 (a model opened on a node whose descriptor file was edited is refused, both pairs shown, editing held, nothing stored) and mp28 (the store file equals the converged model, and a restart after the file is tampered trusts the log), which run the sync path against two live nodes with the directory store and no browser.
 
 ### The edit gate, and why edits are held
 
@@ -82,9 +101,9 @@ This is a guard, not a cure. **The fix belongs on the wire** — a move op, so a
 
 ## Dependencies
 
-`react`, `react-dom`, and `lucide-react` (pinned exact at 1.38.0: one package, zero transitive dependencies, no install hooks, no network at runtime, ISC). All icons are re-exported from `src/ui/icons.tsx`, so the set can be swapped for inline SVGs in one file if that audit ever sours. `npm audit`: 0 vulnerabilities.
+`react`, `react-dom`, and `lucide-react` (pinned exact at 1.38.0: one package, zero transitive dependencies, no install hooks, no network at runtime, ISC). All icons are re-exported from `src/ui/icons.tsx`, so the set can be swapped for inline SVGs in one file if that audit ever sours. `puppeteer-core` is a devDependency for the harness only: it drives the Chrome already on the machine and downloads no browser. `npm audit`: 0 vulnerabilities.
 
-Measured production bundle: **JS 284.5 kB raw / 86.9 kB gzip, CSS 27.8 kB / 5.5 kB gzip** (`dist` 324 kB). React and react-dom are ~68 kB gzip of that; lucide-react is ~2.7 kB for the 30 glyphs used; the rest is this app.
+Measured production bundle: **JS 299.4 kB raw / 90.9 kB gzip, CSS 29.8 kB / 5.8 kB gzip** (`dist` 344 kB). React and react-dom are ~68 kB gzip of that; lucide-react is ~2.8 kB for the glyphs used; the rest is this app.
 
 ## Out of scope (this phase)
 
@@ -93,4 +112,5 @@ Measured production bundle: **JS 284.5 kB raw / 86.9 kB gzip, CSS 27.8 kB / 5.5 
 - No eOpposite maintenance: setting one side of an opposite pair does not update the other.
 - Reordering a collection element is delete + full re-create at the target index (no move op on the wire) — see the edit gate above.
 - `Object.Remove` resets a key to its type default rather than deleting it; an object slot counts as present only while its `eClass` is non-empty.
-- The action log is per-tab client state; it does not survive a reload and is not stored on the replica.
+- The action log is per-browser-tab client state; it does not survive a reload and is not stored on the replica.
+- No cluster-wide model catalog: a node lists what it hosts, and a model created elsewhere is joined by an id learned out of band, together with the metamodel it is bound to, which the node requires at registration.
