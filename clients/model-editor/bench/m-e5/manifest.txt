@@ -1,0 +1,17 @@
+run           20260903T182439Z
+host          linux 7.0.0-30-generic x64
+cpu           Intel(R) Xeon(R) W-10855M CPU @ 2.80GHz x12
+memory        30.2 GiB
+load_avg      1.80 1.36 1.11 (1, 5, 15 min at the end of the run)
+arachne       b591829 (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/arachne-model-plane/
+moirai        ddc00fb (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/moirai-model-plane/
+node          v24.18.0
+chrome        Google Chrome 152.0.7977.75
+node_binary   /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/arachne-model-plane/generated/json_crdt/target/debug/examples/network_node
+command       npm run bench:m-e5 (bench/m-e5/run.sh)
+sizes         10,100,1000,10000 TreeNode objects; iterations 100,100,50,20 after 3 warm-up
+measured      applyModel + projectModel over the fs store, per repetition; store_bytes = file length; wire_state_bytes = canonicalJson({json: encodeWire(doc)})
+opfs          the same bytes written through OPFS in headless Chrome on a loopback origin, timed alone
+threshold     store_bytes <= wire_state_bytes (fixed); p95 apply-to-file at 1000 objects FOR-DECISION, the plan's proposal 100 ms
+proposal      from this run: p95 apply-to-file at 1000 objects <= 25 ms, five times the measured p95 and a quarter of the poll-derived 100 ms; see the step-8 report
+note          calibration at 10 objects: the node's GET /api/model/{id}/state body (2801 bytes) equals canonicalJson({json: encodeWire(doc)}) byte for byte

@@ -1,0 +1,5 @@
+run,objects,apply_to_file_p50_ms,apply_to_file_p95_ms,store_bytes,wire_state_bytes,iterations,apply_p50_ms,project_p50_ms,bytes_per_object,opfs_write_p50_ms,opfs_write_p95_ms
+1,10,0.458,0.7,778,2801,100,0.202,0.232,77.8,1.2,2.1
+1,100,0.725,1.049,5481,20092,100,0.244,0.435,54.8,1.2,2
+1,1000,3.911,5.425,54306,200182,50,1.034,2.879,54.3,1.2,2.2
+1,10000,288.108,299.686,560556,2073082,20,7.422,280.776,56.1,1.9,2.9
