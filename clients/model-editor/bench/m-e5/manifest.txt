@@ -1,10 +1,11 @@
-run           20260903T182439Z
+run           20260903T194827Z
 host          linux 7.0.0-30-generic x64
 cpu           Intel(R) Xeon(R) W-10855M CPU @ 2.80GHz x12
 memory        30.2 GiB
-load_avg      1.80 1.36 1.11 (1, 5, 15 min at the end of the run)
-arachne       b591829 (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/arachne-model-plane/
-moirai        ddc00fb (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/moirai-model-plane/
+load_start    0.62 1.28 1.31 (1, 5, 15 min before the run started)
+load_end      1.65 1.43 1.36 (1, 5, 15 min when the manifest was written)
+arachne       043fa87 (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/arachne-model-plane/
+moirai        fd479f6 (dirty) /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/moirai-model-plane/
 node          v24.18.0
 chrome        Google Chrome 152.0.7977.75
 node_binary   /volatile/home/vp242103/Documents/Projects/cea-crdt/repos/arachne-model-plane/generated/json_crdt/target/debug/examples/network_node

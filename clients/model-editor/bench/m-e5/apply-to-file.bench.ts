@@ -62,6 +62,8 @@ import {
 } from '../../src/testing/liveNodes';
 
 const HERE = fileURLToPath(new URL('./', import.meta.url));
+/** The load average when this file was loaded, before any node or browser was started. */
+const LOAD_AT_START = loadavg().map((l) => l.toFixed(2)).join(' ');
 const CHROME = process.env['CHROME_BIN'] ?? '/usr/bin/google-chrome';
 const SIZES = (process.env['M_E5_SIZES'] ?? '10,100,1000,10000').split(',').map(Number);
 const WARMUP = 3;
@@ -184,7 +186,8 @@ afterAll(() => {
     `${pad('host')}${platform()} ${release()} ${arch()}`,
     `${pad('cpu')}${cpus()[0]?.model ?? 'unknown'} x${cpus().length}`,
     `${pad('memory')}${(totalmem() / 2 ** 30).toFixed(1)} GiB`,
-    `${pad('load_avg')}${loadavg().map((l) => l.toFixed(2)).join(' ')} (1, 5, 15 min at the end of the run)`,
+    `${pad('load_start')}${LOAD_AT_START} (1, 5, 15 min before the run started)`,
+    `${pad('load_end')}${loadavg().map((l) => l.toFixed(2)).join(' ')} (1, 5, 15 min when the manifest was written)`,
     `${pad('arachne')}${git(fileURLToPath(new URL('../../../../', import.meta.url)))}`,
     `${pad('moirai')}${git(moiraiRoot)}`,
     `${pad('node')}${process.version}`,
