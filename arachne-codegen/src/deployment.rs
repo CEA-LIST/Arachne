@@ -1,4 +1,5 @@
-//! Generates deployment artifacts: `network_node` example and `Dockerfile`.
+//! Generates deployment artifacts: the `network_node` example, the
+//! conformance module it installs as its intake guard, and the `Dockerfile`.
 //!
 //! These are written alongside the CRDT project so that every generated
 //! crate is immediately runnable as a networked replica and Docker image.
@@ -56,15 +57,26 @@ impl DeploymentCtx {
     }
 }
 
-/// Write `examples/network_node.rs` and `Dockerfile` into the project root.
+/// The structural conformance module the node installs as its intake guard:
+/// one text for every generated crate, since it reads the descriptor as data
+/// and names no generated type. Kept as a file rather than a template so it
+/// stays `rustfmt`-clean and readable where it is written.
+const CONFORMANCE_MODULE: &str = include_str!("deployment/conformance.rs");
+
+/// Write `examples/network_node.rs`, its `examples/conformance/mod.rs` and
+/// `Dockerfile` into the project root.
 pub fn write_deployment_artifacts(root: &Path, ctx: &DeploymentCtx) -> std::io::Result<()> {
     let examples_dir = root.join("examples");
-    std::fs::create_dir_all(&examples_dir)?;
+    // Under a directory of its own so Cargo does not take it for an example
+    // target; `network_node.rs` reaches it with `mod conformance;`.
+    let conformance_dir = examples_dir.join("conformance");
+    std::fs::create_dir_all(&conformance_dir)?;
 
     std::fs::write(
         examples_dir.join("network_node.rs"),
         render_network_node(ctx),
     )?;
+    std::fs::write(conformance_dir.join("mod.rs"), CONFORMANCE_MODULE)?;
     std::fs::write(root.join("Dockerfile"), render_dockerfile(ctx))?;
 
     Ok(())
@@ -166,6 +178,21 @@ fn render_network_node(ctx: &DeploymentCtx) -> String {
 //! is written once: a local operation on `__model` is refused at the intake
 //! and answered `success: false`. The CRDT itself stays model-blind.
 //!
+//! # Conformance
+//!
+//! Every descriptor the node serves is also parsed into a schema
+//! (`conformance.rs`, beside this file), and a local operation on a
+//! registered model is checked against the schema of the descriptor the
+//! model was registered under before the log applies it: an unknown feature,
+//! a value of the wrong kind, a list where one object belongs, a character
+//! that fits no class or enum literal allowed at its slot, are refused at the
+//! intake with a sentence naming the class or the feature. Only the operation
+//! and the descriptor are read, so every replica holding the same digest
+//! gives the same verdict; the default log and a log with no binding are
+//! never checked, and neither is anything received from a peer, which passed
+//! its own intake. What needs the converged document is the editor's to
+//! report.
+//!
 //! # Log identity
 //!
 //! Every replica of a session must host the same log, and `LOG_ID` names it:
@@ -199,8 +226,10 @@ fn render_network_node(ctx: &DeploymentCtx) -> String {
 //! - `POST /api/pause-all`   — pause all peers
 //! - `POST /api/resume-all`  — resume all peers
 
+use std::collections::BTreeMap;
 use std::env;
 use std::path::{{Path, PathBuf}};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 
@@ -215,6 +244,12 @@ use moirai_protocol::state::log::IsLog;
 use serde::{{Deserialize, Serialize}};
 use serde_json::{{Value, json}};
 use sha2::{{Digest, Sha256}};
+
+// One text with the tests and the M-E7 harness, which read the parts of
+// the schema the guard itself does not.
+#[allow(dead_code)]
+mod conformance;
+use conformance::{{Schema, check_structure}};
 
 /// The operation type of the generated log.
 type Op = <{log_type} as IsLog>::Op;
@@ -234,6 +269,13 @@ struct MetamodelId {{
 
 /// The reserved root key every model carries its header under.
 const MODEL_HEADER_KEY: &str = "__model";
+
+/// The schema of every descriptor this node serves, by digest, which is what
+/// the intake guard checks an operation against. Process-wide and built once
+/// in `main` before the node runs, because the guard is a function pointer
+/// and captures nothing; keyed by digest and never by `nsURI`, since two
+/// descriptors of one `nsURI` are two metamodels.
+static SCHEMAS: OnceLock<BTreeMap<String, Schema>> = OnceLock::new();
 
 /// How other replicas reach this one's replication listener.
 ///
@@ -265,9 +307,18 @@ fn metamodel_digest(descriptor: &Value) -> String {{
     format!("{{:x}}", Sha256::digest(descriptor.to_string()))
 }}
 
+/// A descriptor as the node serves it, and the schema the intake checks
+/// against, from one parse.
+struct Described {{
+    descriptor: ServedDescriptor,
+    schema: Schema,
+}}
+
 /// A descriptor as the node serves it: keyed by its digest, which is what a
-/// registration's `metamodel_id` names, and listed as `{{nsURI, package, digest}}`.
-fn describe_descriptor(text: &str) -> Result<ServedDescriptor, String> {{
+/// registration's `metamodel_id` names, and listed as `{{nsURI, package, digest}}`;
+/// beside it the schema, so a descriptor no schema can be built from is not
+/// served at all rather than served unchecked.
+fn describe_descriptor(text: &str) -> Result<Described, String> {{
     let parsed: Value = serde_json::from_str(text).map_err(|err| format!("not JSON: {{err}}"))?;
     let ns_uri = parsed
         .get("nsURI")
@@ -277,11 +328,15 @@ fn describe_descriptor(text: &str) -> Result<ServedDescriptor, String> {{
         .get("package")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let schema = Schema::from_value(&parsed).map_err(|why| format!("no schema: {{why}}"))?;
     let digest = metamodel_digest(&parsed);
-    Ok(ServedDescriptor {{
-        listing: json!({{ "nsURI": ns_uri, "package": package, "digest": digest }}),
-        key: digest,
-        text: text.to_string(),
+    Ok(Described {{
+        descriptor: ServedDescriptor {{
+            listing: json!({{ "nsURI": ns_uri, "package": package, "digest": digest }}),
+            key: digest,
+            text: text.to_string(),
+        }},
+        schema,
     }})
 }}
 
@@ -363,14 +418,33 @@ fn header_string_ops<'a>(path: &'a [&'a str], text: &'a str) -> impl Iterator<It
     }})
 }}
 
-/// The intake guard: the header is written once, so a local operation that
-/// would touch `__model` — an update or a removal of that root key, or a
-/// clear of the root object, which resets every key — is refused. Remote
-/// operations are not this node's to refuse; the adaptation layer compares
-/// the header it reads with the one it recorded.
-fn refuse_header_writes(op: &Op) -> Result<(), String> {{
+/// The intake guard, installed for every registered model: the header rule,
+/// then the structural check against the schema of the descriptor the model
+/// was registered under, which the node hands over and never the caller's
+/// claim. One serialization serves both. Remote operations are not this
+/// node's to refuse: each passed its own sender's intake under the same
+/// digest, and the adaptation layer compares the header it reads with the
+/// one it recorded.
+fn guard_intake(log_id: &LogId, descriptor: &ServedDescriptor, op: &Op) -> Result<(), String> {{
     let value = serde_json::to_value(op)
         .map_err(|err| format!("the operation does not serialize: {{err}}"))?;
+    refuse_header_writes(&value)?;
+    let schema = SCHEMAS
+        .get()
+        .and_then(|schemas| schemas.get(&descriptor.key))
+        .ok_or_else(|| {{
+            format!(
+                "model {{log_id}} is bound to descriptor {{}}, for which no schema is held",
+                descriptor.key
+            )
+        }})?;
+    check_structure(schema, &value)
+}}
+
+/// The header is written once, so a local operation that would touch
+/// `__model` — an update or a removal of that root key, or a clear of the
+/// root object, which resets every key — is refused.
+fn refuse_header_writes(value: &Value) -> Result<(), String> {{
     let root = &value["JsonKind"]["Object"];
     let touches_header = root["Update"][0] == MODEL_HEADER_KEY
         || root["Remove"] == MODEL_HEADER_KEY
@@ -441,13 +515,15 @@ fn main() {{
     // unscoped `/api/metamodel` keeps answering with it; `METAMODEL_DIR`
     // adds the rest.
     let mut descriptors: Vec<ServedDescriptor> = Vec::new();
+    let mut schemas: BTreeMap<String, Schema> = BTreeMap::new();
     let metamodel_path = env::var("METAMODEL_PATH").ok();
     let metamodel_explicit = metamodel_path.is_some();
     let metamodel_path = metamodel_path.unwrap_or_else(|| "metamodel.json".to_string());
     match std::fs::read_to_string(&metamodel_path) {{
         Ok(text) => match describe_descriptor(&text) {{
-            Ok(descriptor) => {{
+            Ok(Described {{ descriptor, schema }}) => {{
                 eprintln!("[{{replica_id}}] serving metamodel descriptor from `{{metamodel_path}}`");
+                schemas.insert(descriptor.key.clone(), schema);
                 descriptors.push(descriptor);
             }}
             Err(why) => {{
@@ -475,12 +551,13 @@ fn main() {{
                     match described {{
                         // Usually the METAMODEL_PATH file seen again through
                         // its directory; the first copy is the one served.
-                        Ok(descriptor) if descriptors.iter().any(|d| d.key == descriptor.key) => {{}}
-                        Ok(descriptor) => {{
+                        Ok(described) if schemas.contains_key(&described.descriptor.key) => {{}}
+                        Ok(Described {{ descriptor, schema }}) => {{
                             eprintln!(
                                 "[{{replica_id}}] serving metamodel descriptor from `{{}}`",
                                 path.display()
                             );
+                            schemas.insert(descriptor.key.clone(), schema);
                             descriptors.push(descriptor);
                         }}
                         Err(why) => {{
@@ -499,7 +576,10 @@ fn main() {{
     }}
     node.serve_metamodels(descriptors);
     node.enable_registration(descriptor_key, header_ops);
-    node.enable_op_guard(refuse_header_writes);
+    SCHEMAS
+        .set(schemas)
+        .expect("the schema table is built once, here, before the node runs");
+    node.enable_op_guard(guard_intake);
 
     if let Some(port) = http_port {{
         node.start_http(port);
