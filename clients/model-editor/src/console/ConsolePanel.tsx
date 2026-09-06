@@ -64,7 +64,7 @@ export function ConsolePanel({
   toggleRef,
 }: ConsolePanelProps) {
   const newest = log[log.length - 1];
-  const failed = newest !== undefined && newest.outcome !== 'ok';
+  const failed = newest !== undefined && (newest.outcome === 'refused' || newest.outcome === 'error');
 
   const summary = (
     <button

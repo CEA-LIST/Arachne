@@ -341,6 +341,7 @@ export default function App() {
         doc={doc}
         connected={connected}
         refusal={refusal}
+        diagnostics={selected?.diagnostics ?? []}
         collapsed={collapsed}
         setCollapsed={setCollapsed}
         selectedPath={effectivePath}

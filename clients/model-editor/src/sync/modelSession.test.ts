@@ -114,7 +114,9 @@ describe('mp29 a session per model', () => {
       expect(two.tab(UML_ID, NODE).doc).toMatchObject({ name: 'Door' });
       expect(one.tab(MODEL_ID, NODE).doc).toEqual(btDocument(btHeader));
       expect(two.rows.at(-1)).toMatchObject({ description: 'set Model.name', outcome: 'ok', ops });
-      expect(one.rows).toEqual([]);
+      // The fixture document lacks what the descriptor requires, which the
+      // conformance report says and this test is not about.
+      expect(one.rows.filter((row) => row.description !== 'conformance')).toEqual([]);
     } finally {
       a.close();
       c.close();

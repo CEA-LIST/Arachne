@@ -24,13 +24,14 @@ import { exportLog } from './exportLog';
 
 type Outcome = LogEntry['outcome'];
 
-const OUTCOMES: readonly Outcome[] = ['ok', 'refused', 'error'];
+const OUTCOMES: readonly Outcome[] = ['ok', 'refused', 'error', 'diagnostic'];
 
 /** A filter chip carries its outcome's own colour once it has entries to show. */
 const TONE: Record<Outcome, string> = {
   ok: 'me-chip--ok',
   refused: 'me-chip--warn',
   error: 'me-chip--danger',
+  diagnostic: 'me-chip--warn',
 };
 
 interface ActionLogViewProps {
@@ -53,7 +54,7 @@ export function ActionLogView({
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
 
   const counts = useMemo(() => {
-    const result: Record<Outcome, number> = { ok: 0, refused: 0, error: 0 };
+    const result: Record<Outcome, number> = { ok: 0, refused: 0, error: 0, diagnostic: 0 };
     for (const entry of log) result[entry.outcome]++;
     return result;
   }, [log]);

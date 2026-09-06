@@ -15,6 +15,7 @@
 
 import type { Descriptor, HostedModel, JsonOp, MetamodelListing, ModelId, PlainJson } from '../api/types';
 import type { Binding } from '../model/binding';
+import type { Diagnostic } from '../model/conformance';
 import type { Projection } from '../model/projection';
 import { FieldRegistry } from '../sync/fieldRegistry';
 
@@ -24,8 +25,13 @@ export interface LogEntry {
   ts: number;
   description: string;
   ops: JsonOp[];
-  /** ok = all applied; refused = the node answered success:false; error = HTTP/network failure. */
-  outcome: 'ok' | 'refused' | 'error';
+  /**
+   * ok = all applied; refused = the node answered success:false; error =
+   * HTTP/network failure; diagnostic = the converged document violates an
+   * invariant of its descriptor (model/conformance.ts), which is a report
+   * and not a failure of anything sent.
+   */
+  outcome: 'ok' | 'refused' | 'error' | 'diagnostic';
   detail?: string;
   /** The model the row is about; absent for a row about the connection or the node. */
   modelId?: ModelId;
@@ -50,6 +56,13 @@ export interface ModelTab {
   binding: Binding | null;
   /** The model store's last outcome after an apply (model/projection.ts); null before the first apply. */
   projection: Projection | null;
+  /**
+   * The invariants the applied document violates (model/conformance.ts),
+   * evaluated after every bound apply: shown beside the binding verdict and
+   * under the tree, never a hold on the edit gate. Empty until an apply
+   * answers `bound`, and after one that refuses.
+   */
+  diagnostics: Diagnostic[];
   lastSyncAt: number | null;
   pendingOps: number;
   /**
@@ -112,6 +125,7 @@ export function newTab(id: ModelId, nodeUrl: string, registry: FieldRegistry = n
     doc: null,
     binding: null,
     projection: null,
+    diagnostics: [],
     lastSyncAt: null,
     pendingOps: 0,
   };

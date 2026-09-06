@@ -10,7 +10,10 @@
  * every poll, fetch `GET /api/model/{id}/state`, run the binding check against
  * the descriptor in effect (`GET /api/model/{id}/metamodel`, or a loaded
  * file), apply only when the check lets it through, then write the store.
- * Nothing here reads the store.
+ * After an apply that answered `bound`, the descriptor's invariants are
+ * evaluated over the document (model/conformance.ts) and reported to the tab
+ * when the report changed; a report never refuses an apply and never reaches
+ * the edit gate. Nothing here reads the store.
  */
 
 import { ApiError, getModelMetamodel, getModelState, postModelOp } from '../api/client';
@@ -25,6 +28,7 @@ import {
   type ApplyResult,
   type Binding,
 } from '../model/binding';
+import { checkInvariants, describeDiagnostics, sameDiagnostics, type Diagnostic } from '../model/conformance';
 import { describeProjection, projectModel, sameProjection, type Projection } from '../model/projection';
 import type { ModelStore } from '../model/store';
 import type { LogEntry, TabPatch } from '../state/store';
@@ -74,6 +78,8 @@ export class ModelSession {
   #recorded: ModelHeader | null = null;
   #binding: Binding | null = null;
   #projection: Projection | null = null;
+  #diagnostics: Diagnostic[] | null = null;
+  #loggedDiagnostics: Diagnostic[] | null = null;
 
   constructor(options: SessionOptions) {
     this.id = options.id;
@@ -98,6 +104,10 @@ export class ModelSession {
 
   get binding(): Binding | null {
     return this.#binding;
+  }
+
+  get diagnostics(): Diagnostic[] {
+    return this.#diagnostics ?? [];
   }
 
   get closed(): boolean {
@@ -207,6 +217,32 @@ export class ModelSession {
   }
 
   /**
+   * The invariants after an apply: evaluated on a bound document, empty
+   * otherwise. The tab is patched once per change, so the chip follows the
+   * document poll by poll; the log gets a row only when the report changed
+   * while this session had nothing in flight, because a class name is
+   * written one character per operation and a poll in the middle of one
+   * sees a half-written tag, which is a report that will be gone at the next
+   * poll and not a row anyone wants to read. The row's outcome is
+   * `diagnostic`, since nothing sent failed.
+   */
+  #report(diagnostics: Diagnostic[], ts: number): void {
+    if (this.#diagnostics === null || !sameDiagnostics(this.#diagnostics, diagnostics)) {
+      this.#diagnostics = diagnostics;
+      this.#patch({ diagnostics });
+    }
+    if (this.#queue.pendingCount > 0) return;
+    const logged = this.#loggedDiagnostics;
+    if (logged !== null && sameDiagnostics(logged, diagnostics)) return;
+    this.#loggedDiagnostics = diagnostics;
+    if (diagnostics.length > 0) {
+      this.#log({ ts, description: 'conformance', ops: [], outcome: 'diagnostic', detail: describeDiagnostics(diagnostics) });
+    } else if (logged !== null && logged.length > 0) {
+      this.#log({ ts, description: 'conformance', ops: [], outcome: 'ok', detail: describeDiagnostics(diagnostics) });
+    }
+  }
+
+  /**
    * One apply: fetch the state, check its binding against the descriptor in
    * effect, the one the document would be rendered under, report the
    * document only when the check lets it through, then write the projection.
@@ -231,6 +267,7 @@ export class ModelSession {
         this.#log({ ts, description: 'apply model', ops: [], outcome: 'refused', detail: result.message });
         this.#banner(result.message);
       }
+      this.#report([], ts);
       await this.#project(result);
       return;
     }
@@ -243,6 +280,13 @@ export class ModelSession {
       lastSyncAt: ts,
       ...(changed ? { binding: result.binding } : {}),
     });
+    // Only a bound document is checked: an unbound log has no descriptor of
+    // its own to be held to, and a header with no descriptor has nothing to
+    // check against.
+    this.#report(
+      result.binding.kind === 'bound' && this.#descriptor !== null ? checkInvariants(this.#descriptor, result.doc) : [],
+      ts,
+    );
     await this.#project(result);
   }
 

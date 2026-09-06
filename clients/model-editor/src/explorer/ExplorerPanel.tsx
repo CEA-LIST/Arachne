@@ -20,6 +20,7 @@ import type {
   PlainJson,
 } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
+import { pathText, type Diagnostic } from '../model/conformance';
 import { buildTree, rootCandidates, type ModelNode } from '../model/instance';
 import { AddControl } from '../properties/AddControl';
 import { countElements, flattenTree } from '../ui/flattenTree';
@@ -57,6 +58,8 @@ interface ExplorerPanelProps {
   connected: boolean;
   /** The binding check's refusal when the document was not applied (model/binding.ts); null otherwise. */
   refusal: string | null;
+  /** The invariants the applied document violates (model/conformance.ts), listed under the tree. */
+  diagnostics: Diagnostic[];
   collapsed: ReadonlySet<string>;
   setCollapsed: (update: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void;
   selectedPath: Path;
@@ -93,6 +96,7 @@ export function ExplorerPanel({
   doc,
   connected,
   refusal,
+  diagnostics,
   collapsed,
   setCollapsed,
   selectedPath,
@@ -284,6 +288,25 @@ export function ExplorerPanel({
                 onRename={onRename}
                 onRowCount={onRowCount}
               />
+            )}
+
+            {connected && selectedModel !== null && diagnostics.length > 0 && (
+              <ul className="me-diagnostics" aria-label="Conformance diagnostics" data-testid="diagnostics-list">
+                {diagnostics.map((diagnostic, index) => (
+                  <li key={index} className="me-diagnostics__item">
+                    <button
+                      type="button"
+                      className="me-diagnostics__path me-mono"
+                      title="Select the element"
+                      onClick={() => onSelectPath(diagnostic.path)}
+                    >
+                      {pathText(diagnostic.path)}
+                    </button>
+                    <span className="me-chip me-chip--warn">{diagnostic.rule}</span>
+                    <span className="me-diagnostics__message">{diagnostic.message}</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </>

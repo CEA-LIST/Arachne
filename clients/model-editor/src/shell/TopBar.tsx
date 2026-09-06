@@ -5,12 +5,16 @@
  * metamodel PACKAGE read from its descriptor at runtime with its provenance
  * (node or file) — the editor never hard-codes what it is editing — and, once
  * a state has been fetched, the binding check's verdict on that document
- * (model/binding.ts): unbound, bound, or not applied; then the model store's
- * word (model/projection.ts): stored, with the file and its digest in the
- * title, or why not. With no tab open the context says so.
+ * (model/binding.ts): unbound, bound, or not applied; then, when the applied
+ * document violates an invariant of its descriptor, a count of the issues
+ * with the report as its title (model/conformance.ts), which holds nothing;
+ * then the model store's word (model/projection.ts): stored, with the file
+ * and its digest in the title, or why not. With no tab open the context
+ * says so.
  */
 
 import { bindingLabel, describeBinding, isRefusal } from '../model/binding';
+import { describeDiagnostics } from '../model/conformance';
 import { describeProjection, projectionLabel } from '../model/projection';
 import type { AppState, ModelTab } from '../state/store';
 import type { FlushProgress } from '../ui/editGate';
@@ -91,6 +95,15 @@ export function TopBar({
                 data-testid="binding"
               >
                 {bindingLabel(tab.binding)}
+              </span>
+            )}
+            {tab.diagnostics.length > 0 && (
+              <span
+                className="me-chip me-chip--warn"
+                title={describeDiagnostics(tab.diagnostics)}
+                data-testid="diagnostics"
+              >
+                {tab.diagnostics.length} issue{tab.diagnostics.length === 1 ? '' : 's'}
               </span>
             )}
             {tab.projection !== null && (
