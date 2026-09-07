@@ -9,8 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "vitest run --config vitest.e2e.config.ts",
-    "bench:m-e5": "vitest run --config bench/vitest.bench.config.ts bench/m-e5"
+    "e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "lucide-react": "1.38.0",
