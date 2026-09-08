@@ -35,6 +35,11 @@ const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
 
 const BT: &str = "bt.metamodel.json";
 const UML: &str = "uml.metamodel.json";
+/// The third descriptor in `examples/`, checked in on 2026-09-09 when
+/// decision D6 was amended and `json.ecore`'s two forms stopped being
+/// refused. This crate is generated from it, so a node started on the whole
+/// directory serves it too, which is what MP13's listing has to expect.
+const JSON: &str = "json.metamodel.json";
 
 static RUN_SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -364,6 +369,7 @@ fn mp8_a_local_op_on_the_header_is_rejected_after_creation() {
 fn mp13_the_metamodel_dir_is_keyed_by_digest_and_metamodel_path_still_works() {
     let bt = metamodel_id(BT);
     let uml = metamodel_id(UML);
+    let json_mm = metamodel_id(JSON);
     let listing_of = |node: &NodeProcess| -> Vec<Value> {
         let (status, reply) = node.get("/api/metamodels");
         assert_eq!(status, 200, "{reply}");
@@ -378,7 +384,7 @@ fn mp13_the_metamodel_dir_is_keyed_by_digest_and_metamodel_path_still_works() {
     };
 
     let both = NodeProcess::start("mp13-dir", &[("METAMODEL_DIR", EXAMPLES)]);
-    let mut expected = vec![bt.clone(), uml.clone()];
+    let mut expected = vec![bt.clone(), uml.clone(), json_mm.clone()];
     expected.sort_by_key(|entry| entry["digest"].to_string());
     assert_eq!(
         listing_of(&both),
@@ -386,7 +392,7 @@ fn mp13_the_metamodel_dir_is_keyed_by_digest_and_metamodel_path_still_works() {
         "the listing is not keyed by digest with the right nsURI beside each"
     );
 
-    for (descriptor, file) in [(&bt, BT), (&uml, UML)] {
+    for (descriptor, file) in [(&bt, BT), (&uml, UML), (&json_mm, JSON)] {
         let (status, reply) = both.post("/api/models", &json!({ "metamodel_id": descriptor }));
         assert_eq!(status, 201, "{reply}");
         let model_id = reply["model_id"].as_str().expect("a model_id");
