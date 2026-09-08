@@ -1,0 +1,31 @@
+[package]
+name = "kitchen-crdt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moirai-crdt = { path = "../../../moirai-model-plane/moirai-crdt" }
+moirai-protocol = { path = "../../../moirai-model-plane/moirai-protocol", features = ["serde"] }
+moirai-macros = { path = "../../../moirai-model-plane/moirai-macros" }
+moirai-fuzz = { path = "../../../moirai-model-plane/moirai-fuzz" }
+moirai-network = { path = "../../../moirai-model-plane/moirai-network" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+petgraph = "0.8.3"
+rand = "0.10.0"
+
+[dev-dependencies]
+# The equivalence oracle of `ip29` drives the interpreted node tree beside
+# this crate's generated log. `sink` because `moirai-protocol`'s own `sink` is
+# on for this build and `IsLog::effect`'s arity follows it; `test_utils`
+# because the interpreted arm is `moirai_interp::testing::Harness`, which is
+# the node tree with no installation ceremony in front of it.
+moirai-interp = { path = "../../../moirai-model-plane/moirai-interp", features = ["sink", "test_utils"] }
+moirai-semantics = { path = "../../../moirai-model-plane/moirai-semantics" }
+
+[features]
+default = ["fuzz", "sink", "serde"]
+fuzz = []
+serde = ["moirai-protocol/serde", "moirai-macros/serde", "moirai-crdt/serde"]
+sink = ["moirai-protocol/sink","moirai-fuzz/sink","moirai-macros/sink","moirai-crdt/sink"]
