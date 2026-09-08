@@ -10,4 +10,5 @@ mod import;
 mod operation;
 pub mod package;
 pub mod reference;
+pub mod semantics;
 mod warnings;

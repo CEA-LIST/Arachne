@@ -7,11 +7,11 @@
 //! itself to whatever node it connects to without compiling against the
 //! generated types.
 //!
-//! # Descriptor format (`formatVersion` 1)
+//! # Descriptor format (`formatVersion` 2)
 //!
 //! ```json
 //! {
-//!   "formatVersion": 1,
+//!   "formatVersion": 2,
 //!   "package": "behaviortree",
 //!   "nsURI": "http://www.example.org/behaviortree",
 //!   "rootClasses": ["Root"],
@@ -21,15 +21,30 @@
 //!       "superTypes": [],
 //!       "attributes": [
 //!         {"name": "ID", "kind": "string", "many": false,
-//!          "required": true, "isId": true}
+//!          "required": true, "isId": true,
+//!          "facets": {"ordered": null, "unique": null}, "annotation": null,
+//!          "merge": {"kind": "attribute", "shape": {"kind": "single"},
+//!                    "leaf": {"kind": "text"}},
+//!          "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+//!                         "leaf": "declared", "presence": "declared"}}
 //!       ],
 //!       "containments": [
 //!         {"name": "children", "target": "TreeNode", "many": true,
-//!          "required": false, "ordered": true}
+//!          "required": false, "ordered": true,
+//!          "facets": {"ordered": null, "unique": null}, "annotation": null,
+//!          "merge": {"kind": "containment", "shape": {"kind": "sequence"},
+//!                    "target": "TreeNode"},
+//!          "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
+//!                         "leaf": "notApplicable", "presence": "declared"}}
 //!       ],
 //!       "references": [
 //!         {"name": "entry", "target": "BlackboardEntry", "many": false,
-//!          "required": false}
+//!          "required": false,
+//!          "facets": {"ordered": null, "unique": null}, "annotation": null,
+//!          "merge": {"kind": "reference", "many": false,
+//!                    "target": "BlackboardEntry"},
+//!          "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+//!                         "leaf": "notApplicable", "presence": "notApplicable"}}
 //!       ]
 //!     }
 //!   },
@@ -48,6 +63,30 @@
 //! - The class set is the one code generation reaches from the root classes,
 //!   so descriptor and generated crate describe the same metamodel slice.
 //!
+//! # What version 2 added, and why nothing broke
+//!
+//! Version 1 described a metamodel for an *editor*: enough shape to draw a
+//! form. It said nothing about how two concurrent writes to a feature settle,
+//! so a node that wanted to merge by the metamodel had to be compiled against
+//! it. Version 2 adds, on every attribute, containment and reference entry:
+//!
+//! - `facets` — `ordered` and `unique` exactly as the `.ecore` file wrote
+//!   them, `null` where it was silent.
+//! - `annotation` — the `urn:arachne:semantics` `datatype` string it wrote,
+//!   or `null`.
+//! - `merge` — the CRDT construction the generator compiles for this feature,
+//!   as data, in the closed vocabulary of `moirai_semantics::MergeRule`.
+//! - `provenance` — where each of the four facets of that rule came from:
+//!   `declared`, `ecoreDefault`, `houseDefault`, `annotation` or
+//!   `notApplicable`. This is what keeps "derived" an honest word: a policy
+//!   nobody wrote down says so in the file that publishes it.
+//!
+//! The derivation is [`crate::codegen::semantics::merge_rule`], and its module
+//! documents every reading it takes. **Keys were added and none removed**, so
+//! the phase 4 `Schema` parser (`deployment/conformance.rs`) and the model
+//! editor keep working on a version 2 descriptor: both read only the keys they
+//! name.
+//!
 //! # Identity
 //!
 //! A descriptor's identity on the model plane is `{nsURI, digest}`, where the
@@ -65,11 +104,12 @@ use log::warn;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
+use crate::codegen::semantics;
 use crate::error::{ArachneError, Result};
 
 /// Version of the descriptor layout above. Bump on any breaking change so
 /// clients can refuse what they do not understand.
-const FORMAT_VERSION: u64 = 1;
+const FORMAT_VERSION: u64 = 2;
 
 /// Builds the JSON metamodel descriptor for `pack`.
 ///
@@ -189,6 +229,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                 if let Some(enum_name) = enum_name {
                     attribute["enum"] = json!(enum_name);
                 }
+                add_semantics(&mut attribute, ctx, class, feature);
                 attributes.push(attribute);
             }
             structural::Typ::EReference => {
@@ -203,20 +244,24 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                 };
                 let target = ctx[target].name();
                 if feature.containment {
-                    containments.push(json!({
+                    let mut containment = json!({
                         "name": feature.name,
                         "target": target,
                         "many": many,
                         "required": required,
                         "ordered": feature.ordered.unwrap_or(true),
-                    }));
+                    });
+                    add_semantics(&mut containment, ctx, class, feature);
+                    containments.push(containment);
                 } else {
-                    references.push(json!({
+                    let mut reference = json!({
                         "name": feature.name,
                         "target": target,
                         "many": many,
                         "required": required,
-                    }));
+                    });
+                    add_semantics(&mut reference, ctx, class, feature);
+                    references.push(reference);
                 }
             }
         }
@@ -229,6 +274,24 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
         "containments": containments,
         "references": references,
     })
+}
+
+/// Adds the four `formatVersion` 2 keys to one feature entry: the facets as
+/// the `.ecore` file wrote them, the `urn:arachne:semantics` `datatype` string
+/// it wrote or `null`, the merge rule the generator would compile, and where
+/// each facet of that rule came from.
+///
+/// Nothing is removed and nothing existing moves, which is what keeps the
+/// phase 4 `Schema` parser (`deployment/conformance.rs`) and the model editor
+/// reading these descriptors unchanged: both read only the keys they name.
+fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structural::Structural) {
+    let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
+    entry["facets"] = semantics::facets_json(feature);
+    entry["annotation"] = semantics::datatype_annotation(feature)
+        .map(|value| json!(value))
+        .unwrap_or(Value::Null);
+    entry["merge"] = semantics::merge_json(&merge, ctx);
+    entry["provenance"] = semantics::provenance_json(&provenance);
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the
@@ -330,6 +393,14 @@ mod tests {
         );
     }
 
+    /// A class carries its own declarations only, and every one of them carries
+    /// the four `formatVersion` 2 keys: the facets as written, the annotation,
+    /// the merge rule and its provenance.
+    ///
+    /// `TreeNode.ID` is the shape of a required text slot; `TreeNode.name` the
+    /// same leaf under an `OptionLog`, its `presence` `declared` because
+    /// `lowerBound="0" upperBound="1"` differs from Ecore's `1..1` default for
+    /// an attribute.
     #[test]
     fn bt_tree_node_declares_only_its_own_features() {
         let descriptor = bt_descriptor();
@@ -338,13 +409,28 @@ mod tests {
             tree_node["attributes"],
             json!([
                 {"name": "ID", "kind": "string", "many": false,
-                 "required": true, "isId": false},
+                 "required": true, "isId": false,
+                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+                 "merge": {"kind": "attribute", "shape": {"kind": "single"},
+                           "leaf": {"kind": "text"}},
+                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+                                "leaf": "declared", "presence": "ecoreDefault"}},
                 {"name": "name", "kind": "string", "many": false,
-                 "required": false, "isId": false},
+                 "required": false, "isId": false,
+                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+                 "merge": {"kind": "attribute", "shape": {"kind": "optional"},
+                           "leaf": {"kind": "text"}},
+                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+                                "leaf": "declared", "presence": "declared"}},
             ])
         );
     }
 
+    /// The one entry the whole provenance argument rests on. `bt.ecore` writes
+    /// no `ordered` anywhere, and a behaviour tree's `Sequence` runs its
+    /// children left to right, so the sequence this compiles to is Arachne's
+    /// decision and the descriptor says so: `houseDefault`, with `facets`
+    /// showing the file was silent.
     #[test]
     fn bt_control_node_containment_is_many_ordered_and_subclass_typed() {
         let descriptor = bt_descriptor();
@@ -353,7 +439,12 @@ mod tests {
             control_node["containments"],
             json!([
                 {"name": "children", "target": "TreeNode", "many": true,
-                 "required": false, "ordered": true},
+                 "required": false, "ordered": true,
+                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+                 "merge": {"kind": "containment", "shape": {"kind": "sequence"},
+                           "target": "TreeNode"},
+                 "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
+                                "leaf": "notApplicable", "presence": "declared"}},
             ])
         );
     }
@@ -432,6 +523,10 @@ mod tests {
         }
     }
 
+    /// A non-containment reference stays a reference, and its rule says so
+    /// with every facet `notApplicable`: no field is emitted for it
+    /// (`classifier/mod.rs:104-117`), so there is nothing for a facet to
+    /// describe.
     #[test]
     fn bt_non_containment_reference_stays_a_reference() {
         let descriptor = bt_descriptor();
@@ -440,8 +535,42 @@ mod tests {
             port["references"],
             json!([
                 {"name": "entry", "target": "BlackboardEntry",
-                 "many": false, "required": false},
+                 "many": false, "required": false,
+                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+                 "merge": {"kind": "reference", "many": false,
+                           "target": "BlackboardEntry"},
+                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+                                "leaf": "notApplicable", "presence": "notApplicable"}},
             ])
         );
+    }
+
+    /// The two forms decision D6 keeps on the generated path, as `json.ecore`
+    /// writes them: a `uw-map` containment is `keyed`, and a feature of a class
+    /// the `urn:arachne:representation` annotation makes transparent is
+    /// `transparent`. `moirai_semantics::from_descriptor` refuses a metamodel
+    /// carrying either, by name.
+    #[test]
+    fn json_publishes_the_two_forms_the_interpreted_path_refuses() {
+        let descriptor = descriptor_of("json.ecore");
+        assert_eq!(
+            (
+                &descriptor["classes"]["Object"]["containments"][0]["merge"],
+                &descriptor["classes"]["Object"]["containments"][0]["annotation"],
+                &descriptor["classes"]["Array"]["containments"][0]["merge"],
+            ),
+            (
+                &json!({"kind": "unsupported", "reason": "keyed"}),
+                &json!("uw-map"),
+                &json!({"kind": "unsupported", "reason": "transparent"}),
+            )
+        );
+    }
+
+    /// The format version is what the editor and the interpreted node gate on,
+    /// so it is asserted rather than left to the fixture digest.
+    #[test]
+    fn the_descriptor_declares_format_version_two() {
+        assert_eq!(bt_descriptor()["formatVersion"], json!(2));
     }
 }

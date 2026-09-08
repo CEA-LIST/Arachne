@@ -11,6 +11,9 @@ quote = "1.0.44"
 syn = "2.0.114"
 prettyplease = "0.2.37"
 anyhow = "1.0"
+# `Serialize` on the shared merge vocabulary, so the descriptor and
+# `moirai-semantics`'s parser cannot drift on a tag name.
+serde = "1.0"
 serde_json = "1.0"
 # The metamodel digest: SHA-256 over the compact descriptor. Keep `serde_json`
 # without `preserve_order`, or the digest would depend on a file's key order.
@@ -24,4 +27,5 @@ xml-builder = "0.5.4"
 moirai-protocol = { version = "*", path = "../../moirai/moirai-protocol" }
 moirai-crdt = { version = "*", path = "../../moirai/moirai-crdt" }
 moirai-macros = { version = "*", path = "../../moirai/moirai-macros" }
+moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
 pathdiff = "0.2"
