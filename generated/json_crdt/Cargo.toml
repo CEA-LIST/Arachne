@@ -15,6 +15,15 @@ sha2 = "0.10"
 petgraph = "0.8.3"
 rand = "0.10.0"
 
+[dev-dependencies]
+# The equivalence oracle of `ip28` drives the interpreted node tree beside
+# this crate's generated log. `sink` because `moirai-protocol`'s own `sink` is
+# on for this build and `IsLog::effect`'s arity follows it; `test_utils`
+# because the interpreted arm is `moirai_interp::testing::Harness`, which is
+# the node tree with no installation ceremony in front of it.
+moirai-interp = { path = "../../../moirai-model-plane/moirai-interp", features = ["sink", "test_utils"] }
+moirai-semantics = { path = "../../../moirai-model-plane/moirai-semantics" }
+
 [features]
 default = ["fuzz", "sink", "serde"]
 fuzz = []
