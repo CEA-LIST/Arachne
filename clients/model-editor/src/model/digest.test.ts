@@ -52,8 +52,12 @@ describe('sha256Hex', () => {
 describe('mp6 the editor digest equals the node digest', () => {
   const fixture = readExample('fixtures/metamodel-digests.json') as DigestFixture;
 
-  it('covers both shipped descriptors', () => {
-    expect(Object.keys(fixture).sort()).toEqual(['bt.metamodel.json', 'uml.metamodel.json']);
+  it('covers all three shipped descriptors', () => {
+    expect(Object.keys(fixture).sort()).toEqual([
+      'bt.metamodel.json',
+      'json.metamodel.json',
+      'uml.metamodel.json',
+    ]);
   });
 
   for (const [file, expected] of Object.entries(fixture)) {
