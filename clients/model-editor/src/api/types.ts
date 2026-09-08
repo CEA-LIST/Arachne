@@ -5,7 +5,7 @@
  * - GET /api/state returns {"json": <WireNode>}; a fresh node returns {"json": "Unset"}.
  * - Every populated node is wrapped: {"Value": {...}}; strings are char arrays.
  * - POST /api/op takes {"JsonKind": <JsonOp>} and answers {"success": bool, "message": string}.
- * - GET /api/metamodel returns a formatVersion-1 descriptor, or 404 when the node serves none.
+ * - GET /api/metamodel returns a formatVersion 1 or 2 descriptor, or 404 when the node serves none.
  * - GET /api/model/{id}/state, POST /api/model/{id}/op and GET /api/model/{id}/metamodel are
  *   the same, scoped to one hosted model; a malformed id is 400, an id the node does not host is 404.
  * - GET /api/models lists the hosted models as {"models": [{model_id, metamodel_id}]}, the
@@ -69,11 +69,88 @@ export interface OpResult {
   message: string;
 }
 
-/* ---------- Metamodel descriptor (formatVersion 1) ---------- */
+/* ---------- Metamodel descriptor (formatVersion 1 and 2) ---------- */
 
 export type AttributeKind = 'string' | 'int' | 'float' | 'bool' | 'enum';
 
-export interface AttributeDesc {
+/**
+ * The four keys formatVersion 2 adds to every feature entry.
+ *
+ * Version 1 described a metamodel for an editor: enough shape to draw a form.
+ * Version 2 additionally publishes how the node merges each feature, and where
+ * every part of that decision came from, so a node can merge by the descriptor
+ * instead of being compiled against it. The editor reads none of it today and
+ * every key is optional, which is why a version 1 descriptor still validates.
+ */
+
+/** `ordered` and `unique` exactly as the .ecore file wrote them; null where it was silent. */
+export interface FacetsDesc {
+  ordered: boolean | null;
+  unique: boolean | null;
+}
+
+/** Where one facet of a merge rule came from. */
+export type FacetSource =
+  | 'declared'
+  | 'ecoreDefault'
+  | 'houseDefault'
+  | 'annotation'
+  | 'notApplicable';
+
+/** The source of each of the four facets of a merge rule. */
+export interface ProvenanceDesc {
+  ordered: FacetSource;
+  unique: FacetSource;
+  leaf: FacetSource;
+  presence: FacetSource;
+}
+
+/** The collection a feature's values sit in. */
+export interface ShapeDesc {
+  kind: 'single' | 'optional' | 'sequence' | 'set' | 'bag' | 'orderedSet';
+  /** Set when kind === 'set'. */
+  tie?: 'aw' | 'rw';
+}
+
+/** The innermost CRDT of an attribute. */
+export interface LeafDesc {
+  kind: 'text' | 'counter' | 'flag' | 'register' | 'enum';
+  /** Set when kind === 'counter': the Rust width the generator compiles. */
+  num?: 'u8' | 'i16' | 'i32' | 'i64' | 'f32' | 'f64';
+  /** Set when kind === 'counter'. */
+  resettable?: boolean;
+  /** Set when kind === 'flag'. */
+  wins?: 'enable' | 'disable';
+  /** Set when kind === 'register' or 'enum'. */
+  tie?: 'mv' | 'lww' | 'fair' | 'po' | 'to';
+  /** Set when kind === 'enum': key into Descriptor.enums. */
+  class?: string;
+}
+
+/** The CRDT construction the generator compiles for one feature. */
+export interface MergeDesc {
+  kind: 'attribute' | 'containment' | 'reference' | 'unsupported';
+  /** Set when kind === 'attribute' or 'containment'. */
+  shape?: ShapeDesc;
+  /** Set when kind === 'attribute'. */
+  leaf?: LeafDesc;
+  /** Set when kind === 'containment' or 'reference'. */
+  target?: string;
+  /** Set when kind === 'reference'. */
+  many?: boolean;
+  /** Set when kind === 'unsupported'. */
+  reason?: 'keyed' | 'transparent' | 'derived' | 'transient' | 'volatile';
+}
+
+/** The formatVersion 2 keys, absent on a version 1 descriptor. */
+export interface FeatureSemantics {
+  facets?: FacetsDesc;
+  annotation?: string | null;
+  merge?: MergeDesc;
+  provenance?: ProvenanceDesc;
+}
+
+export interface AttributeDesc extends FeatureSemantics {
   name: string;
   kind: AttributeKind;
   /** Set when kind === 'enum': key into Descriptor.enums. */
@@ -83,7 +160,7 @@ export interface AttributeDesc {
   isId: boolean;
 }
 
-export interface ContainmentDesc {
+export interface ContainmentDesc extends FeatureSemantics {
   name: string;
   target: string;
   many: boolean;
@@ -91,7 +168,7 @@ export interface ContainmentDesc {
   ordered: boolean;
 }
 
-export interface ReferenceDesc {
+export interface ReferenceDesc extends FeatureSemantics {
   name: string;
   target: string;
   many: boolean;

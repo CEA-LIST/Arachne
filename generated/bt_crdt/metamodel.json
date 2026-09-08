@@ -13,25 +13,81 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
           "name": "ID",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "TreeNode"
+          },
           "name": "child",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "TreeNode"
         },
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Blackboard"
+          },
           "name": "blackboard",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "Blackboard"
         }
@@ -44,9 +100,27 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "BlackboardEntry"
+          },
           "name": "entries",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "BlackboardEntry"
         }
@@ -58,17 +132,57 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
           "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
           "required": true
         },
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
           "name": "value",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
@@ -99,9 +213,27 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "TreeNode"
+          },
           "name": "children",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "TreeNode"
         }
@@ -117,8 +249,24 @@
       "containments": [],
       "references": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "reference",
+            "many": false,
+            "target": "BlackboardEntry"
+          },
           "name": "entry",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "BlackboardEntry"
         }
@@ -130,9 +278,27 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "TreeNode"
+          },
           "name": "child",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "TreeNode"
         }
@@ -156,16 +322,52 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "OutFlowPort"
+          },
           "name": "outflowports",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "OutFlowPort"
         },
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "InFlowPort"
+          },
           "name": "inflowports",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "InFlowPort"
         }
@@ -234,16 +436,52 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "BehaviorTree"
+          },
           "name": "behaviortrees",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "BehaviorTree"
         },
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "BehaviorTree"
+          },
           "name": "main",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "BehaviorTree"
         }
@@ -265,9 +503,27 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "BehaviorTree"
+          },
           "name": "tree",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "BehaviorTree"
         }
@@ -281,17 +537,57 @@
       "abstract": true,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
           "name": "ID",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
           "required": true
         },
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
           "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": false
         }
       ],
@@ -307,7 +603,7 @@
       "FAILURE"
     ]
   },
-  "formatVersion": 1,
+  "formatVersion": 2,
   "nsURI": "http://www.example.org/behaviortree",
   "package": "behaviortree",
   "rootClasses": [

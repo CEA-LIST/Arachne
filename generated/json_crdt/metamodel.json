@@ -5,9 +5,24 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "transparent"
+          },
           "name": "items",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "Json"
         }
@@ -21,10 +36,25 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "bool",
           "many": false,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "transparent"
+          },
           "name": "value",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
@@ -38,18 +68,56 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
           "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
       "containments": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Json"
+          },
           "name": "value",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
           "required": true,
           "target": "Json"
         }
@@ -68,10 +136,25 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "float",
           "many": false,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "transparent"
+          },
           "name": "value",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
@@ -86,9 +169,24 @@
       "attributes": [],
       "containments": [
         {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "many": true,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "keyed"
+          },
           "name": "entry",
           "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": false,
           "target": "Entry"
         }
@@ -102,10 +200,25 @@
       "abstract": false,
       "attributes": [
         {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
           "isId": false,
           "kind": "string",
           "many": false,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "transparent"
+          },
           "name": "value",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
           "required": true
         }
       ],
@@ -117,7 +230,7 @@
     }
   },
   "enums": {},
-  "formatVersion": 1,
+  "formatVersion": 2,
   "nsURI": "http://www.example.org/json",
   "package": "json",
   "rootClasses": [

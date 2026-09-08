@@ -1,10 +1,10 @@
 {
   "bt.metamodel.json": {
     "nsURI": "http://www.example.org/behaviortree",
-    "digest": "f8e305f1d50b1bcc4db192e28e3e6e505f7d72a182d59b74f95c3783fb89d44e"
+    "digest": "704356c81751dac49104ce1f3ccc085fa3b7ada84dc4e7da548843dfd5f250eb"
   },
   "uml.metamodel.json": {
     "nsURI": "http:///SimpleUML.ecore",
-    "digest": "4e4a1b0f20c1a6fe878d72b82680b3d221cfbb6a2a1b765a78b1dc55b7442746"
+    "digest": "c3a3807ac29deb198cbb5f7cb2a534dc03eacac135c0b00c302e9896337ecc9a"
   }
 }

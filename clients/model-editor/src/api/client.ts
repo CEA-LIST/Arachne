@@ -101,7 +101,7 @@ async function readState(base: string, path: string): Promise<WireNode> {
   return body['json'] as WireNode;
 }
 
-/** The descriptor routes: a formatVersion-1 descriptor, or null on 404. */
+/** The descriptor routes: a descriptor of a format version the editor reads, or null on 404. */
 async function readDescriptor(base: string, path: string): Promise<Descriptor | null> {
   const response = await request(base, path);
   if (response.status === 404) return null;
@@ -260,7 +260,9 @@ export function validateDescriptor(body: unknown): Descriptor {
     throw new ApiError('metamodel descriptor is not a JSON object');
   }
   const desc = body as Partial<Descriptor>;
-  if (desc.formatVersion !== 1) {
+  // Version 2 added the merge rule and its provenance to every feature entry
+  // and removed nothing, so the keys this editor reads are the same in both.
+  if (desc.formatVersion !== 1 && desc.formatVersion !== 2) {
     throw new ApiError(`unsupported descriptor formatVersion: ${String(desc.formatVersion)}`);
   }
   if (typeof desc.classes !== 'object' || desc.classes === null || !Array.isArray(desc.rootClasses)) {
