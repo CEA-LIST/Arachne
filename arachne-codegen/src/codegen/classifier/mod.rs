@@ -733,9 +733,19 @@ impl<'a> ClassGenerator<'a> {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // The same `cfg_attr` `record!` puts on the structs it writes
+        // (`moirai-macros/src/record.rs:9`), and for the same reason: a
+        // generated `VecLog<MVRegister<Visibility>>` is a field of a
+        // `record!` struct whose `Serialize` and `Deserialize` derives bound
+        // every field type, so an enum without them makes the crate that
+        // declares one fail to compile under its own default features. Found
+        // on 2026-09-09 by `examples/class_diagram.ecore`, the first
+        // metamodel in the corpus with an enum-typed attribute: forty
+        // `E0277`s over three enums, none of them in code a modeller wrote.
         let tokens = if let Some((first, rest)) = variants.split_first() {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+                #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
                 pub enum #name {
                     #[default]
                     #first,
@@ -745,6 +755,7 @@ impl<'a> ClassGenerator<'a> {
         } else {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+                #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
                 pub enum #name {
                     #(#variants,)*
                 }

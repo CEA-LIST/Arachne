@@ -29,6 +29,7 @@ __classifiers::record!(
     Blackboard { entries : __classifiers::NestedListLog < BlackboardEntryLog >, }
 );
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Status {
     #[default]
     Running,
