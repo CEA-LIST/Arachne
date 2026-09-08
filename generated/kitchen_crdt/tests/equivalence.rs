@@ -1456,6 +1456,27 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     harness.cross();
     assert_eq!(harness.interp_doc('a')["simpleList"], json!([false, true]));
     assert_eq!(harness.gen_doc('a')["simpleList"], json!([true]));
+
+    // And it does not heal irreversibly, which is the half `I-A1`'s
+    // exception does not cover: the element at position 1 is visible on both
+    // paths above, and disabling it takes it back out of the generated
+    // read-out while the interpreted one keeps it.
+    let hide = Edit {
+        writer: 'b',
+        feature: Some("simpleList"),
+        action: Action::SeqUpdate {
+            pos: 1,
+            elem: Elem::Disable,
+        },
+    };
+    assert!(harness.carry(&hide).expect("both intakes agree on it"));
+    harness.cross();
+    assert_eq!(harness.interp_doc('a')["simpleList"], json!([false, false]));
+    assert_eq!(
+        harness.gen_doc('a')["simpleList"],
+        Value::Null,
+        "a visible element written back to its default goes away again"
+    );
 }
 
 /// The oracle fails when the two paths genuinely differ, which is criterion
