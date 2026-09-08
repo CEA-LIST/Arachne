@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A UML class diagram, as an Ecore metamodel, shaped after the hand-written
+  one in `moirai-crdt/src/model/class_diagram.rs`.
+
+  WHAT IS TAKEN FROM THAT FILE. Its three records are `Class`, `Feature` and
+  `Relation`, and none of them contains another: a class diagram there is a
+  `UWGraphLog<&str, &str, ClassLog, RelationLog>`, so classes are nodes and
+  relations are edges. This file keeps that arrangement, which is also why it
+  declares no containment: the three classes are three top-level roots. It
+  keeps `Class.name`, `Class.isAbstract`, `Feature.typ` as a multi-value
+  register over an enumeration, `Feature.visibility` as a total-order register
+  over an enumeration, `Relation.label` as a multi-value register over a
+  string, and `Relation.typ` as a total-order register over an enumeration.
+  Its `Visibility`, `PrimitiveType` and `RelationType` enumerations are
+  carried over with the same literals.
+
+  WHAT IS ADDED, AND WHY. `class_diagram.rs` reaches four Moirai leaves:
+  `MVRegister`, `TORegister`, `EWFlag` and `UWMapLog`. Eight constructions of
+  `moirai-interp`'s leaf vocabulary are reachable from an `.ecore` file and
+  are reached by no metamodel checked in before this one: the last-writer-wins,
+  fair, partial-order and total-order register tie-breaks, the add-wins and
+  remove-wins sets, the disable-wins flag, and an enumeration-typed attribute.
+  `Class` carries one feature for each of them, so that one root class drives
+  all eight against one generated log. `Class.isAbstract` is disable-wins
+  where `class_diagram.rs` makes it enable-wins, because enable-wins is
+  already two-path proven by `json.ecore` and disable-wins is not.
+
+  WHAT IS DROPPED. `class_diagram.rs`'s `Operation` record, its `Ends` record
+  nested inside `Relation`, and the `UWMapLog` fields of `Class` and
+  `Operation`. The keyed shape those fields are is already two-path proven
+  over `json.ecore`, and reproducing it here would need a containment and an
+  entry class that this file has no other use for.
+
+  THE SET TRAP. A multi-valued attribute reaches `Shape::Set` only when it
+  declares `unique="true"` and `ordered="false"`: `semantics.rs:588` reads a
+  silent `unique` as `false`, which is why `kitchen_sink.ecore`'s attribute
+  named `set` is in fact a bag. `tags` and `invariants` below declare both
+  facets, and are the first two features in the checked-in corpus to reach
+  `Shape::Set` at all.
+-->
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="classdiagram" nsURI="http://www.example.org/classdiagram" nsPrefix="classdiagram">
+    <eClassifiers xsi:type="ecore:EClass" name="Class">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="qualifiedName" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="lww-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="author" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="fair-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="stereotype" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="po-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="layer" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="to-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="isAbstract" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="dw-flag"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="visibility" eType="#//Visibility"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="tags" lowerBound="0" upperBound="-1" unique="true" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="aw-set"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="invariants" lowerBound="0" upperBound="-1" unique="true" ordered="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="rw-set"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Feature">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="typ" eType="#//PrimitiveType"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="visibility" eType="#//Visibility">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="to-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Relation">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="label" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="mv-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="typ" eType="#//RelationType">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="to-register"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="source" eType="#//Class"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="target" eType="#//Class"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EEnum" name="Visibility">
+        <eLiterals name="Public"/>
+        <eLiterals name="Private" value="1"/>
+        <eLiterals name="Protected" value="2"/>
+        <eLiterals name="Package" value="3"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EEnum" name="PrimitiveType">
+        <eLiterals name="String"/>
+        <eLiterals name="Number" value="1"/>
+        <eLiterals name="Boolean" value="2"/>
+        <eLiterals name="Void" value="3"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EEnum" name="RelationType">
+        <eLiterals name="Extends"/>
+        <eLiterals name="Implements" value="1"/>
+        <eLiterals name="Composes" value="2"/>
+        <eLiterals name="Aggregates" value="3"/>
+        <eLiterals name="Associates" value="4"/>
+    </eClassifiers>
+</ecore:EPackage>

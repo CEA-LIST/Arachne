@@ -668,12 +668,16 @@ mod tests {
 
     /// The three metamodels criterion I-A3 names, plus `kitchen_sink.ecore`,
     /// which is the only checked-in file that reaches a counter, a register, a
-    /// bag and the widened bounds.
-    const METAMODELS: [&str; 4] = [
+    /// bag and the widened bounds, plus `class_diagram.ecore`, which is the
+    /// only one that reaches the four register tie-breaks other than the
+    /// multi-value one, the disable-wins flag, both sets and an enum-typed
+    /// attribute.
+    const METAMODELS: [&str; 5] = [
         "bt.ecore",
         "SimpleUML.ecore",
         "json.ecore",
         "pet_metamodels/kitchen_sink.ecore",
+        "class_diagram.ecore",
     ];
 
     /// The Rust type the generator writes for a declared Ecore type, stated
@@ -940,9 +944,14 @@ mod tests {
         // `containment.rs` writes, and the four transparent fields against
         // what their own generator writes, which is what
         // `transparent_field_types` then lifts into the `JsonKind` union.
+        // Sixty-nine and eleven on 2026-09-09, when `class_diagram.ecore`
+        // joined the list: fourteen more attributes, two more references, and
+        // the first `Shape::Set`, `DWFlag`, `LwwRegister`, `FairRegister`,
+        // `PORegister`, `TORegister` and enum-typed attribute the rule and
+        // the generator have ever been compared on.
         assert_eq!(
             (compared, references, unsupported),
-            (55, 9, 0),
+            (69, 11, 0),
             "the census of what was compared moved"
         );
     }
@@ -1057,7 +1066,7 @@ mod tests {
             }
         }
         let total: usize = sources.values().sum();
-        assert_eq!(total, 4 * 64, "four facets on each of sixty-four features");
+        assert_eq!(total, 4 * 80, "four facets on each of eighty features");
         assert!(
             sources.contains_key("Declared")
                 && sources.contains_key("EcoreDefault")
