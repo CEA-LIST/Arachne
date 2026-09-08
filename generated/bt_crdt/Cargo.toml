@@ -15,6 +15,15 @@ sha2 = "0.10"
 petgraph = "0.8.3"
 rand = "0.10.0"
 
+[dev-dependencies]
+# The equivalence oracle of step 5 drives the interpreted `ModelLog` beside
+# this crate's generated log. `sink` because `moirai-protocol`'s own `sink`
+# is on for this build and `IsLog::effect`'s arity follows it.
+moirai-interp = { path = "../../../moirai-model-plane/moirai-interp", features = ["sink"] }
+moirai-semantics = { path = "../../../moirai-model-plane/moirai-semantics" }
+# The naming rule the generator itself names its fields with.
+heck = "0.5.0"
+
 [features]
 default = ["fuzz", "sink", "serde"]
 fuzz = []
