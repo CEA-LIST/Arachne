@@ -60,6 +60,9 @@
 //! - A class lists its **declared** features only, plus `superTypes`; clients
 //!   flatten the inheritance closure themselves. Enum classes appear only
 //!   under `enums`.
+//! - A class carrying `urn:arachne:representation` `kind="transparent"` adds
+//!   one key, `"transparent"`, naming the field it is represented by. The key
+//!   is absent on every other class.
 //! - The class set is the one code generation reaches from the root classes,
 //!   so descriptor and generated crate describe the same metamodel slice.
 //!
@@ -267,13 +270,23 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
         }
     }
 
-    json!({
+    let mut entry = json!({
         "abstract": class.is_abstract() || class.is_interface(),
         "superTypes": super_types,
         "attributes": attributes,
         "containments": containments,
         "references": references,
-    })
+    });
+    // A `urn:arachne:representation` `kind="transparent"` class is compiled
+    // as its one named field and gets no record of its own
+    // (`classifier/mod.rs:565-567`). The name is written here so a reader of
+    // the descriptor renders the class the same way, and the key is absent
+    // on every other class so nothing that read a version 2 descriptor before
+    // 2026-09-08 sees a change.
+    if let Some(field) = semantics::transparent_field(class) {
+        entry["transparent"] = json!(field);
+    }
+    entry
 }
 
 /// Adds the four `formatVersion` 2 keys to one feature entry: the facets as
@@ -506,6 +519,7 @@ mod tests {
         for (file, ecore) in [
             ("bt.metamodel.json", "bt.ecore"),
             ("uml.metamodel.json", "SimpleUML.ecore"),
+            ("json.metamodel.json", "json.ecore"),
         ] {
             let generated = descriptor_of(ecore);
             let checked_in = read_json(&example(file));
@@ -545,26 +559,55 @@ mod tests {
         );
     }
 
-    /// The two forms decision D6 keeps on the generated path, as `json.ecore`
-    /// writes them: a `uw-map` containment is `keyed`, and a feature of a class
-    /// the `urn:arachne:representation` annotation makes transparent is
-    /// `transparent`. `moirai_semantics::from_descriptor` refuses a metamodel
-    /// carrying either, by name.
+    /// The two forms D6 used to keep on the generated path, as `json.ecore`
+    /// writes them since the decision was amended on 2026-09-08: a `uw-map`
+    /// containment publishes the `keyed` shape and the class its values are,
+    /// not the `Entry` its `.ecore` names; and a class the
+    /// `urn:arachne:representation` annotation makes transparent publishes the
+    /// field it is represented by under its own `transparent` key while its
+    /// features publish ordinary rules.
     #[test]
-    fn json_publishes_the_two_forms_the_interpreted_path_refuses() {
+    fn json_publishes_the_keyed_shape_and_the_transparent_field() {
         let descriptor = descriptor_of("json.ecore");
         assert_eq!(
             (
                 &descriptor["classes"]["Object"]["containments"][0]["merge"],
                 &descriptor["classes"]["Object"]["containments"][0]["annotation"],
-                &descriptor["classes"]["Array"]["containments"][0]["merge"],
+                &descriptor["classes"]["Object"]["transparent"],
             ),
             (
-                &json!({"kind": "unsupported", "reason": "keyed"}),
+                &json!({
+                    "kind": "containment",
+                    "shape": {"kind": "keyed", "key": {"kind": "str"}},
+                    "target": "Json"
+                }),
                 &json!("uw-map"),
-                &json!({"kind": "unsupported", "reason": "transparent"}),
+                &json!("entry"),
             )
         );
+        assert_eq!(
+            (
+                &descriptor["classes"]["Array"]["containments"][0]["merge"],
+                &descriptor["classes"]["Array"]["transparent"],
+                &descriptor["classes"]["String"]["attributes"][0]["merge"],
+                &descriptor["classes"]["String"]["transparent"],
+            ),
+            (
+                &json!({
+                    "kind": "containment",
+                    "shape": {"kind": "sequence"},
+                    "target": "Json"
+                }),
+                &json!("items"),
+                &json!({"kind": "attribute", "shape": {"kind": "single"},
+                        "leaf": {"kind": "text"}}),
+                &json!("value"),
+            )
+        );
+        // `Entry` is not transparent and keeps its own rules; nothing reaches
+        // it any more, because the keyed rule above names `Json` directly.
+        assert_eq!(descriptor["classes"]["Entry"].get("transparent"), None);
+        assert_eq!(descriptor["classes"]["Json"].get("transparent"), None);
     }
 
     /// The format version is what the editor and the interpreted node gate on,

@@ -93,8 +93,8 @@ use ecore_rs::{
     repr::{Class, Structural, annot::Val, builtin::Typ as BuiltinTyp, idx, structural},
 };
 use moirai_semantics::{
-    ClassSlot, FacetSource, FlagWins, LeafRule, MergeRule, NumKind, Provenance, SetTie, Shape,
-    TieBreak, UnsupportedReason,
+    ClassSlot, FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, Provenance, SetTie,
+    Shape, TieBreak, UnsupportedReason,
 };
 use serde_json::{Value, json};
 
@@ -106,6 +106,12 @@ const DATATYPE_KEY: &str = "datatype";
 const REPRESENTATION_SOURCE: &str = "urn:arachne:representation";
 /// The detail key naming the representation.
 const KIND_KEY: &str = "kind";
+/// The detail key naming the field a transparent class is represented by.
+const FIELD_KEY: &str = "field";
+/// The detail keys of a `uw-map` annotation.
+const KEY_FEATURE_KEY: &str = "key-feature";
+/// The detail key naming the entry feature the map's values come from.
+const VALUE_FEATURE_KEY: &str = "value-feature";
 
 /// How many values a feature holds, as `feature/bounds.rs` normalises it.
 ///
@@ -141,6 +147,13 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
                 presence: FacetSource::NotApplicable,
             },
         );
+    }
+
+    // A `uw-map` containment is a keyed collection and not a sequence, and
+    // it is checked before the feature kind because the annotation replaces
+    // the whole construction `containment.rs` would otherwise emit.
+    if let Some(rule) = keyed_rule(feature, ctx) {
+        return rule;
     }
 
     let presence = presence_of(feature);
@@ -252,6 +265,26 @@ pub fn datatype_annotation(feature: &Structural) -> Option<&Val> {
         .and_then(|annot| annot.details().get(DATATYPE_KEY))
 }
 
+/// The feature a `urn:arachne:representation` `kind="transparent"` class is
+/// represented by, or `None`.
+///
+/// `classifier/mod.rs:565-567` emits no record for such a class and
+/// `:497-517` puts the field's own construction in its parent union's
+/// variant, so `JsonKind::Array` carries a `NestedList<Box<JsonKind>>` and
+/// there is no `Array` record anywhere. The descriptor writes this name under
+/// the class's `transparent` key so a node reading the descriptor knows the
+/// same thing.
+pub fn transparent_field<'a>(class: &'a Class) -> Option<&'a str> {
+    let annot = class
+        .annotations()
+        .iter()
+        .find(|annot| annot.source() == REPRESENTATION_SOURCE)?;
+    if annot.details().get(KIND_KEY).map(String::as_str) != Some("transparent") {
+        return None;
+    }
+    annot.details().get(FIELD_KEY).map(String::as_str)
+}
+
 /// The classifier a slot produced by this module names.
 pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> &str {
     ctx.classes()
@@ -262,26 +295,125 @@ pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> &str {
 
 /* ---------- derivation ---------- */
 
+/// The rule a `urn:arachne:semantics` `datatype="uw-map"` containment
+/// carries, or `None` when the feature is not one.
+///
+/// `containment.rs:110-168` compiles `UWMapLog<KeyTy, ValueLog>` for it: the
+/// entry class is not represented at all, its key attribute becomes the map's
+/// key type, and its value feature's own construction becomes the map's value
+/// log. So the rule is the *value feature's* rule with the collection
+/// replaced by [`Shape::Keyed`], and the entry class never appears in it.
+///
+/// `None` is also the answer for a `uw-map` the generator would itself refuse
+/// — a single-valued one, a missing or non-attribute key feature, a
+/// non-containment value reference — because a descriptor entry claiming a
+/// construction the generator will not emit is worse than one that claims
+/// nothing. Such a feature falls through to the ordinary containment rule,
+/// and `arachne generate` fails on it as it did before.
+fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)> {
+    if !datatype_annotation(feature)
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("uw-map"))
+    {
+        return None;
+    }
+    if feature.kind != structural::Typ::EReference
+        || !feature.containment
+        || presence_of(feature) != Presence::Many
+    {
+        return None;
+    }
+    let annot = feature
+        .annotations()
+        .iter()
+        .find(|annot| annot.source() == SEMANTICS_SOURCE)?;
+    let key_name = annot
+        .details()
+        .get(KEY_FEATURE_KEY)
+        .map_or("key", String::as_str);
+    let value_name = annot
+        .details()
+        .get(VALUE_FEATURE_KEY)
+        .map_or("value", String::as_str);
+
+    let entry = ctx.classes().get(*feature.typ?)?;
+    let key_feature = entry.structural().iter().find(|f| f.name == key_name)?;
+    let value_feature = entry.structural().iter().find(|f| f.name == value_name)?;
+    if key_feature.kind != structural::Typ::EAttribute {
+        return None;
+    }
+    if presence_of(value_feature) != Presence::Single {
+        return None;
+    }
+    let key = key_kind(key_feature, ctx)?;
+    let shape = Shape::Keyed { key };
+
+    match value_feature.kind {
+        structural::Typ::EAttribute => {
+            let (leaf, leaf_source) = leaf_rule(value_feature, ctx);
+            Some((
+                MergeRule::Attribute { shape, leaf },
+                Provenance {
+                    // The annotation replaced the collection outright, so
+                    // neither facet the file wrote decided anything.
+                    ordered: FacetSource::Annotation,
+                    unique: FacetSource::Annotation,
+                    leaf: leaf_source,
+                    presence: presence_source(feature),
+                },
+            ))
+        }
+        structural::Typ::EReference if value_feature.containment => Some((
+            MergeRule::Containment {
+                shape,
+                target: target_slot(value_feature),
+            },
+            Provenance {
+                ordered: FacetSource::Annotation,
+                unique: FacetSource::Annotation,
+                leaf: FacetSource::NotApplicable,
+                presence: presence_source(feature),
+            },
+        )),
+        structural::Typ::EReference => None,
+    }
+}
+
+/// The key type `containment.rs:150-163` compiles for the key attribute.
+fn key_kind(key_feature: &Structural, ctx: &Ctx) -> Option<KeyKind> {
+    let typ = key_feature.typ?;
+    let declared = ctx.classes().get(*typ)?;
+    if declared.is_enum() {
+        return Some(KeyKind::Enum { class: slot(typ) });
+    }
+    Some(match declared.name().parse::<BuiltinTyp>() {
+        Ok(BuiltinTyp::EByte) => KeyKind::Num { num: NumKind::U8 },
+        Ok(BuiltinTyp::EShort) => KeyKind::Num { num: NumKind::I16 },
+        Ok(BuiltinTyp::EInt) => KeyKind::Num { num: NumKind::I32 },
+        Ok(BuiltinTyp::ELong) => KeyKind::Num { num: NumKind::I64 },
+        Ok(BuiltinTyp::EFloat) => KeyKind::Num { num: NumKind::F32 },
+        Ok(BuiltinTyp::EDouble) => KeyKind::Num { num: NumKind::F64 },
+        Ok(BuiltinTyp::EBoolean) => KeyKind::Bool,
+        Ok(BuiltinTyp::EChar) => KeyKind::Char,
+        // `descriptor.rs`'s `attribute_kind` describes `Object` and a custom
+        // `EDataType` as a string, and this follows it.
+        Ok(BuiltinTyp::EString) | Ok(BuiltinTyp::Object) | Err(()) => KeyKind::Str,
+    })
+}
+
 /// Why this feature carries no rule the interpreted path can run, if it does
 /// not.
 ///
-/// A `uw-map` feature is checked before its declaring class, because the
-/// annotation is the feature's own and holds whatever the class is. `json.ecore`
-/// is the metamodel that reaches both.
+/// Until 2026-09-08 this answered [`UnsupportedReason::Keyed`] for a `uw-map`
+/// feature and [`UnsupportedReason::Transparent`] for every feature of a
+/// class carrying `urn:arachne:representation` `kind="transparent"`, which is
+/// every feature `json.ecore` has. Both now carry the rule the generator
+/// compiles: a `uw-map` is [`keyed_rule`], and a transparent class's feature
+/// is derived exactly as any other feature of any other class, with the
+/// class's own `transparent` key in the descriptor saying that the class is
+/// rendered as that feature. The three behavioural flags below are what is
+/// left.
 fn unsupported_reason(feature: &Structural, class: &Class) -> Option<UnsupportedReason> {
-    if datatype_annotation(feature).is_some_and(|value| value.trim().eq_ignore_ascii_case("uw-map"))
-    {
-        return Some(UnsupportedReason::Keyed);
-    }
-    if class
-        .annotations()
-        .iter()
-        .find(|annot| annot.source() == REPRESENTATION_SOURCE)
-        .and_then(|annot| annot.details().get(KIND_KEY))
-        .is_some_and(|kind| kind == "transparent")
-    {
-        return Some(UnsupportedReason::Transparent);
-    }
+    let _ = class;
     if feature.derived == Some(true) {
         return Some(UnsupportedReason::Derived);
     }
@@ -517,8 +649,7 @@ mod tests {
     use ecore_rs::repr::{Class, Structural, builtin::Typ as BuiltinTyp, structural};
     use heck::ToUpperCamelCase;
     use moirai_semantics::{
-        FacetSource, FlagWins, LeafRule, MergeRule, NumKind, SetTie, Shape, TieBreak,
-        UnsupportedReason,
+        FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, SetTie, Shape, TieBreak,
     };
 
     use super::merge_rule;
@@ -614,6 +745,22 @@ mod tests {
                 tie: SetTie::RemoveWins,
             } => format!("VecLog<RWSet<{rust}>>"),
             Shape::Bag => format!("AWBagLog<{rust}>"),
+            Shape::Keyed { key } => {
+                format!("UWMapLog<{},{}>", key_rust(*key), leaf_log(leaf, rust))
+            }
+        }
+    }
+
+    /// The Rust key type `containment.rs:150-163` compiles for a `uw-map`.
+    fn key_rust(key: KeyKind) -> String {
+        match key {
+            KeyKind::Str => "std::string::String".to_string(),
+            KeyKind::Bool => "bool".to_string(),
+            KeyKind::Char => "char".to_string(),
+            KeyKind::Num { num } => num_rust(num).to_string(),
+            KeyKind::Enum { .. } => {
+                panic!("no checked-in metamodel keys a `uw-map` by an enum literal")
+            }
         }
     }
 
@@ -636,6 +783,7 @@ mod tests {
             Shape::Single => log,
             Shape::Optional => format!("OptionLog<{log}>"),
             Shape::Sequence => format!("NestedListLog<{log}>"),
+            Shape::Keyed { key } => format!("UWMapLog<{},{log}>", key_rust(*key)),
             other => panic!("a containment cannot be {other:?}"),
         }
     }
@@ -713,26 +861,6 @@ mod tests {
                     let at = format!("{metamodel} `{}.{}`", class.name(), feature.name);
 
                     match &rule {
-                        // A `uw-map` containment and a transparent class's
-                        // field are compiled outside the record path, into a
-                        // `UWMapLog` and into a union variant. The rule says
-                        // so and names no construction, which is what decision
-                        // D6 asks of it; the one thing worth pinning is that a
-                        // keyed feature really does compile to a map.
-                        MergeRule::Unsupported {
-                            reason: UnsupportedReason::Keyed,
-                        } => {
-                            let emitted =
-                                ContainmentGenerator::new(feature, class.idx, ctx, &cycles)
-                                    .generate()
-                                    .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
-                            let emitted = normalize(emitted.tokens());
-                            assert!(
-                                emitted.starts_with("UWMapLog<"),
-                                "{at}: the rule says keyed and the generator emits `{emitted}`"
-                            );
-                            unsupported += 1;
-                        }
                         MergeRule::Unsupported { .. } => unsupported += 1,
                         // `process_structural_features` skips a non-containment
                         // reference, so there is no field to compare; the
@@ -804,9 +932,17 @@ mod tests {
         // The counts are asserted so a metamodel silently losing its features
         // — a parse that yields nothing, a package that resolves to the
         // builtins — cannot make this test vacuous.
+        // Fifty on 2026-09-07, when `json.ecore`'s five keyed and transparent
+        // features carried no rule and were counted as unsupported. D6's
+        // amendment gives all five a rule, and each is compared against the
+        // construction the generator emits like any other: `Object.entry`
+        // against the `UWMapLog<std::string::String, JsonKindLog>`
+        // `containment.rs` writes, and the four transparent fields against
+        // what their own generator writes, which is what
+        // `transparent_field_types` then lifts into the `JsonKind` union.
         assert_eq!(
             (compared, references, unsupported),
-            (50, 9, 5),
+            (55, 9, 0),
             "the census of what was compared moved"
         );
     }
@@ -1293,22 +1429,69 @@ mod tests {
     }
 
     /// **ip5's boundary, from the emitting side** — the descriptor this crate
-    /// writes for `json.ecore` is refused by `from_descriptor`, by name,
-    /// because the metamodel needs a form the interpreted path has no node
-    /// for. Decision D6: it stays on the generated path rather than half-runs.
+    /// writes for `json.ecore` is read by `from_descriptor`, and the table it
+    /// becomes carries the two forms D6 used to refuse: `Object.entry` keyed
+    /// by a string onto `Json`, and all five concrete classes marked
+    /// transparent onto the one feature each is represented by.
+    ///
+    /// This assertion was the refusal until 2026-09-08. The refusal itself is
+    /// still reachable and still tested, in `moirai-semantics`'s own
+    /// `ip5_a_keyed_feature_is_refused_with_a_sentence_naming_it`: a
+    /// descriptor written before the amendment spells `Object.entry` as
+    /// `unsupported`, which carries no rule, and a table cannot run what a
+    /// descriptor does not say.
     #[test]
-    fn from_descriptor_refuses_the_json_descriptor_by_name() {
+    fn from_descriptor_reads_the_json_descriptor_keyed_and_transparent() {
         let parser =
             EcoreParser::from_file(example("json.ecore")).expect("json.ecore should parse");
         let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         let descriptor =
             crate::codegen::descriptor::descriptor_json(&parser.ctx, pack).expect("a descriptor");
-        let refusal = moirai_semantics::from_descriptor(&descriptor)
-            .expect_err("json.ecore is transparent throughout");
-        let sentence = refusal.to_string();
-        assert!(
-            sentence.contains("transparent") && sentence.contains("Array.items"),
-            "the refusal names the form and the feature: {sentence}"
+        let table = moirai_semantics::from_descriptor(&descriptor)
+            .expect("json.ecore's descriptor is a table this crate's parser reads");
+
+        let class = |name: &str| {
+            table
+                .classes
+                .iter()
+                .find(|class| &*class.name == name)
+                .unwrap_or_else(|| panic!("no class `{name}`"))
+        };
+
+        // `UWMapLog<std::string::String, JsonKindLog>`, as data.
+        let object = class("Object");
+        assert_eq!(
+            object.declared[0].merge,
+            MergeRule::Containment {
+                shape: Shape::Keyed { key: KeyKind::Str },
+                target: class("Json").slot,
+            },
+            "`Object.entry` is a map from a string onto whatever a `Json` is"
+        );
+
+        // Every concrete class is its one field and nothing else.
+        let transparent: Vec<(String, String)> = table
+            .classes
+            .iter()
+            .filter_map(|class| {
+                class.transparent.map(|slot| {
+                    (
+                        class.name.to_string(),
+                        class.visible[slot.index()].0.to_string(),
+                    )
+                })
+            })
+            .collect();
+        assert_eq!(
+            transparent,
+            vec![
+                ("Array".to_string(), "items".to_string()),
+                ("Boolean".to_string(), "value".to_string()),
+                ("Number".to_string(), "value".to_string()),
+                ("Object".to_string(), "entry".to_string()),
+                ("String".to_string(), "value".to_string()),
+            ],
+            "the five classes `classifiers.rs` renders as `JsonKind`'s variants"
         );
     }
 
