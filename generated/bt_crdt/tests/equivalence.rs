@@ -78,6 +78,17 @@
 //!   paths leave present and empty) stays present on both sides and is
 //!   compared. [`an_emptied_optional_is_not_dropped`] is the test that keeps
 //!   that honest.
+//! - **An object created into an ordered containment and never written
+//!   into**, which the generated read-out cannot distinguish from a removed
+//!   one and so cannot render. This is not part of the projection: it is a
+//!   named, separate step applied on top of it, to both sides, by
+//!   [`except_unwritten_sequence_children`], whose doc comment carries the
+//!   decision Cam took on 2026-09-08 and the reason the interpreted read-out
+//!   was not changed to match instead. I-A1 now reads: the two paths agree on
+//!   every state reachable by a write, with that one named exception. It is
+//!   the only exclusion of its kind and
+//!   [`the_thirty_scripts_find_exactly_one_kind_of_difference`] is what keeps
+//!   that true.
 //! - Nothing else. In particular the other structural difference — the
 //!   generated path materialising a single-valued containment whose target
 //!   has no subclasses (`Root.main`, `BehaviorTree.blackboard`,
@@ -1017,6 +1028,90 @@ fn is_default(rule: MergeRule, value: &Value) -> bool {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 4c. The one named exclusion of the equivalence criterion
+// ---------------------------------------------------------------------------
+
+/// A canonical document with the criterion's one named exception removed: an
+/// object created into an **ordered containment and never written into**.
+///
+/// # What it drops
+///
+/// A sequence element carrying nothing but its `eClass` once
+/// [`without_defaults`] has run over it, and then, to a fixed point, whatever
+/// collapses upward from that — dropping the element can empty the array that
+/// held it, which can empty the object that held that array, which the
+/// default rule then drops in turn. Applied to *both* sides by this one
+/// function, on top of the projection and never inside it, so the two sides
+/// cannot drift and [`without_defaults`] is not widened to cover a case it
+/// has no business covering.
+///
+/// # Why the generated path cannot render it
+///
+/// `UWMapLog::execute_query` (`moirai-crdt/src/map/uw_map.rs:199-210`) keeps a
+/// child only when its value differs from the default, and it must:
+/// `UWMap::Remove` is not a tombstone, it leaves the child in the map, so
+/// reading as the default is exactly how the generated path spells *removed*.
+/// `NestedListLog` sits on that map, so this is every ordered containment.
+/// An object created there and not yet written into reads as its default and
+/// is therefore indistinguishable, on the generated read-out, from one that
+/// was removed. The interpreted path mints the object and shows it.
+///
+/// # Why the exception rather than a change to the interpreted read-out
+///
+/// Cam took this decision on 2026-09-08. Filtering the interpreted read-out
+/// the way the generated one filters would make it inherit the defect rather
+/// than agree with it: an `OutFlowPort`, whose only feature is a
+/// non-containment reference and which therefore has no writable feature at
+/// all, could then never be rendered on either path. So `I-A1` reads: the two
+/// paths agree on every state reachable by a write, with one named exception,
+/// this one.
+///
+/// # It heals, and it is the only one
+///
+/// The divergence lasts exactly from an object's creation to its first write
+/// and does not compound — one character into the new object and the two
+/// paths agree again, at the same index, which
+/// [`a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path`]
+/// asserts on the *unexcluded* projections so that the finding stays visible
+/// in the suite rather than being erased by the thing that works around it.
+/// This is the ONLY exclusion of its kind, and
+/// [`the_thirty_scripts_find_exactly_one_kind_of_difference`] is the test that
+/// keeps that honest: it re-prunes both documents by this rule over all thirty
+/// scripts and asserts the residual is empty, so a second inequality of any
+/// kind would surface there as an unexplained difference rather than hide
+/// behind this one.
+fn except_unwritten_sequence_children(meta: &Meta, mut value: Value) -> Value {
+    for _ in 0..16 {
+        let next = without_defaults(meta, drop_empty_sequence_children(value.clone()));
+        if next == value {
+            break;
+        }
+        value = next;
+    }
+    value
+}
+
+/// One pass of the rule above: every array element carrying nothing but its
+/// class name, gone.
+fn drop_empty_sequence_children(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(drop_empty_sequence_children)
+                .filter(|item| !only_a_class(item))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, item)| (key, drop_empty_sequence_children(item)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// The interpreted read-out with every non-containment reference dropped and
 /// every default-valued key with it: the two edits this oracle makes to the
 /// canonical form the interpreter already produces.
@@ -1200,10 +1295,17 @@ impl Harness {
 
     /// Both replicas of both paths, compared. `Ok` when the four read-outs
     /// are two equal pairs.
+    ///
+    /// The criterion's one named exception is taken off both sides first, by
+    /// [`except_unwritten_sequence_children`], as a step on top of the
+    /// projection. The raw projections stay reachable through [`interp_doc`]
+    /// and [`gen_doc`], which is what the divergence test asserts on.
     fn compare(&self) -> Result<(), String> {
         for writer in ['a', 'b'] {
-            let interp = self.interp_doc(writer);
-            let generated = self.gen_doc(writer);
+            let interp =
+                except_unwritten_sequence_children(&self.interp_meta, self.interp_doc(writer));
+            let generated =
+                except_unwritten_sequence_children(&self.gen_meta, self.gen_doc(writer));
             if interp != generated {
                 let where_ = difference(&interp, &generated, "")
                     .unwrap_or_else(|| "the documents differ but no key does".to_string());
@@ -2417,46 +2519,19 @@ fn a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path() {
 /// or something that collapses upward from it.
 ///
 /// The check is mechanical rather than by eye: both canonical documents are
-/// re-pruned by a rule this test owns and the projection does not — drop a
-/// sequence element that carries nothing but its class, then re-run
-/// [`without_defaults`], to a fixed point, since dropping the element can
-/// empty the array that held it and so empty the object that held *that*.
-/// What is left over after that is a difference the finding does not
-/// explain, and there must be none.
+/// re-pruned by [`except_unwritten_sequence_children`], the criterion's one
+/// named exception, which drops a sequence element that carries nothing but
+/// its class and re-runs [`without_defaults`] to a fixed point, since dropping
+/// the element can empty the array that held it and so empty the object that
+/// held *that*. What is left over after that is a difference the exception
+/// does not explain, and there must be none.
 ///
-/// This test is what makes `ip13`'s failure actionable: it says the whole of
-/// I-A1 rests on one rule in one function, and that nothing else is hiding
-/// behind it.
+/// This test is what keeps the exception honest: it says the whole of I-A1
+/// rests on one rule in one function, and that nothing else is hiding behind
+/// it. A second inequality of any kind surfaces here as an unexplained
+/// difference instead of being absorbed.
 #[test]
 fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
-    fn without_empty_children(value: Value) -> Value {
-        match value {
-            Value::Array(items) => Value::Array(
-                items
-                    .into_iter()
-                    .map(without_empty_children)
-                    .filter(|item| !only_a_class(item))
-                    .collect(),
-            ),
-            Value::Object(map) => Value::Object(
-                map.into_iter()
-                    .map(|(key, item)| (key, without_empty_children(item)))
-                    .collect(),
-            ),
-            other => other,
-        }
-    }
-    fn explained(meta: &Meta, mut value: Value) -> Value {
-        for _ in 0..16 {
-            let next = without_defaults(meta, without_empty_children(value.clone()));
-            if next == value {
-                break;
-            }
-            value = next;
-        }
-        value
-    }
-
     let meta = Meta::new(Arc::new(
         from_descriptor(&bt_descriptor()).expect("the descriptor parses"),
     ));
@@ -2491,8 +2566,8 @@ fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
                     continue;
                 }
                 *differing += 1;
-                let left = explained(&harness.interp_meta, interpreted);
-                let right = explained(&harness.gen_meta, generated);
+                let left = except_unwritten_sequence_children(&harness.interp_meta, interpreted);
+                let right = except_unwritten_sequence_children(&harness.gen_meta, generated);
                 if left != right {
                     unexplained.push(format!(
                         "{} seed {seed} {at} replica {writer}: {}",
