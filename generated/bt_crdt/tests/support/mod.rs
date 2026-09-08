@@ -921,6 +921,7 @@ pub fn drop_defaults(meta: &Meta, value: Value) -> Value {
 /// default of the rule the feature carrying it is bound to.
 pub fn is_default(rule: MergeRule, value: &Value) -> bool {
     let empty_collection = |value: &Value| value.as_array().is_some_and(|items| items.is_empty());
+    let empty_map = |value: &Value| value.as_object().is_some_and(|entries| entries.is_empty());
     match rule {
         // Both are dropped from the interpreted side before this runs and
         // never appear on the generated side at all.
@@ -938,12 +939,19 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
                 LeafRule::Register { .. } | LeafRule::Enum { .. } => value.is_null(),
             },
             Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
+            // A keyed collection reads as a JSON object, so its default is
+            // the empty one. `bt.ecore` reaches none — `Blackboard.entries`
+            // has its `uw-map` annotation commented out — so this arm is
+            // here to compile and `json.ecore`'s own oracle is what exercises
+            // it (`generated/json_crdt/tests/equivalence.rs`).
+            Shape::Keyed { .. } => empty_map(value),
             Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
         MergeRule::Containment { shape, .. } => match shape.effective() {
             Shape::Optional => false,
             Shape::Single => only_a_class(value),
             Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
+            Shape::Keyed { .. } => empty_map(value),
             Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
     }
