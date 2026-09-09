@@ -644,6 +644,7 @@ fn to_value<T: serde::Serialize>(value: &T) -> Value {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::io::Write;
     use std::path::{Path, PathBuf};
 
     use ecore_rs::repr::{Class, Structural, builtin::Typ as BuiltinTyp, structural};
@@ -652,7 +653,7 @@ mod tests {
         FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, SetTie, Shape, TieBreak,
     };
 
-    use super::merge_rule;
+    use super::{datatype_annotation, merge_rule};
     use crate::EcoreParser;
     use crate::codegen::{
         cycles::analyze_cycles,
@@ -1558,6 +1559,638 @@ mod tests {
                 FacetSource::EcoreDefault,
             ),
             "`Foo.myChar` is a multi-value register, which is Arachne's pick among five"
+        );
+    }
+
+    /* ---------- the corpus census: `ip2` over a whole directory tree ---------- */
+
+    /// Where the panic hook parks the message of the panic it just caught.
+    static PANIC_MESSAGE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+    /// Replace the default hook with one that records instead of printing, so
+    /// a corpus of thousands of files does not bury the census in backtraces.
+    fn quiet_panics() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            std::panic::set_hook(Box::new(|info| {
+                let payload = info
+                    .payload()
+                    .downcast_ref::<&str>()
+                    .map(|text| (*text).to_string())
+                    .or_else(|| info.payload().downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panicked".to_string());
+                let at = info
+                    .location()
+                    .map_or_else(String::new, |loc| format!(" at {}:{}", loc.file(), loc.line()));
+                *PANIC_MESSAGE.lock().expect("the panic slot") = Some(format!("{payload}{at}"));
+            }));
+        });
+    }
+
+    /// Run `body`, turning a panic into an `Err` carrying its message.
+    ///
+    /// `merge_rule` and the two generators both `expect` their way through
+    /// facts every checked-in metamodel happens to satisfy — a resolved
+    /// `eType`, fewer classifiers than a `u16` addresses, a builtin the table
+    /// has a Rust type for. A corpus nobody wrote for us does not, and a
+    /// census that aborted on the first one would measure nothing.
+    fn catching<T>(body: impl FnOnce() -> T) -> Result<T, String> {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).map_err(|_| {
+            PANIC_MESSAGE
+                .lock()
+                .expect("the panic slot")
+                .take()
+                .unwrap_or_else(|| "panicked".to_string())
+        })
+    }
+
+    /// Every `.ecore` under `root`, sorted, skipping build and VCS directories.
+    fn ecore_files(root: &Path) -> Vec<PathBuf> {
+        fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            let mut here: Vec<PathBuf> = Vec::new();
+            let mut deeper: Vec<PathBuf> = Vec::new();
+            for entry in entries.flatten() {
+                let Ok(kind) = entry.file_type() else { continue };
+                let path = entry.path();
+                if kind.is_dir() {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    if name == "target" || name == "node_modules" || name == ".git" {
+                        continue;
+                    }
+                    deeper.push(path);
+                } else if kind.is_file()
+                    && path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ecore"))
+                {
+                    here.push(path);
+                }
+            }
+            here.sort();
+            deeper.sort();
+            found.append(&mut here);
+            for dir in deeper {
+                walk(&dir, found);
+            }
+        }
+        let mut found = Vec::new();
+        walk(root, &mut found);
+        found
+    }
+
+    /// One CSV record, every field quoted so a type string full of commas and
+    /// angle brackets survives the round trip.
+    fn csv(fields: &[String]) -> String {
+        fields
+            .iter()
+            .map(|field| format!("\"{}\"", field.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    /// The `LeafLog` arm `moirai-interp` would hold for this rule, which is
+    /// the vocabulary the two-path proof is stated in. A set and a bag replace
+    /// the leaf log outright, so they name the arm themselves.
+    fn leaf_arm(shape: &Shape, leaf: &LeafRule) -> String {
+        match shape {
+            Shape::Set {
+                tie: SetTie::AddWins,
+            } => "SetAw".to_string(),
+            Shape::Set {
+                tie: SetTie::RemoveWins,
+            } => "SetRw".to_string(),
+            Shape::Bag => "Bag".to_string(),
+            _ => match leaf {
+                LeafRule::Text => "Text".to_string(),
+                LeafRule::Counter { num, resettable } => format!(
+                    "{}{}",
+                    if *resettable {
+                        "Counter"
+                    } else {
+                        "SimpleCounter"
+                    },
+                    num_arm(*num)
+                ),
+                LeafRule::Flag {
+                    wins: FlagWins::Enable,
+                } => "FlagEw".to_string(),
+                LeafRule::Flag {
+                    wins: FlagWins::Disable,
+                } => "FlagDw".to_string(),
+                LeafRule::Register { tie } | LeafRule::Enum { tie, .. } => {
+                    format!("Register{}", tie_arm(*tie))
+                }
+            },
+        }
+    }
+
+    fn num_arm(num: NumKind) -> &'static str {
+        match num {
+            NumKind::U8 => "U8",
+            NumKind::I16 => "I16",
+            NumKind::I32 => "I32",
+            NumKind::I64 => "I64",
+            NumKind::F32 => "F32",
+            NumKind::F64 => "F64",
+        }
+    }
+
+    fn tie_arm(tie: TieBreak) -> &'static str {
+        match tie {
+            TieBreak::MultiValue => "Mv",
+            TieBreak::LastWriterWins => "Lww",
+            TieBreak::Fair => "Fair",
+            TieBreak::PartialOrder => "Po",
+            TieBreak::TotalOrder => "To",
+        }
+    }
+
+    /// The shape's own name, in the descriptor's spelling.
+    fn shape_name(shape: &Shape) -> String {
+        match shape {
+            Shape::Single => "single".to_string(),
+            Shape::Optional => "optional".to_string(),
+            Shape::Sequence => "sequence".to_string(),
+            Shape::Set {
+                tie: SetTie::AddWins,
+            } => "set-aw".to_string(),
+            Shape::Set {
+                tie: SetTie::RemoveWins,
+            } => "set-rw".to_string(),
+            Shape::Bag => "bag".to_string(),
+            Shape::Keyed { key } => format!("keyed-{}", key_name(*key)),
+            Shape::OrderedSet => "ordered-set".to_string(),
+        }
+    }
+
+    fn key_name(key: KeyKind) -> String {
+        match key {
+            KeyKind::Str => "str".to_string(),
+            KeyKind::Bool => "bool".to_string(),
+            KeyKind::Char => "char".to_string(),
+            KeyKind::Num { num } => num_arm(num).to_ascii_lowercase(),
+            KeyKind::Enum { .. } => "enum".to_string(),
+        }
+    }
+
+    /// Whether this feature sits inside the constructions the oracles have
+    /// proven two-path equal, and when it does not, which way it falls out.
+    ///
+    /// `ordered-set` is the cell with no construction: the generator warns and
+    /// compiles a list, and `Shape::effective` degrades it the same way, so the
+    /// two paths agree by both dropping the declaration rather than by
+    /// honouring it. `reference` is the capability the interpreted path does
+    /// not implement at all. `unsupported` is a behavioural flag, which carries
+    /// no construction on either path.
+    fn proof_standing(rule: &MergeRule) -> &'static str {
+        match rule {
+            MergeRule::Attribute { shape, leaf } => match (shape, leaf) {
+                (Shape::OrderedSet, _) => "ordered-set",
+                (
+                    _,
+                    LeafRule::Counter {
+                        resettable: false, ..
+                    },
+                ) => "unreachable-arm",
+                _ => "proven",
+            },
+            MergeRule::Containment { shape, .. } => match shape {
+                Shape::Single | Shape::Optional | Shape::Sequence | Shape::Keyed { .. } => "proven",
+                _ => "unreachable-arm",
+            },
+            MergeRule::Reference { .. } => "reference",
+            MergeRule::Unsupported { .. } => "unsupported",
+        }
+    }
+
+    /// Whether the file wrote a facet down at all: `true`, `false` or silence.
+    fn facet(value: Option<bool>) -> String {
+        match value {
+            Some(true) => "true".to_string(),
+            Some(false) => "false".to_string(),
+            None => "absent".to_string(),
+        }
+    }
+
+    /// The census of one feature: the derived rule, the type the generator
+    /// emits, and whether they agree.
+    ///
+    /// This is `ip2`'s loop body with the assertion removed. It calls the same
+    /// `attribute_type` and `containment_type` the assertion calls, so a
+    /// disagreement found here is a disagreement `ip2` would have failed on.
+    fn census_feature(
+        rel: &str,
+        class: &Class,
+        feature: &Structural,
+        ctx: &ecore_rs::ctx::Ctx,
+        cycles: &crate::codegen::cycles::CycleAnalysis,
+    ) -> Vec<String> {
+        let (rule, provenance) = merge_rule(feature, class, ctx);
+        let many = !matches!(
+            (feature.bounds.lbound, feature.bounds.ubound),
+            (0, Some(1)) | (0, Some(0)) | (1, Some(1))
+        );
+
+        // The generator runs first. When it refuses the feature there is no
+        // type to compare against and no reason to ask the table for one,
+        // which is also what keeps a metamodel the generator would reject from
+        // being counted as a disagreement.
+        let emitted = match &rule {
+            MergeRule::Attribute { .. } => Some(
+                AttributeGenerator::new(feature, ctx)
+                    .generate()
+                    .map(|fragment| normalize(fragment.tokens()))
+                    .map_err(|error| error.to_string()),
+            ),
+            MergeRule::Containment { .. } => Some(
+                ContainmentGenerator::new(feature, class.idx, ctx, cycles)
+                    .generate()
+                    .map(|fragment| normalize(fragment.tokens()))
+                    .map_err(|error| error.to_string()),
+            ),
+            _ => None,
+        };
+
+        let (shape_column, leaf_column, arm, expected, emitted_column, agree) = match (&rule,
+            emitted)
+        {
+            (MergeRule::Unsupported { reason }, _) => (
+                String::new(),
+                reason.as_str().to_string(),
+                String::new(),
+                String::new(),
+                String::new(),
+                "no-field".to_string(),
+            ),
+            (MergeRule::Reference { many, .. }, _) => (
+                if *many { "many" } else { "single" }.to_string(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                "no-field".to_string(),
+            ),
+            (_, Some(Err(error))) => (
+                match &rule {
+                    MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } => {
+                        shape_name(shape)
+                    }
+                    _ => String::new(),
+                },
+                String::new(),
+                String::new(),
+                String::new(),
+                error,
+                "generator-refused".to_string(),
+            ),
+            (MergeRule::Attribute { shape, leaf }, Some(Ok(emitted))) => {
+                let declared = feature
+                    .typ
+                    .and_then(|typ| ctx.classes().get(*typ))
+                    .expect("a generated attribute has a resolved type");
+                let rust = rust_type(declared);
+                let expected = attribute_type(shape, leaf, &rust);
+                let agree = if expected == emitted { "yes" } else { "NO" };
+                (
+                    shape_name(shape),
+                    format!("{leaf:?}"),
+                    leaf_arm(shape, leaf),
+                    expected,
+                    emitted,
+                    agree.to_string(),
+                )
+            }
+            (MergeRule::Containment { shape, target }, Some(Ok(emitted))) => {
+                let target = ctx
+                    .classes()
+                    .get(target.index())
+                    .expect("a containment target is a classifier");
+                let expected = containment_type(shape, target);
+                let agree = if expected == emitted { "yes" } else { "NO" };
+                (
+                    shape_name(shape),
+                    String::new(),
+                    String::new(),
+                    expected,
+                    emitted,
+                    agree.to_string(),
+                )
+            }
+            (_, None) => unreachable!("only a reference and an unsupported feature emit nothing"),
+        };
+
+        vec![
+            rel.to_string(),
+            class.name().to_string(),
+            feature.name.clone(),
+            match feature.kind {
+                structural::Typ::EAttribute => "attribute",
+                structural::Typ::EReference if feature.containment => "containment",
+                structural::Typ::EReference => "reference",
+            }
+            .to_string(),
+            match &rule {
+                MergeRule::Attribute { .. } => "attribute",
+                MergeRule::Containment { .. } => "containment",
+                MergeRule::Reference { .. } => "reference",
+                MergeRule::Unsupported { .. } => "unsupported",
+            }
+            .to_string(),
+            many.to_string(),
+            feature.bounds.lbound.to_string(),
+            feature
+                .bounds
+                .ubound
+                .map_or_else(|| "*".to_string(), |bound| bound.to_string()),
+            facet(feature.ordered),
+            facet(feature.unique),
+            shape_column,
+            leaf_column,
+            arm,
+            expected,
+            emitted_column,
+            agree,
+            proof_standing(&rule).to_string(),
+            format!("{:?}", provenance.ordered),
+            format!("{:?}", provenance.unique),
+            format!("{:?}", provenance.leaf),
+            format!("{:?}", provenance.presence),
+            datatype_annotation(feature).cloned().unwrap_or_default(),
+        ]
+    }
+
+    /// The header of `results.csv`, one column per field `census_feature`
+    /// returns.
+    const CENSUS_COLUMNS: [&str; 22] = [
+        "file",
+        "class",
+        "feature",
+        "ecore_kind",
+        "rule_kind",
+        "multivalued",
+        "lower_bound",
+        "upper_bound",
+        "ordered_declared",
+        "unique_declared",
+        "shape",
+        "leaf",
+        "leaf_arm",
+        "expected_type",
+        "emitted_type",
+        "agree",
+        "proof_standing",
+        "src_ordered",
+        "src_unique",
+        "src_leaf",
+        "src_presence",
+        "annotation",
+    ];
+
+    /// The header of `files.csv`.
+    const FILE_COLUMNS: [&str; 9] = [
+        "file",
+        "bytes",
+        "status",
+        "classes",
+        "features",
+        "compared",
+        "descriptor",
+        "table",
+        "detail",
+    ];
+
+    /// **The corpus census** — `ip2` run as a measurement rather than as an
+    /// assertion, over every `.ecore` file under `CENSUS_ROOT`.
+    ///
+    /// For each file it records whether the parser accepts it; for each
+    /// structural feature of each class of its user package it records the
+    /// rule `merge_rule` derives, the type `AttributeGenerator` or
+    /// `ContainmentGenerator` emits, and whether the two agree. It asserts
+    /// nothing at all: a disagreement is a row in `results.csv` with `NO` in
+    /// the `agree` column, and the aggregate is computed from the CSV by the
+    /// experiment's own script so it can be recomputed without a rebuild.
+    ///
+    /// It is restartable. Every file already named in `files.csv` is skipped
+    /// and both files are appended to, so an interrupted run resumes where it
+    /// stopped rather than starting over.
+    ///
+    /// Knobs, all from the environment because a test takes no arguments:
+    /// `CENSUS_ROOT` is the directory walked, `CENSUS_OUT` the directory the
+    /// two CSVs are written to, `CENSUS_LIMIT` an optional cap on how many
+    /// files this invocation processes.
+    #[test]
+    #[ignore = "a corpus census, not a gate; run it from experiments/ip5-corpus-census/run.sh"]
+    fn corpus_census_of_derived_rules_against_emitted_types() {
+        let Ok(root) = std::env::var("CENSUS_ROOT") else {
+            println!("CENSUS_ROOT is unset; nothing to census");
+            return;
+        };
+        let root = PathBuf::from(root);
+        let out = PathBuf::from(
+            std::env::var("CENSUS_OUT").unwrap_or_else(|_| "target/census".to_string()),
+        );
+        let limit: usize = std::env::var("CENSUS_LIMIT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(usize::MAX);
+        std::fs::create_dir_all(&out).expect("the census output directory");
+
+        let results_path = out.join("results.csv");
+        let files_path = out.join("files.csv");
+
+        // Restart: every file already in `files.csv` has been censused.
+        let mut done: BTreeMap<String, ()> = BTreeMap::new();
+        if let Ok(text) = std::fs::read_to_string(&files_path) {
+            for line in text.lines().skip(1) {
+                if let Some(name) = line.strip_prefix('"').and_then(|rest| rest.split('"').next()) {
+                    done.insert(name.to_string(), ());
+                }
+            }
+        }
+
+        let fresh = done.is_empty();
+        let mut results = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&results_path)
+            .expect("results.csv");
+        let mut files = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&files_path)
+            .expect("files.csv");
+        if fresh {
+            let header = |columns: &[&str]| {
+                csv(&columns
+                    .iter()
+                    .map(|column| (*column).to_string())
+                    .collect::<Vec<_>>())
+            };
+            writeln!(results, "{}", header(&CENSUS_COLUMNS)).expect("the results header");
+            writeln!(files, "{}", header(&FILE_COLUMNS)).expect("the files header");
+        }
+
+        quiet_panics();
+        let corpus = ecore_files(&root);
+        println!("corpus: {} .ecore files under {}", corpus.len(), root.display());
+
+        let mut processed = 0usize;
+        for path in &corpus {
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
+            if done.contains_key(&rel) {
+                continue;
+            }
+            if processed >= limit {
+                break;
+            }
+            processed += 1;
+            let bytes = std::fs::metadata(path).map_or(0, |meta| meta.len());
+
+            let mut rows: Vec<String> = Vec::new();
+            let mut status = "ok".to_string();
+            let mut detail = String::new();
+            let mut classes = 0usize;
+            let mut features = 0usize;
+            let mut compared = 0usize;
+            let mut descriptor_status = String::new();
+            let mut table_status = String::new();
+
+            let parsed = catching(|| EcoreParser::from_file(path));
+            match parsed {
+                Err(panic) => {
+                    status = "parse-panic".to_string();
+                    detail = panic;
+                }
+                Ok(Err(error)) => {
+                    status = "parse-error".to_string();
+                    detail = error.to_string();
+                }
+                Ok(Ok(parser)) => {
+                    let ctx = &parser.ctx;
+                    match crate::find_user_package(ctx) {
+                        Err(error) => {
+                            status = "no-package".to_string();
+                            detail = error.to_string();
+                        }
+                        Ok(pack) => match catching(|| analyze_cycles(ctx)) {
+                            Err(panic) => {
+                                status = "cycles-panic".to_string();
+                                detail = panic;
+                            }
+                            Ok(Err(error)) => {
+                                status = "cycles-error".to_string();
+                                detail = error.to_string();
+                            }
+                            Ok(Ok(cycles)) => {
+                                match catching(|| {
+                                    crate::codegen::descriptor::descriptor_json(ctx, pack)
+                                }) {
+                                    Err(panic) => {
+                                        descriptor_status = format!("panic: {panic}");
+                                        table_status = "skipped".to_string();
+                                    }
+                                    Ok(Err(error)) => {
+                                        descriptor_status = format!("error: {error}");
+                                        table_status = "skipped".to_string();
+                                    }
+                                    Ok(Ok(descriptor)) => {
+                                        descriptor_status = "ok".to_string();
+                                        table_status = match catching(|| {
+                                            moirai_semantics::from_descriptor(&descriptor)
+                                        }) {
+                                            Err(panic) => format!("panic: {panic}"),
+                                            Ok(Err(error)) => format!("error: {error}"),
+                                            Ok(Ok(_)) => "ok".to_string(),
+                                        };
+                                    }
+                                }
+
+                                for class_idx in pack.classes() {
+                                    let class = &ctx[*class_idx];
+                                    if class.is_enum() {
+                                        continue;
+                                    }
+                                    classes += 1;
+                                    for feature in class.structural() {
+                                        features += 1;
+                                        match catching(|| {
+                                            census_feature(&rel, class, feature, ctx, &cycles)
+                                        }) {
+                                            Ok(fields) => {
+                                                compared += 1;
+                                                rows.push(csv(&fields));
+                                            }
+                                            Err(panic) => {
+                                                rows.push(csv(&[
+                                                    rel.clone(),
+                                                    class.name().to_string(),
+                                                    feature.name.clone(),
+                                                    String::new(),
+                                                    "panic".to_string(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    facet(feature.ordered),
+                                                    facet(feature.unique),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    panic,
+                                                    "derivation-panic".to_string(),
+                                                    "panic".to_string(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                    String::new(),
+                                                ]));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    }
+                }
+            }
+
+            for row in &rows {
+                writeln!(results, "{row}").expect("a results row");
+            }
+            writeln!(
+                files,
+                "{}",
+                csv(&[
+                    rel.clone(),
+                    bytes.to_string(),
+                    status.clone(),
+                    classes.to_string(),
+                    features.to_string(),
+                    compared.to_string(),
+                    descriptor_status,
+                    table_status,
+                    detail.lines().collect::<Vec<_>>().join(" | "),
+                ])
+            )
+            .expect("a files row");
+            results.flush().expect("flush results");
+            files.flush().expect("flush files");
+            println!("{rel}: {status}, {features} features");
+        }
+
+        println!(
+            "censused {processed} files this invocation; {} were already in {}",
+            done.len(),
+            files_path.display()
         );
     }
 }
