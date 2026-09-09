@@ -472,6 +472,75 @@ mod tests {
         generate_modules_from_parser(&parser)
     }
 
+    fn generate_modules_from_string(content: &str) -> (String, String) {
+        let parser = EcoreParser::from_string(content).expect("ecore should parse");
+        generate_modules_from_parser(&parser)
+    }
+
+    /// A metamodel with a transparent class and an enumeration whose Ecore
+    /// name is not already upper camel case, which is the pair the ModelSet
+    /// census of 2026-09-09 found thirty-one instances of the second half of
+    /// and no instance of both halves at once.
+    ///
+    /// `swmlTypes` is the shape of the real name: ModelSet carries `SWMLTypes`
+    /// in six files, `types` in four and `Is_Style` in two, and every
+    /// enumeration of the fourteen checked-in `.ecore` files is a fixed point
+    /// of `to_upper_camel_case`, which is why nothing in the repository could
+    /// reach this.
+    const NON_CAMEL_ENUM_WITH_A_TRANSPARENT_CLASS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="casing" nsURI="http://www.example.org/casing" nsPrefix="casing">
+    <eClassifiers xsi:type="ecore:EEnum" name="swmlTypes">
+        <eLiterals name="Text"/>
+        <eLiterals name="Number" value="1"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Value" abstract="true"/>
+    <eClassifiers xsi:type="ecore:EClass" name="Tagged" eSuperTypes="#//Value">
+        <eAnnotations source="urn:arachne:representation">
+            <details key="kind" value="transparent"/>
+            <details key="field" value="tag"/>
+        </eAnnotations>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="tag" lowerBound="1" eType="#//swmlTypes"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Root">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="tag" lowerBound="1" eType="#//swmlTypes"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="values" upperBound="-1" eType="#//Value" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+    /// The enumeration is declared under one name and every field that names
+    /// it uses that name.
+    ///
+    /// Before arachne fixed this, `generate_enum` declared the Rust enum under
+    /// the raw Ecore name while `transparent_field_types` typed the
+    /// transparent variant's field by the upper camel cased one, so this
+    /// metamodel emitted a `MVRegister<SwmlTypes>` field against an
+    /// `enum swmlTypes` declaration and the generated crate did not compile.
+    /// The rest of the generator spells every Rust type it makes from a
+    /// classifier's name upper camel case, so that is the spelling all four
+    /// enumeration sites now use.
+    #[test]
+    fn a_non_camel_enum_is_declared_and_referred_to_under_one_upper_camel_name() {
+        let (classifiers, _references) =
+            generate_modules_from_string(NON_CAMEL_ENUM_WITH_A_TRANSPARENT_CLASS);
+
+        assert!(
+            classifiers.contains("enumSwmlTypes{"),
+            "the enum should be declared as `SwmlTypes`, not under its raw Ecore name: {classifiers}"
+        );
+        assert!(
+            classifiers.contains("MVRegister<SwmlTypes>"),
+            "every field typed by the enum should name `SwmlTypes`: {classifiers}"
+        );
+        assert!(
+            !classifiers.contains("swmlTypes"),
+            "no site should keep the raw Ecore spelling `swmlTypes`: {classifiers}"
+        );
+    }
+
     #[test]
     fn concrete_superclass_with_subclasses_emits_family_union() {
         let (classifiers, _references) =

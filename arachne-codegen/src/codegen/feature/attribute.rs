@@ -4,7 +4,7 @@ use ecore_rs::{
     ctx::Ctx,
     repr::{Structural, builtin::Typ},
 };
-use heck::ToSnakeCase;
+use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::Span;
 use quote::quote;
 use syn::Ident;
@@ -94,7 +94,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .unwrap();
 
         let (rust_typ, mut crdt) = if class_typ.is_enum() {
-            let enum_name = Ident::new(class_typ.name(), Span::call_site());
+            let enum_name = Ident::new(&class_typ.name().to_upper_camel_case(), Span::call_site());
             (
                 Some(quote! { #enum_name }),
                 Primitive::Register(Default::default()),

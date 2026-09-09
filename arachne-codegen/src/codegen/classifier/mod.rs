@@ -713,9 +713,27 @@ impl<'a> ClassGenerator<'a> {
         ))
     }
 
+    /// The Rust enum an `EEnum` becomes.
+    ///
+    /// The type name is the upper camel cased Ecore name, which is what every
+    /// other Rust type this generator makes from a classifier's name uses, and
+    /// what the three sites that refer to an enumeration use: the attribute
+    /// field (`feature/attribute.rs`), the transparent variant's field
+    /// (`transparent_field_types`) and the `uw-map` key and value
+    /// (`feature/containment.rs`). Declaring it under the raw Ecore name
+    /// instead, which is what this did until the ModelSet census of
+    /// 2026-09-09, emitted a field typed `SwmlTypes` against an
+    /// `enum swmlTypes` on any metamodel whose enumeration is not already a
+    /// fixed point of the conversion, and that crate does not compile. The
+    /// literals below are upper camel cased for the same reason.
+    ///
+    /// The descriptor is deliberately not part of this: `codegen/descriptor.rs`
+    /// names classes, features, enumerations and literals by their Ecore names
+    /// throughout, and the projection from an Ecore name to a Rust one is the
+    /// generated path's business alone.
     // TODO: derive Ord from the literal values, and PartialEq/Eq from that
     fn generate_enum(&self) -> anyhow::Result<Fragment> {
-        let name = Ident::new(self.class.name(), Span::call_site());
+        let name = Ident::new(&self.class.name().to_upper_camel_case(), Span::call_site());
 
         let variants = self
             .class

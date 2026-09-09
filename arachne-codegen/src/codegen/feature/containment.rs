@@ -212,7 +212,7 @@ impl<'a> ContainmentGenerator<'a> {
             structural::Typ::EAttribute => {
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
                 let (rust_ty, mut primitive) = if value_class.is_enum() {
-                    let enum_name = format_ident!("{}", value_class.name());
+                    let enum_name = format_ident!("{}", value_class.name().to_upper_camel_case());
                     (
                         Some(quote! { #enum_name }),
                         Primitive::Register(crate::codegen::datatype::crdt::Register::MultiValue),
