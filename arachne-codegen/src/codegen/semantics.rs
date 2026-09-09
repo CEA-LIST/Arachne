@@ -1657,6 +1657,22 @@ mod tests {
         })
     }
 
+    /// One error, flattened to a CSV field with the quoted source dropped.
+    ///
+    /// The parser's error prints its cause chain, then the line and column,
+    /// then `current parser state:` followed by the bytes of the file it
+    /// stopped inside. The chain and the position are the measurement and the
+    /// bytes are somebody else's metamodel: 432 KB of them over ModelSet, and
+    /// no part of a third-party corpus belongs in this repository or in the
+    /// vault, so the field stops where the quoting starts.
+    fn diagnostic(error: &str) -> String {
+        let flat = error.lines().collect::<Vec<_>>().join(" | ");
+        match flat.find("current parser state:") {
+            Some(at) => format!("{}current parser state elided", &flat[..at]),
+            None => flat,
+        }
+    }
+
     /// Every `.ecore` under `root`, sorted, skipping build and VCS directories.
     fn ecore_files(root: &Path) -> Vec<PathBuf> {
         fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
@@ -2243,7 +2259,7 @@ mod tests {
                     compared.to_string(),
                     descriptor_status,
                     table_status,
-                    detail.lines().collect::<Vec<_>>().join(" | "),
+                    diagnostic(&detail),
                 ])
             )
             .expect("a files row");
