@@ -150,6 +150,7 @@ use moirai_interp::testing::{class_slot, feature_slot, triplet, twins};
 use moirai_interp::{InstanceOp, LeafOp, Scalar};
 use moirai_protocol::broadcast::message::EventMessage;
 use moirai_protocol::broadcast::tcsb::Tcsb;
+use moirai_protocol::crdt::eval::EvalNested;
 use moirai_protocol::crdt::query::Read;
 use moirai_protocol::replica::{IsReplica, Replica};
 use moirai_semantics::{
@@ -2143,4 +2144,758 @@ fn ip31_thirty_three_replica_scripts_over_class_diagram_ecore_agree_everywhere()
              its merge rule is not being tested three-way"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// 11. `ip32`: a joiner that adopts a snapshot
+// ---------------------------------------------------------------------------
+
+/// The joiner's id. Not `c`: the three-replica arm above uses that seat, and
+/// a joiner is a member nobody had heard of.
+const JOINER: &str = "d";
+
+/// One donor session, driven to completion, and the replica that joined it
+/// afterwards by taking the donor's state wholesale.
+///
+/// # What is being claimed, and why it is not the claim `ip30` makes
+///
+/// `ip30` and `ip31` replay operations into replicas that were present from
+/// the start. Nothing there crosses a serializer. A joiner does: the donor
+/// hands over `Replica::snapshot` — its resolver, its matrix clock, its
+/// stable frontier and the outbox above it — beside the log itself, rendered
+/// as JSON by `TransferableLog::export_log`
+/// (`moirai-network/src/state_transfer.rs:49-60`), and
+/// `Replica::adopt` (`moirai-protocol/src/replica.rs:233-236`) installs the
+/// two together. So "the same document after a transfer" is a different
+/// sentence from "the same document after replay", and the two paths reach it
+/// through different bytes.
+///
+/// **The generated log** is the tree of `record!` and `union!` structs, each
+/// deriving `Serialize` straight through to the `moirai-crdt` logs at its
+/// leaves.
+///
+/// **The interpreted log** is [`moirai_interp::Node`], whose two container
+/// nodes serialize as *pair lists* rather than as JSON objects, because a
+/// `SeqNode`'s children are keyed by `EventId` and a `MapNode`'s by `Scalar`
+/// and a JSON object's keys are strings (`moirai-interp/src/node.rs:565-587`
+/// and `620-644`). What travels here is that node tree: `ModelLog` serializes
+/// exactly the same `root: Node` plus its table and its header
+/// (`moirai-interp/src/log.rs:64-80`), and the table is the metamodel rather
+/// than the state, so the container half is the whole of what a transfer of
+/// this state has to survive.
+///
+/// # Why this metamodel and not `bt.ecore`
+///
+/// Because `bt.ecore`'s generated log cannot be serialized at all once it
+/// holds anything. `NestedListLog` keys its children by `EventId` through a
+/// `UWMapLog<EventId, L>`, which is a `HashMap` with a struct for a key, and
+/// `serde_json` answers `key must be a string`. That is pinned as a test in
+/// `generated/bt_crdt/tests/equivalence.rs`. `class_diagram.ecore` has no
+/// ordered containment, so its generated log is the one of the four that goes
+/// on the wire with content in it — and it is also the metamodel carrying all
+/// five register tie-breaks, so the state a joiner adopts here is the richest
+/// of the four.
+///
+/// # `adopt` needs no network layer
+///
+/// `snapshot` and `adopt` are inherent methods on `Replica` behind
+/// `moirai-protocol`'s `serde` feature, which this crate already turns on for
+/// its own dependency. `moirai-network` contributes the *transport* —
+/// `TransferableLog`, the deflate-and-base64 `LogPayload`, the donor-side
+/// ceiling — and none of that is needed to move a log between two `Replica`s
+/// in one process. Nothing was added to this crate's dev-dependencies for
+/// this arm.
+struct Transfer {
+    /// The session that was already running: `a` and `b` on both paths.
+    donors: Harness,
+    /// `d` on the interpreted path, bootstrapped alone and then handed the
+    /// donor's snapshot and node tree.
+    interp_joiner: InterpReplica,
+    /// `d` on the generated path.
+    gen_joiner: GenReplica,
+    /// What each path put on the wire, in bytes of JSON.
+    interp_bytes: usize,
+    gen_bytes: usize,
+    /// What the joiner has sent and not yet had delivered.
+    pending: Vec<(EventMessage<InstanceOp>, EventMessage<Classdiagram>)>,
+}
+
+impl Transfer {
+    /// Serialize `from`'s log on both paths, hand each to a replica that was
+    /// not there, and let it adopt.
+    ///
+    /// `Err` when either path cannot serialize its log, which is the finding
+    /// this arm has to be able to report rather than panic on.
+    fn joined(donors: Harness, from: char) -> Result<Transfer, String> {
+        let sem = Arc::clone(&donors.meta.sem);
+        let root_class = donors.meta.root;
+
+        // --- the generated path: the log tree, verbatim ---
+        let gen_donor = if from == 'a' { &donors.ga } else { &donors.gb };
+        let gen_wire = serde_json::to_string(gen_donor.log())
+            .map_err(|error| format!("the generated log does not serialize: {error}"))?;
+        let gen_bytes = gen_wire.len();
+        let gen_state: ClassdiagramLog = serde_json::from_str(&gen_wire)
+            .map_err(|error| format!("the generated log does not come back: {error}"))?;
+        let gen_snapshot = gen_donor.snapshot();
+        let gen_log = gen_donor.log_id().clone();
+
+        // --- the interpreted path: the node tree, pair lists and all ---
+        let interp_donor = if from == 'a' { &donors.ia } else { &donors.ib };
+        let interp_wire = serde_json::to_string(&interp_donor.log().root)
+            .map_err(|error| format!("the interpreted node tree does not serialize: {error}"))?;
+        let interp_bytes = interp_wire.len();
+        let root: moirai_interp::Node = serde_json::from_str(&interp_wire)
+            .map_err(|error| format!("the interpreted node tree does not come back: {error}"))?;
+        let interp_state = moirai_interp::testing::Harness {
+            sem,
+            root_class,
+            root,
+        };
+        let interp_snapshot = interp_donor.snapshot();
+        let interp_log = interp_donor.log_id().clone();
+
+        // The joiner knows only itself, and hosts the donor's log: a replica
+        // bootstrapped into the donor's member list would not be a joiner.
+        let mut gen_joiner: GenReplica =
+            Replica::bootstrap_with_log_id(JOINER.to_string(), &[JOINER], gen_log);
+        gen_joiner.adopt(gen_snapshot, gen_state);
+        let mut interp_joiner: InterpReplica =
+            Replica::bootstrap_with_log_id(JOINER.to_string(), &[JOINER], interp_log);
+        interp_joiner.adopt(interp_snapshot, interp_state);
+
+        Ok(Transfer {
+            donors,
+            interp_joiner,
+            gen_joiner,
+            interp_bytes,
+            gen_bytes,
+            pending: Vec::new(),
+        })
+    }
+
+    fn joiner_interp_doc(&self) -> Value {
+        without_defaults(self.interp_joiner.query(Read::<Value>::new()))
+    }
+
+    fn joiner_gen_doc(&self) -> Value {
+        without_defaults(project(
+            &self.donors.meta,
+            &self.gen_joiner.query(Read::<ClassdiagramValue>::new()),
+        ))
+    }
+
+    /// The joiner's two read-outs against each other and against `writer`'s,
+    /// all four under [`without_defaults`] and [`project`]: the same
+    /// canonical form `ip30` compares in.
+    fn compare_with(&self, writer: char) -> Result<(), String> {
+        let expected = self.donors.interp_doc(writer);
+        for (label, held) in [
+            ("the donor's generated read-out", self.donors.gen_doc(writer)),
+            ("the joiner's interpreted read-out", self.joiner_interp_doc()),
+            ("the joiner's generated read-out", self.joiner_gen_doc()),
+        ] {
+            if held != expected {
+                let where_ = difference(&expected, &held, "")
+                    .unwrap_or_else(|| "the documents differ but no key does".to_string());
+                return Err(format!(
+                    "{label} differs from the interpreted donor {writer}: {where_}\n  \
+                     donor {writer} (interpreted): {}\n  {label}: {}",
+                    serde_json::to_string(&expected).unwrap_or_default(),
+                    serde_json::to_string(&held).unwrap_or_default(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// One edit issued *by the joiner*, encoded twice.
+    fn joiner_carry(&mut self, edit: &Edit) -> Result<(), String> {
+        let interp = interp_op(&self.donors.meta, edit);
+        let generated = typed_op(&self.donors.meta, edit);
+        match (
+            self.interp_joiner.send(interp),
+            self.gen_joiner.send(generated),
+        ) {
+            (Some(interp_event), Some(gen_event)) => {
+                self.pending.push((interp_event, gen_event));
+                Ok(())
+            }
+            (None, None) => Err(format!(
+                "both intakes refused the joiner's {}, so the adopted replica \
+                 can read but not write",
+                edit.show()
+            )),
+            (interp_event, _) => Err(format!(
+                "the two intakes disagree on the joiner's {}: interpreted {}",
+                edit.show(),
+                if interp_event.is_some() {
+                    "accepted, generated refused"
+                } else {
+                    "refused, generated accepted"
+                },
+            )),
+        }
+    }
+
+    /// Everything the joiner holds to both donors, and everything the donors
+    /// hold to each other and to the joiner.
+    fn settle(&mut self) {
+        for (interp_event, gen_event) in std::mem::take(&mut self.pending) {
+            self.donors.ia.receive(interp_event.clone());
+            self.donors.ga.receive(gen_event.clone());
+            self.donors.ib.receive(interp_event);
+            self.donors.gb.receive(gen_event);
+        }
+        for (interp_event, gen_event) in std::mem::take(&mut self.donors.pending_a) {
+            self.donors.ib.receive(interp_event.clone());
+            self.donors.gb.receive(gen_event.clone());
+            self.interp_joiner.receive(interp_event);
+            self.gen_joiner.receive(gen_event);
+        }
+        for (interp_event, gen_event) in std::mem::take(&mut self.donors.pending_b) {
+            self.donors.ia.receive(interp_event.clone());
+            self.donors.ga.receive(gen_event.clone());
+            self.interp_joiner.receive(interp_event);
+            self.gen_joiner.receive(gen_event);
+        }
+    }
+
+    /// All six read-outs of the joined session, against each other.
+    fn compare_everywhere(&self) -> Result<(), String> {
+        self.compare_with('a')?;
+        self.compare_with('b')
+    }
+}
+
+/// An edit issued by the joiner.
+fn joiner_edit(feature: &'static str, elem: Elem) -> Edit {
+    Edit {
+        writer: 'd',
+        feature: Some(feature),
+        action: Action::Leaf(elem),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 12. The state-transfer tests
+// ---------------------------------------------------------------------------
+
+/// Both paths can put this metamodel's log on the wire, and both get back a
+/// log that renders the document the donor was rendering.
+///
+/// The precondition of everything below, asserted separately so that a
+/// failure here reads as "the log does not serialize" rather than as "the
+/// joiner read something different".
+///
+/// # The bytes are not canonical, and the semantics are
+///
+/// Measured while writing this: neither path's exported log round-trips to
+/// the *same bytes*. `EventGraph` — which every text attribute is on both
+/// paths — holds a `BiMap<NodeIndex, EventId>`, a `HashSet<EventId>` of heads
+/// and a `HashMap<NodeIndex, Vec<Seq>>` of summaries
+/// (`moirai-protocol/src/state/event_graph.rs:39-49`), and a `HashMap`
+/// serializes into a JSON object in its own iteration order, which `RandomState`
+/// seeds afresh in every process. One run of this file produced
+/// `"map":{"1":…,"0":…}` and the next `"map":{"0":…,"1":…}` for the same
+/// state. The pair-list encodings in `moirai-interp/src/node.rs` make the
+/// interpreted *container* levels canonical, and the note there says why they
+/// have to be, but the leaves below them are the library's and are not. So
+/// what is asserted here is that the log comes back rendering the same
+/// document, which is what a transfer needs; byte-identity of an exported log
+/// is not a property this system has, and anything that digests one would be
+/// building on sand.
+#[test]
+fn ip32_both_paths_serialize_this_metamodels_log_and_get_it_back() {
+    let mut harness = Harness::new();
+    harness
+        .run(&scripts()[12])
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    let expected = harness.interp_doc('a');
+
+    let gen_wire = serde_json::to_string(harness.ga.log())
+        .expect("the generated log of a metamodel with no ordered containment serializes");
+    let gen_back: ClassdiagramLog = serde_json::from_str(&gen_wire).expect("and comes back");
+    assert_eq!(
+        without_defaults(project(
+            &harness.meta,
+            &EvalNested::execute_query(&gen_back, Read::<ClassdiagramValue>::new())
+        )),
+        expected,
+        "the generated log came back rendering a different document"
+    );
+
+    let interp_wire = serde_json::to_string(&harness.ia.log().root)
+        .expect("the interpreted node tree serializes");
+    let interp_back: moirai_interp::Node =
+        serde_json::from_str(&interp_wire).expect("and comes back");
+    let rebuilt = moirai_interp::testing::Harness {
+        sem: Arc::clone(&harness.meta.sem),
+        root_class: harness.meta.root,
+        root: interp_back,
+    };
+    assert_eq!(
+        without_defaults(EvalNested::execute_query(&rebuilt, Read::<Value>::new())),
+        expected,
+        "the interpreted node tree came back rendering a different document"
+    );
+
+    eprintln!(
+        "ip32 wire sizes after one script: generated {} B, interpreted {} B",
+        gen_wire.len(),
+        interp_wire.len()
+    );
+    assert!(
+        gen_wire.len() > 100 && interp_wire.len() > 100,
+        "an empty log proves nothing: generated {} B, interpreted {} B",
+        gen_wire.len(),
+        interp_wire.len()
+    );
+}
+
+/// **ip32** — every one of the thirty scripts, run to completion and then
+/// transferred: a replica that was never in the session adopts `a`'s state on
+/// both paths and reads what `a` and `b` read, in the same canonical form
+/// `ip30` compares in.
+///
+/// The matrix clock travels with the log, so the joiner is asserted to have
+/// counted the donor's history as delivered rather than merely to render the
+/// same document: a joiner that read correctly and clocked wrongly would pass
+/// the read-out check and fail the first thing it tried to do afterwards,
+/// which is what the test below this one is for.
+///
+/// The comparison is against `a`, the replica the state was taken from, and
+/// not against `b`. That is the claim — a joiner reads what its donor reads —
+/// and it is also all that can honestly be claimed here, because on four of
+/// these thirty scripts `a` and `b` do not converge with each other. See
+/// [`ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way`],
+/// which is where that was found and where it is pinned.
+#[test]
+fn ip32_a_joiner_adopting_a_snapshot_reads_what_the_donor_reads() {
+    let scripts = scripts();
+    let mut failures = Vec::new();
+    let mut transferred = 0usize;
+    let mut gen_bytes = 0usize;
+    let mut interp_bytes = 0usize;
+    for script in &scripts {
+        let mut harness = Harness::new();
+        if let Err(reason) = harness.run(script) {
+            failures.push(format!("{}: the script itself diverged\n{reason}", script.label));
+            continue;
+        }
+        let donor_delivered = harness.ga.stability().delivered;
+        match Transfer::joined(harness, 'a') {
+            Ok(transfer) => {
+                transferred += 1;
+                gen_bytes += transfer.gen_bytes;
+                interp_bytes += transfer.interp_bytes;
+                if let Err(reason) = transfer.compare_with('a') {
+                    failures.push(format!("{}: after the transfer\n{reason}", script.label));
+                }
+                let joined = transfer.gen_joiner.stability().delivered;
+                if joined != donor_delivered {
+                    failures.push(format!(
+                        "{}: the joiner counts {joined} delivered events and the donor {donor_delivered}",
+                        script.label
+                    ));
+                }
+                let joined = transfer.interp_joiner.stability().delivered;
+                if joined != donor_delivered {
+                    failures.push(format!(
+                        "{}: the interpreted joiner counts {joined} delivered events and the donor {donor_delivered}",
+                        script.label
+                    ));
+                }
+            }
+            Err(reason) => failures.push(format!("{}: {reason}", script.label)),
+        }
+    }
+    eprintln!(
+        "ip32: {transferred} of {} scripts transferred, {gen_bytes} B of generated log and \
+         {interp_bytes} B of interpreted node tree on the wire in total",
+        scripts.len()
+    );
+    assert!(
+        failures.is_empty(),
+        "{} of {} transfers failed:\n{}",
+        failures.len(),
+        scripts.len(),
+        failures.join("\n\n")
+    );
+    assert_eq!(transferred, scripts.len(), "every script has to transfer");
+}
+
+/// The half that matters: the adopted replica keeps working.
+///
+/// A joiner that can read but not write has not joined. The clock is where
+/// that goes wrong: `adopt` installs the donor's matrix clock and stable
+/// frontier under the joiner's own index, and a joiner whose own column did
+/// not start at zero, or whose stable frontier was installed against the
+/// wrong index space, produces a first operation that is concurrent with the
+/// state it just adopted rather than causally after it. That does not show up
+/// in a read-out; it shows up here.
+///
+/// So the joiner writes each of the constructions in turn, the donors deliver
+/// them, a donor writes back, and all six read-outs are compared after every
+/// exchange.
+#[test]
+fn ip32_the_adopted_replica_writes_and_the_session_converges() {
+    let mut harness = Harness::new();
+    harness
+        .run(&scripts()[3])
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    let mut transfer = Transfer::joined(harness, 'a').unwrap_or_else(|reason| panic!("{reason}"));
+    transfer
+        .compare_everywhere()
+        .unwrap_or_else(|reason| panic!("{reason}"));
+
+    // The joiner writes one of everything.
+    for one in [
+        joiner_edit("name", Elem::InsertChar { pos: 0, ch: 'j' }),
+        joiner_edit("qualifiedName", Elem::Write("delta")),
+        joiner_edit("author", Elem::Write("delta")),
+        joiner_edit("stereotype", Elem::Write("delta")),
+        joiner_edit("layer", Elem::Write("delta")),
+        joiner_edit("isAbstract", Elem::Enable),
+        joiner_edit("visibility", Elem::WriteLiteral(3)),
+        joiner_edit("tags", Elem::Add("delta")),
+        joiner_edit("invariants", Elem::Add("delta")),
+    ] {
+        transfer
+            .joiner_carry(&one)
+            .unwrap_or_else(|reason| panic!("{reason}"));
+        transfer.settle();
+        transfer
+            .compare_everywhere()
+            .unwrap_or_else(|reason| panic!("after the joiner's {}\n{reason}", one.show()));
+    }
+
+    // Everything the joiner wrote is on the donors' read-outs, and the joiner
+    // is not simply rendering its own writes into a document nobody else has.
+    let read = transfer.donors.interp_doc('b');
+    assert_eq!(read, transfer.joiner_interp_doc());
+    assert_eq!(read["qualifiedName"], json!("delta"));
+    assert_eq!(read["author"], json!("delta"));
+    assert_eq!(read["layer"], json!("delta"), "`delta` is the greatest word");
+    assert_eq!(read["visibility"], json!("Package"));
+    assert!(
+        read["tags"]
+            .as_array()
+            .expect("a set reads as an array")
+            .contains(&json!("delta")),
+        "the joiner's set element did not reach the donors: {}",
+        read["tags"]
+    );
+
+    // And a donor writes back, so the traffic is not one-directional.
+    transfer
+        .donors
+        .carry(&edit('b', "qualifiedName", Elem::Write("gamma")))
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    transfer.settle();
+    transfer
+        .compare_everywhere()
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    assert_eq!(
+        transfer.joiner_interp_doc()["qualifiedName"],
+        json!("gamma"),
+        "the joiner did not take a donor's write that is causally after the \
+         state it adopted"
+    );
+}
+
+/// A write from the joiner concurrent with one from a donor, on every
+/// construction, settles the same way on all six read-outs.
+///
+/// The case the read-out check cannot reach: the joiner's first operation is
+/// tagged against the clock it adopted and the donors' against the clock they
+/// have always had, and the member table the joiner installed by adopting is
+/// not the one the donors held when the session started. `FairPolicy` reads
+/// exactly that table, so `Class.author` is the feature this test exists for.
+#[test]
+fn ip32_a_joiners_write_concurrent_with_a_donors_settles_the_same_way_on_both_paths() {
+    let mut harness = Harness::new();
+    harness.apply(&open()).unwrap_or_else(|r| panic!("{r}"));
+    harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+    harness
+        .apply(&edit('a', "author", Elem::Write("alpha")))
+        .unwrap_or_else(|r| panic!("{r}"));
+    harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+
+    let mut transfer = Transfer::joined(harness, 'a').unwrap_or_else(|reason| panic!("{reason}"));
+    transfer
+        .compare_everywhere()
+        .unwrap_or_else(|reason| panic!("{reason}"));
+
+    for feature in ["qualifiedName", "author", "layer", "stereotype"] {
+        transfer
+            .joiner_carry(&joiner_edit(feature, Elem::Write("delta")))
+            .unwrap_or_else(|r| panic!("{r}"));
+        transfer
+            .donors
+            .carry(&edit('b', feature, Elem::Write("beta")))
+            .unwrap_or_else(|r| panic!("{r}"));
+    }
+    transfer
+        .joiner_carry(&joiner_edit("visibility", Elem::WriteLiteral(0)))
+        .unwrap_or_else(|r| panic!("{r}"));
+    transfer
+        .donors
+        .carry(&edit('b', "visibility", Elem::WriteLiteral(2)))
+        .unwrap_or_else(|r| panic!("{r}"));
+    transfer
+        .joiner_carry(&joiner_edit("tags", Elem::Add("delta")))
+        .unwrap_or_else(|r| panic!("{r}"));
+    transfer
+        .donors
+        .carry(&edit('b', "tags", Elem::Remove("delta")))
+        .unwrap_or_else(|r| panic!("{r}"));
+    transfer.settle();
+    transfer
+        .compare_everywhere()
+        .unwrap_or_else(|reason| panic!("{reason}"));
+
+    let read = transfer.joiner_interp_doc();
+    assert_eq!(read, transfer.donors.interp_doc('a'));
+    assert_eq!(read, transfer.donors.interp_doc('b'));
+    assert_eq!(read, transfer.joiner_gen_doc());
+    assert_eq!(read, transfer.donors.gen_doc('a'));
+    assert_eq!(read, transfer.donors.gen_doc('b'));
+    for feature in ["qualifiedName", "author"] {
+        let held = read[feature]
+            .as_str()
+            .unwrap_or_else(|| panic!("a unique register holds one value: {}", read[feature]));
+        assert!(
+            held == "delta" || held == "beta",
+            "`{feature}` holds `{held}`, which neither the joiner nor the donor wrote"
+        );
+    }
+    assert_eq!(read["layer"], json!("delta"), "`delta` is the greater word");
+    assert_eq!(read["stereotype"], json!("delta"));
+    assert_eq!(
+        read["visibility"],
+        json!({CONFLICT: ["Public", "Protected"]}),
+        "the joiner's literal and the donor's are concurrent, so both survive"
+    );
+    assert_eq!(
+        read["tags"],
+        json!(["delta"]),
+        "an add concurrent with a remove wins in an add-wins set, whichever \
+         side of a state transfer each came from"
+    );
+    eprintln!(
+        "ip32 joiner-versus-donor contention settled on {}",
+        serde_json::to_string(&read).unwrap_or_default()
+    );
+}
+
+/// The transfer oracle fails when the joiner is handed a state that is not
+/// the donor's, which is criterion I-A2 for this arm.
+///
+/// Without this, `ip32` would pass on a `compare_with` that compared nothing.
+#[test]
+fn ip32_the_transfer_oracle_notices_when_the_joiner_adopts_the_wrong_state() {
+    let mut harness = Harness::new();
+    harness
+        .run(&scripts()[7])
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    let mut transfer = Transfer::joined(harness, 'a').unwrap_or_else(|reason| panic!("{reason}"));
+    transfer
+        .compare_everywhere()
+        .expect("the honest transfer agrees");
+
+    // The mutation: one write applied to the generated joiner alone, with no
+    // event reaching anyone else.
+    let stray: Classdiagram = serde_json::from_value(tagged(
+        ROOT,
+        tagged(variant_of("qualifiedName"), tagged("Write", json!("stray"))),
+    ))
+    .expect("the shape is right; the asymmetry is the lie");
+    transfer
+        .gen_joiner
+        .send(stray)
+        .expect("the joiner's generated log takes it");
+
+    let reason = transfer
+        .compare_everywhere()
+        .expect_err("the joiner now holds something the donor does not");
+    assert!(reason.contains("qualifiedName"), "{reason}");
+    assert!(reason.contains("joiner"), "{reason}");
+}
+
+// ---------------------------------------------------------------------------
+// 13. What building `ip32` turned up: two replicas that do not converge
+// ---------------------------------------------------------------------------
+
+/// Four of the thirty scripts leave `a` and `b` holding different documents
+/// after every operation has been delivered to both, and **both paths fail
+/// the same way**.
+///
+/// # How this was found
+///
+/// `ip32` compares a joiner against a donor. Its first version compared
+/// against both donors, and four scripts failed at `b` while passing at `a`,
+/// which can only mean `a` and `b` disagree with each other. Neither `ip30`
+/// nor `ip31` could have seen it: every comparison in this file until now is
+/// interpreted-`a` against generated-`a` and interpreted-`b` against
+/// generated-`b`, never `a` against `b`. Two paths that fail to converge in
+/// exactly the same way pass an oracle built that way, and these two do.
+///
+/// # What is happening
+///
+/// Not a merge failure. On `concurrent seed 0` the divergence appears at the
+/// delivery of a round whose four edits touch `invariants`, `name` and
+/// `qualifiedName`, and the feature that comes out different is `isAbstract`,
+/// which nobody wrote in that round. The only thing that changes an untouched
+/// leaf at a delivery is stabilization: `Replica::deliver` asks
+/// `IsTcsb::is_stable` and, when it answers, calls `IsLog::stabilize` down the
+/// whole tree (`moirai-protocol/src/replica.rs:253-260`).
+///
+/// At that delivery both replicas have delivered the same nine events and
+/// both report `stable_prefix: 7`, but their stable *versions* differ:
+/// `a` holds `[("a", 3), ("b", 4)]` and `b` holds `[("b", 2), ("a", 5)]`.
+/// That is legitimate — a replica's view of what its peers have acknowledged
+/// lags differently on each side — so each replica stabilizes a different set
+/// of operations, in a different order. What is not legitimate is that the
+/// two stabilizations produce different states:
+///
+/// * `DWFlag` has no `stabilize` of its own, so a stabilized operation is
+///   folded in by `IsStableState<DWFlag> for Option<bool>::apply`
+///   (`moirai-crdt/src/flag/dw_flag.rs:33-41`), which simply overwrites:
+///   the stable value is whichever flag operation was stabilized *last*. And
+///   `execute_query` returns `false` immediately when the stable value is
+///   `Some(false)` (`dw_flag.rs:93-97`), so once a replica has stabilized a
+///   `Disable` last, no unstable `Enable` can ever be read again on it.
+///
+/// * `RWSet::stabilize` (`moirai-crdt/src/set/rw_set.rs:129-163`) decides
+///   whether to drop a stabilizing `Remove(v)` from the PO-Log by looking at
+///   what is *still unstable* at that moment, and a `Remove(v)` that stays in
+///   `stable.1` permanently masks every `Add(v)` in `execute_query`
+///   (`rw_set.rs:184-190`). Two replicas stabilizing different sets keep
+///   different removes.
+///
+/// # Why this test asserts the defect rather than the fix
+///
+/// `moirai-crdt` is Léo Olivier's and is out of scope for this branch. The
+/// value here is that the *two paths agree even about this*: the interpreted
+/// `LeafLog` reaches the same `moirai-crdt` logs and reproduces the
+/// non-convergence operation for operation, which is evidence for the
+/// equivalence claim rather than against it. A fix upstream makes this test
+/// fail, which is the point: it is a pin, and the number in it is a
+/// measurement.
+#[test]
+fn ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way() {
+    let scripts = scripts();
+    let mut split: Vec<&str> = Vec::new();
+    let mut features: Vec<String> = Vec::new();
+    for script in &scripts {
+        let mut harness = Harness::new();
+        harness
+            .run(script)
+            .unwrap_or_else(|reason| panic!("{reason}"));
+        let interp_a = harness.interp_doc('a');
+        let interp_b = harness.interp_doc('b');
+        if interp_a == interp_b {
+            continue;
+        }
+        split.push(&script.label);
+        // The two paths have to disagree in exactly the same way, which is
+        // the claim this file exists for and is what makes the divergence a
+        // `moirai-crdt` finding rather than an interpreted-path one.
+        assert_eq!(
+            interp_a,
+            harness.gen_doc('a'),
+            "{}: the two paths differ at `a`, which would be a real \
+             equivalence failure and not this one",
+            script.label
+        );
+        assert_eq!(
+            interp_b,
+            harness.gen_doc('b'),
+            "{}: the two paths differ at `b`",
+            script.label
+        );
+        for Feature { name, .. } in FEATURES {
+            if interp_a.get(name) != interp_b.get(name) {
+                features.push(name.to_string());
+            }
+        }
+        eprintln!(
+            "ip32 {} leaves the two replicas split\n  a: {}\n  b: {}",
+            script.label,
+            serde_json::to_string(&interp_a).unwrap_or_default(),
+            serde_json::to_string(&interp_b).unwrap_or_default(),
+        );
+    }
+    features.sort();
+    features.dedup();
+    eprintln!(
+        "ip32: {} of {} scripts leave the two replicas holding different documents, on {features:?}",
+        split.len(),
+        scripts.len()
+    );
+    assert_eq!(
+        split,
+        vec![
+            "concurrent seed 0",
+            "concurrent seed 7",
+            "concurrent seed 10",
+            "concurrent seed 13"
+        ],
+        "the four scripts that do not converge, by name"
+    );
+    assert_eq!(
+        features,
+        vec!["invariants", "isAbstract"],
+        "the remove-wins set and the disable-wins flag, and no other feature"
+    );
+}
+
+/// The smallest shape of the remove-wins half, found by enumerating every
+/// pair of concurrent operation lists of length at most two over
+/// `{Add, Remove, Clear}` on `Class.invariants`: thirty-two of them do not
+/// converge and this is the shortest.
+///
+/// `a` adds `alpha`. Concurrently `b` removes `alpha` and then clears the
+/// set. Afterwards `a` reads an empty set and `b` reads `["alpha"]`, on both
+/// paths. The `Clear` is what makes it: it is `redundant_itself` for `RWSet`
+/// (`rw_set.rs:88-96`) so it never enters the PO-Log, and it makes every
+/// causally preceding operation redundant, which on `b` retires the `Remove`
+/// it issued and on `a` does not, because on `a` the `Add` arrived first.
+#[test]
+fn ip32_the_shortest_pair_of_concurrent_edits_that_does_not_converge() {
+    let mut harness = Harness::new();
+    harness.apply(&open()).unwrap_or_else(|r| panic!("{r}"));
+    harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+
+    harness
+        .carry(&edit('a', "invariants", Elem::Add("alpha")))
+        .unwrap_or_else(|r| panic!("{r}"));
+    harness
+        .carry(&edit('b', "invariants", Elem::Remove("alpha")))
+        .unwrap_or_else(|r| panic!("{r}"));
+    harness
+        .carry(&edit('b', "invariants", Elem::Clear))
+        .unwrap_or_else(|r| panic!("{r}"));
+    harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+
+    let interp_a = harness.interp_doc('a');
+    let interp_b = harness.interp_doc('b');
+    assert_eq!(interp_a, harness.gen_doc('a'), "the two paths agree at `a`");
+    assert_eq!(interp_b, harness.gen_doc('b'), "the two paths agree at `b`");
+    assert_eq!(
+        interp_a.get("invariants"),
+        None,
+        "`a` reads the empty set, so the key is pruned: {interp_a}"
+    );
+    assert_eq!(
+        interp_b["invariants"],
+        json!(["alpha"]),
+        "`b` reads the element `a` added: {interp_b}"
+    );
+    assert_ne!(
+        interp_a, interp_b,
+        "the two replicas delivered the same three operations and have to \
+         differ here, or this test is pinning nothing"
+    );
 }

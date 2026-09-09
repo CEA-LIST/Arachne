@@ -880,3 +880,86 @@ fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
          sequence child"
     );
 }
+
+/// **A generated log with a non-empty ordered containment cannot be
+/// serialized at all, so this metamodel cannot be state-transferred.**
+///
+/// Found while building the state-transfer oracle `ip32`
+/// (`generated/classdiagram_crdt/tests/equivalence.rs`), which needed a
+/// metamodel whose generated log goes on the wire. This one does not.
+///
+/// `Root.behaviortrees` compiles to `NestedListLog<BehaviorTreeLog>`, whose
+/// children are a `UWMapLog<EventId, L>`
+/// (`moirai-crdt/src/list/nested_list.rs:61-66`), which is a `HashMap` keyed
+/// by `EventId` — a struct. A JSON object's keys are strings, so `serde_json`
+/// answers `key must be a string` the moment that map holds anything. An
+/// empty log serializes fine, which is why nothing noticed until a log with
+/// content had to travel.
+///
+/// # What it costs
+///
+/// `moirai-network`'s state transfer is JSON end to end:
+/// `TransferableLog::export_log` is `serde_json::to_value`
+/// (`moirai-network/src/state_transfer.rs:49-60`) and returns
+/// `Value::Null` on failure, and `GenericNode` measures the serialized length
+/// before serving. So a donor hosting a `bt.ecore` model with one behaviour
+/// tree in it cannot serve a state transfer for it, and a joiner falls back
+/// to a delta sync — which reaches only the unstable suffix, so the compacted
+/// prefix stays out of reach. The three other checked-in metamodels divide
+/// the same way: `bt.ecore`, `json.ecore` and `kitchen_sink.ecore` all
+/// produce a `NestedListLog`, and `class_diagram.ecore` is the one that does
+/// not, which is why `ip32` runs there.
+///
+/// The interpreted path does not have this problem for the same model:
+/// `SeqNode`'s children are a `BTreeMap<EventId, Node>` serialized as a list
+/// of pairs precisely because the key is not a string
+/// (`moirai-interp/src/node.rs:565-587`).
+///
+/// `moirai-crdt` is out of scope for this branch, so this is a pin and not a
+/// fix: a `UWMapLog` that serialized as pair lists would make this test fail,
+/// which is the point.
+#[test]
+fn a_generated_log_with_a_non_empty_ordered_containment_cannot_be_serialized() {
+    use moirai_crdt::utils::membership::twins_log;
+    use moirai_protocol::broadcast::tcsb::Tcsb;
+    use moirai_protocol::replica::Replica;
+
+    type Gen = Replica<bt_crdt::package::BehaviortreeLog, Tcsb<bt_crdt::package::Behaviortree>>;
+    let (mut a, mut b): (Gen, Gen) = twins_log::<bt_crdt::package::BehaviortreeLog>();
+
+    // Empty, it serializes: an empty `HashMap` is an empty JSON object.
+    let empty = serde_json::to_string(a.log());
+    assert!(
+        empty.is_ok(),
+        "an empty generated log has to serialize, or this test is measuring \
+         something else: {:?}",
+        empty.err()
+    );
+
+    // One behaviour tree in the ordered containment.
+    let insert: bt_crdt::package::Behaviortree = serde_json::from_value(
+        json!({"Root": {"Behaviortrees": {"Insert": {"pos": 0, "op": "New"}}}}),
+    )
+    .expect("the insert shape is the one `record!` writes");
+    let event = a.send(insert).expect("the log takes it");
+    b.receive(event);
+
+    let error = serde_json::to_string(a.log())
+        .expect_err("a `HashMap<EventId, _>` cannot become a JSON object");
+    assert_eq!(
+        error.to_string(),
+        "key must be a string",
+        "the failure has to be the key and not something else"
+    );
+    // And `to_value`, which is the call `export_log` actually makes.
+    assert!(
+        serde_json::to_value(a.log()).is_err(),
+        "`TransferableLog::export_log` would hand `Value::Null` to the wire"
+    );
+    eprintln!(
+        "bt: an empty generated log is {} B of JSON; one with a single \
+         behaviour tree in `Root.behaviortrees` cannot be serialized at all \
+         ({error})",
+        empty.expect("checked above").len()
+    );
+}
