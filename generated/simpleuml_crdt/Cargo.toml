@@ -1,0 +1,31 @@
+[package]
+name = "simpleuml-crdt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moirai-crdt = { path = "../../../moirai-model-plane/moirai-crdt" }
+moirai-protocol = { path = "../../../moirai-model-plane/moirai-protocol", features = ["serde"] }
+moirai-macros = { path = "../../../moirai-model-plane/moirai-macros" }
+moirai-fuzz = { path = "../../../moirai-model-plane/moirai-fuzz" }
+moirai-network = { path = "../../../moirai-model-plane/moirai-network" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+petgraph = "0.8.3"
+rand = "0.10.0"
+
+[dev-dependencies]
+# The equivalence oracle of `ip14` drives the interpreted node tree beside
+# this crate's generated log. `sink` because `moirai-protocol`'s own `sink` is
+# on for this build and `IsLog::effect`'s arity follows it.
+moirai-interp = { path = "../../../moirai-model-plane/moirai-interp", features = ["sink"] }
+moirai-semantics = { path = "../../../moirai-model-plane/moirai-semantics" }
+# The naming rule the generator itself names its fields with.
+heck = "0.5.0"
+
+[features]
+default = ["fuzz", "sink", "serde"]
+fuzz = []
+serde = ["moirai-protocol/serde", "moirai-macros/serde", "moirai-crdt/serde"]
+sink = ["moirai-protocol/sink","moirai-fuzz/sink","moirai-macros/sink","moirai-crdt/sink"]
