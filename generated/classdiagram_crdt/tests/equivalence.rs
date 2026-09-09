@@ -2464,12 +2464,14 @@ fn ip32_both_paths_serialize_this_metamodels_log_and_get_it_back() {
 /// the read-out check and fail the first thing it tried to do afterwards,
 /// which is what the test below this one is for.
 ///
-/// The comparison is against `a`, the replica the state was taken from, and
-/// not against `b`. That is the claim — a joiner reads what its donor reads —
-/// and it is also all that can honestly be claimed here, because on four of
-/// these thirty scripts `a` and `b` do not converge with each other. See
-/// [`ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way`],
-/// which is where that was found and where it is pinned.
+/// The comparison is against both donors and not against `a` alone. Until the
+/// `moirai-crdt` fix of 2026-09-09 it could only be against `a`: on four of
+/// these thirty scripts `a` and `b` did not converge with each other, so
+/// comparing a joiner against `b` would have been comparing it against a
+/// document nobody else held. See
+/// [`ip32_every_script_leaves_the_two_replicas_holding_the_same_document`],
+/// which is where that was found and where it is now asserted the other way
+/// round.
 #[test]
 fn ip32_a_joiner_adopting_a_snapshot_reads_what_the_donor_reads() {
     let scripts = scripts();
@@ -2489,7 +2491,7 @@ fn ip32_a_joiner_adopting_a_snapshot_reads_what_the_donor_reads() {
                 transferred += 1;
                 gen_bytes += transfer.gen_bytes;
                 interp_bytes += transfer.interp_bytes;
-                if let Err(reason) = transfer.compare_with('a') {
+                if let Err(reason) = transfer.compare_everywhere() {
                     failures.push(format!("{}: after the transfer\n{reason}", script.label));
                 }
                 let joined = transfer.gen_joiner.stability().delivered;
@@ -2724,70 +2726,66 @@ fn ip32_the_transfer_oracle_notices_when_the_joiner_adopts_the_wrong_state() {
 }
 
 // ---------------------------------------------------------------------------
-// 13. What building `ip32` turned up: two replicas that do not converge
+// 13. What building `ip32` turned up: two replicas that did not converge
 // ---------------------------------------------------------------------------
 
-/// Four of the thirty scripts leave `a` and `b` holding different documents
-/// after every operation has been delivered to both, and **both paths fail
-/// the same way**.
+/// Every one of the thirty scripts leaves `a` and `b` holding the same
+/// document once every operation has been delivered to both, and each replica's
+/// two paths hold it too.
 ///
-/// # How this was found
+/// # How the defect this now asserts against was found
 ///
 /// `ip32` compares a joiner against a donor. Its first version compared
-/// against both donors, and four scripts failed at `b` while passing at `a`,
-/// which can only mean `a` and `b` disagree with each other. Neither `ip30`
-/// nor `ip31` could have seen it: every comparison in this file until now is
-/// interpreted-`a` against generated-`a` and interpreted-`b` against
-/// generated-`b`, never `a` against `b`. Two paths that fail to converge in
-/// exactly the same way pass an oracle built that way, and these two do.
+/// against both donors, and four scripts — `concurrent seed 0`, `7`, `10` and
+/// `13` — failed at `b` while passing at `a`, which can only mean `a` and `b`
+/// disagreed with each other. Neither `ip30` nor `ip31` could have seen it:
+/// every comparison in this file until this test is interpreted-`a` against
+/// generated-`a` and interpreted-`b` against generated-`b`, never `a` against
+/// `b`. Two paths that fail to converge in exactly the same way pass an oracle
+/// built that way, and these two did — which is evidence for the equivalence
+/// claim rather than against it, the interpreted `LeafLog` reaching the same
+/// `moirai-crdt` logs and reproducing the non-convergence operation for
+/// operation.
 ///
-/// # What is happening
-///
-/// Not a merge failure. On `concurrent seed 0` the divergence appears at the
-/// delivery of a round whose four edits touch `invariants`, `name` and
-/// `qualifiedName`, and the feature that comes out different is `isAbstract`,
+/// It was never a merge failure. On `concurrent seed 0` the divergence appeared
+/// at the delivery of a round whose four edits touch `invariants`, `name` and
+/// `qualifiedName`, and the feature that came out different was `isAbstract`,
 /// which nobody wrote in that round. The only thing that changes an untouched
 /// leaf at a delivery is stabilization: `Replica::deliver` asks
 /// `IsTcsb::is_stable` and, when it answers, calls `IsLog::stabilize` down the
-/// whole tree (`moirai-protocol/src/replica.rs:253-260`).
+/// whole tree (`moirai-protocol/src/replica.rs:253-260`). At that delivery both
+/// replicas had delivered the same nine events and both reported
+/// `stable_prefix: 7`, but their stable *versions* differed — `a` holding
+/// `[("a", 3), ("b", 4)]` and `b` holding `[("b", 2), ("a", 5)]` — which is
+/// legitimate, a replica's view of what its peers have acknowledged lagging
+/// differently on each side. What was not legitimate is that the two
+/// stabilizations then produced different states.
 ///
-/// At that delivery both replicas have delivered the same nine events and
-/// both report `stable_prefix: 7`, but their stable *versions* differ:
-/// `a` holds `[("a", 3), ("b", 4)]` and `b` holds `[("b", 2), ("a", 5)]`.
-/// That is legitimate — a replica's view of what its peers have acknowledged
-/// lags differently on each side — so each replica stabilizes a different set
-/// of operations, in a different order. What is not legitimate is that the
-/// two stabilizations produce different states:
+/// # The two causes, and the fix
 ///
-/// * `DWFlag` has no `stabilize` of its own, so a stabilized operation is
-///   folded in by `IsStableState<DWFlag> for Option<bool>::apply`
-///   (`moirai-crdt/src/flag/dw_flag.rs:33-41`), which simply overwrites:
-///   the stable value is whichever flag operation was stabilized *last*. And
-///   `execute_query` returns `false` immediately when the stable value is
-///   `Some(false)` (`dw_flag.rs:93-97`), so once a replica has stabilized a
-///   `Disable` last, no unstable `Enable` can ever be read again on it.
+/// Fixed on this branch at moirai `akira/interpreted-path`, both in
+/// `moirai-crdt`, which is Léo Olivier's; the fix is deliberately not offered
+/// upstream while he finishes his manuscript. Both defects are still present at
+/// moirai `origin/master`.
 ///
-/// * `RWSet::stabilize` (`moirai-crdt/src/set/rw_set.rs:129-163`) decides
-///   whether to drop a stabilizing `Remove(v)` from the PO-Log by looking at
-///   what is *still unstable* at that moment, and a `Remove(v)` that stays in
-///   `stable.1` permanently masks every `Add(v)` in `execute_query`
-///   (`rw_set.rs:184-190`). Two replicas stabilizing different sets keep
-///   different removes.
+/// * `IsStableState<DWFlag> for Option<bool>::apply` overwrote, so the stable
+///   value was whichever flag operation stabilized *last*, and a batch of
+///   causally stable operations is folded in the order each replica delivered
+///   them. It now keeps a stable `Disable` against a concurrent `Enable`, which
+///   is what disable-wins means, and a causally later `Enable` still clears the
+///   stable state through `prune_redundant_ops` before it is folded in.
 ///
-/// # Why this test asserts the defect rather than the fix
-///
-/// `moirai-crdt` is Léo Olivier's and is out of scope for this branch. The
-/// value here is that the *two paths agree even about this*: the interpreted
-/// `LeafLog` reaches the same `moirai-crdt` logs and reproduces the
-/// non-convergence operation for operation, which is evidence for the
-/// equivalence claim rather than against it. A fix upstream makes this test
-/// fail, which is the point: it is a pin, and the number in it is a
-/// measurement.
+/// * `RWSet`'s stable state kept its stable removes past a `Clear` — the
+///   `Clear` arm of `IsStableState::prune_redundant_ops` cleared the stable
+///   adds and not the stable removes — and `RWSet::stabilize` dropped a stable
+///   `Remove(v)` when a merely concurrent `Add(v)` stabilized. Both are now
+///   the other way round: a `Clear` retires every stable operation, and a
+///   stabilizing `Add(v)` that finds a `Remove(v)` anywhere in the PO-Log
+///   loses to it.
 #[test]
-fn ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way() {
+fn ip32_every_script_leaves_the_two_replicas_holding_the_same_document() {
     let scripts = scripts();
-    let mut split: Vec<&str> = Vec::new();
-    let mut features: Vec<String> = Vec::new();
+    let mut split: Vec<String> = Vec::new();
     for script in &scripts {
         let mut harness = Harness::new();
         harness
@@ -2795,18 +2793,14 @@ fn ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way
             .unwrap_or_else(|reason| panic!("{reason}"));
         let interp_a = harness.interp_doc('a');
         let interp_b = harness.interp_doc('b');
-        if interp_a == interp_b {
-            continue;
-        }
-        split.push(&script.label);
-        // The two paths have to disagree in exactly the same way, which is
-        // the claim this file exists for and is what makes the divergence a
-        // `moirai-crdt` finding rather than an interpreted-path one.
+        // The two paths have to agree at each seat as well, which is the claim
+        // this file exists for: a divergence that both paths reproduce is a
+        // `moirai-crdt` finding, and one that only one path reproduces is an
+        // equivalence failure.
         assert_eq!(
             interp_a,
             harness.gen_doc('a'),
-            "{}: the two paths differ at `a`, which would be a real \
-             equivalence failure and not this one",
+            "{}: the two paths differ at `a`",
             script.label
         );
         assert_eq!(
@@ -2815,55 +2809,53 @@ fn ip32_the_two_replicas_do_not_always_converge_and_both_paths_fail_the_same_way
             "{}: the two paths differ at `b`",
             script.label
         );
-        for Feature { name, .. } in FEATURES {
-            if interp_a.get(name) != interp_b.get(name) {
-                features.push(name.to_string());
-            }
+        if interp_a == interp_b {
+            continue;
         }
-        eprintln!(
-            "ip32 {} leaves the two replicas split\n  a: {}\n  b: {}",
+        let where_ = difference(&interp_a, &interp_b, "")
+            .unwrap_or_else(|| "the documents differ but no key does".to_string());
+        split.push(format!(
+            "{} leaves the two replicas split at {where_}\n  a: {}\n  b: {}",
             script.label,
             serde_json::to_string(&interp_a).unwrap_or_default(),
             serde_json::to_string(&interp_b).unwrap_or_default(),
-        );
+        ));
     }
-    features.sort();
-    features.dedup();
     eprintln!(
-        "ip32: {} of {} scripts leave the two replicas holding different documents, on {features:?}",
-        split.len(),
+        "ip32: {} of {} scripts leave the two replicas holding the same document",
+        scripts.len() - split.len(),
         scripts.len()
     );
-    assert_eq!(
-        split,
-        vec![
-            "concurrent seed 0",
-            "concurrent seed 7",
-            "concurrent seed 10",
-            "concurrent seed 13"
-        ],
-        "the four scripts that do not converge, by name"
-    );
-    assert_eq!(
-        features,
-        vec!["invariants", "isAbstract"],
-        "the remove-wins set and the disable-wins flag, and no other feature"
+    assert!(
+        split.is_empty(),
+        "{} of {} scripts leave the two replicas holding different documents:\n{}",
+        split.len(),
+        scripts.len(),
+        split.join("\n\n")
     );
 }
 
-/// The smallest shape of the remove-wins half, found by enumerating every
-/// pair of concurrent operation lists of length at most two over
-/// `{Add, Remove, Clear}` on `Class.invariants`: thirty-two of them do not
-/// converge and this is the shortest.
+/// The smallest shape of the remove-wins half, found by enumerating every pair
+/// of concurrent operation lists of length at most two over `{Add, Remove}` on
+/// two elements plus `Clear` on `Class.invariants`: thirty-two of the nine
+/// hundred and sixty-one did not converge and this is the shortest.
 ///
-/// `a` adds `alpha`. Concurrently `b` removes `alpha` and then clears the
-/// set. Afterwards `a` reads an empty set and `b` reads `["alpha"]`, on both
-/// paths. The `Clear` is what makes it: it is `redundant_itself` for `RWSet`
+/// `a` adds `alpha`. Concurrently `b` removes `alpha` and then clears the set.
+/// The `Clear` is what made it: it is `redundant_itself` for `RWSet`
 /// (`rw_set.rs:88-96`) so it never enters the PO-Log, and it makes every
-/// causally preceding operation redundant, which on `b` retires the `Remove`
-/// it issued and on `a` does not, because on `a` the `Add` arrived first.
+/// causally preceding operation redundant, which on `b` retired the `Remove` it
+/// issued. On `a` the `Add` arrived first, so the `Remove` stabilized while
+/// that `Add` was still unstable and was kept in the stable state — and the
+/// `Clear` that followed used to clear only the stable adds, leaving a stable
+/// `Remove` that went on masking the `Add` for good. `a` read the empty set and
+/// `b` read `["alpha"]`, on both paths. Both now read `["alpha"]`, which is
+/// what the PO-Log says with no stabilization at all: the `Clear` retires the
+/// `Remove` that precedes it, and the `Add` it is concurrent with survives it.
+///
+/// The enumeration itself is kept in `moirai-crdt` as
+/// `set::rw_set::tests::every_concurrent_pair_of_at_most_two_operations_converges`.
 #[test]
-fn ip32_the_shortest_pair_of_concurrent_edits_that_does_not_converge() {
+fn ip32_an_add_concurrent_with_a_remove_and_a_clear_converges_on_both_paths() {
     let mut harness = Harness::new();
     harness.apply(&open()).unwrap_or_else(|r| panic!("{r}"));
     harness.deliver().unwrap_or_else(|r| panic!("{r}"));
@@ -2884,18 +2876,13 @@ fn ip32_the_shortest_pair_of_concurrent_edits_that_does_not_converge() {
     assert_eq!(interp_a, harness.gen_doc('a'), "the two paths agree at `a`");
     assert_eq!(interp_b, harness.gen_doc('b'), "the two paths agree at `b`");
     assert_eq!(
-        interp_a.get("invariants"),
-        None,
-        "`a` reads the empty set, so the key is pruned: {interp_a}"
-    );
-    assert_eq!(
-        interp_b["invariants"],
-        json!(["alpha"]),
-        "`b` reads the element `a` added: {interp_b}"
-    );
-    assert_ne!(
         interp_a, interp_b,
         "the two replicas delivered the same three operations and have to \
-         differ here, or this test is pinning nothing"
+         agree here"
+    );
+    assert_eq!(
+        interp_a["invariants"],
+        json!(["alpha"]),
+        "the add is concurrent with the remove the clear retired: {interp_a}"
     );
 }
