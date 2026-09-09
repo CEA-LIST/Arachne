@@ -1587,6 +1587,59 @@ mod tests {
         });
     }
 
+    /// The file the census is inside right now, with its size and the moment
+    /// it started, which is all the watchdog below needs.
+    static CENSUS_CURRENT: std::sync::Mutex<Option<(String, u64, std::time::Instant)>> =
+        std::sync::Mutex::new(None);
+
+    /// A per-file deadline, because one pathological file in a corpus of
+    /// thousands must not stall the run.
+    ///
+    /// A hang is not a panic and cannot be caught like one: the thread that is
+    /// stuck cannot be unwound, so the watchdog writes the file's row itself
+    /// with the status `hang` and ends the process. Every file already named
+    /// in `files.csv` is skipped, so the next invocation resumes past it and
+    /// the hung file stays in the record as a hang rather than vanishing.
+    fn watchdog(files_path: PathBuf, seconds: u64) {
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let stuck = match &*CENSUS_CURRENT.lock().expect("the census slot") {
+                    Some((rel, bytes, started)) if started.elapsed().as_secs() >= seconds => {
+                        Some((rel.clone(), *bytes))
+                    }
+                    _ => None,
+                };
+                let Some((rel, bytes)) = stuck else { continue };
+                if let Ok(mut files) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&files_path)
+                {
+                    let _ = writeln!(
+                        files,
+                        "{}",
+                        csv(&[
+                            rel.clone(),
+                            bytes.to_string(),
+                            "hang".to_string(),
+                            "0".to_string(),
+                            "0".to_string(),
+                            "0".to_string(),
+                            String::new(),
+                            String::new(),
+                            format!("no answer in {seconds}s, ended by the census watchdog"),
+                        ])
+                    );
+                    let _ = files.flush();
+                }
+                println!("{rel}: hang after {seconds}s");
+                let _ = std::io::stdout().flush();
+                std::process::exit(7);
+            }
+        });
+    }
+
     /// Run `body`, turning a panic into an `Err` carrying its message.
     ///
     /// `merge_rule` and the two generators both `expect` their way through
@@ -1981,7 +2034,8 @@ mod tests {
     /// Knobs, all from the environment because a test takes no arguments:
     /// `CENSUS_ROOT` is the directory walked, `CENSUS_OUT` the directory the
     /// two CSVs are written to, `CENSUS_LIMIT` an optional cap on how many
-    /// files this invocation processes.
+    /// files this invocation processes, `CENSUS_TIMEOUT` the per-file deadline
+    /// in seconds, 60 by default and disabled by 0.
     #[test]
     #[ignore = "a corpus census, not a gate; run it from experiments/ip5-corpus-census/run.sh"]
     fn corpus_census_of_derived_rules_against_emitted_types() {
@@ -2035,6 +2089,13 @@ mod tests {
         }
 
         quiet_panics();
+        let timeout: u64 = std::env::var("CENSUS_TIMEOUT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(60);
+        if timeout > 0 {
+            watchdog(files_path.clone(), timeout);
+        }
         let corpus = ecore_files(&root);
         println!("corpus: {} .ecore files under {}", corpus.len(), root.display());
 
@@ -2053,6 +2114,10 @@ mod tests {
             }
             processed += 1;
             let bytes = std::fs::metadata(path).map_or(0, |meta| meta.len());
+            *CENSUS_CURRENT.lock().expect("the census slot") =
+                Some((rel.clone(), bytes, std::time::Instant::now()));
+            println!("> {rel}");
+            let _ = std::io::stdout().flush();
 
             let mut rows: Vec<String> = Vec::new();
             let mut status = "ok".to_string();
@@ -2184,6 +2249,7 @@ mod tests {
             .expect("a files row");
             results.flush().expect("flush results");
             files.flush().expect("flush files");
+            *CENSUS_CURRENT.lock().expect("the census slot") = None;
             println!("{rel}: {status}, {features} features");
         }
 
