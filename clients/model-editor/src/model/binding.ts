@@ -33,8 +33,7 @@
  * wire state to a decision, so the sync path calls one function.
  */
 
-import type { Descriptor, MetamodelId, ModelHeader, PlainJson, WireNode } from '../api/types';
-import { decodeState } from '../crdt/decode';
+import type { Descriptor, MetamodelId, ModelHeader, PlainJson } from '../api/types';
 import { metamodelIdOf } from './digest';
 import { modelHeaderOf } from './instance';
 
@@ -97,17 +96,16 @@ export function checkBinding(
 }
 
 /**
- * The whole step: decode the wire state, read its header, hash the descriptor
- * it would be rendered under, decide. Throws where `decodeState` and
- * `modelHeaderOf` throw, which is a wire-contract violation and is surfaced
- * as a failed sync rather than guessed around.
+ * The whole step: read the document's header, hash the descriptor it would be
+ * rendered under, decide. Throws where `modelHeaderOf` throws, which is a
+ * wire-contract violation and is surfaced as a failed sync rather than
+ * guessed around.
  */
 export async function applyModel(
-  wire: WireNode,
+  doc: PlainJson,
   served: Descriptor | null,
   recorded: ModelHeader | null,
 ): Promise<ApplyResult> {
-  const doc = decodeState(wire);
   const header = modelHeaderOf(doc);
   // Over the descriptor's bytes, here, every time: never a digest the node
   // reports for it. A headerless log has nothing to compare, so no hash.

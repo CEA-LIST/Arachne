@@ -18,13 +18,13 @@
 import type {
   Descriptor,
   HostedModel,
-  JsonOp,
   MetamodelId,
   MetamodelListing,
   ModelId,
+  ModelOp,
   OpResult,
+  PlainJson,
   Registration,
-  WireNode,
 } from './types';
 
 export class ApiError extends Error {
@@ -92,13 +92,15 @@ function modelPath(id: ModelId, leaf: 'state' | 'metamodel' | 'op'): string {
   return `/api/model/${encodeURIComponent(id)}/${leaf}`;
 }
 
-/** The state routes share one envelope: {"json": <WireNode>}. */
-async function readState(base: string, path: string): Promise<WireNode> {
+/**
+ * The state routes serve the model document itself: the canonical form the
+ * interpreted node renders, `null` for a model whose root has not been
+ * written. There is no envelope to unwrap and no per-character array to join.
+ */
+async function readState(base: string, path: string): Promise<PlainJson> {
   const response = await request(base, path);
   if (!response.ok) throw await failure(response, path);
-  const body = (await readJson(response, path)) as Record<string, unknown>;
-  if (!('json' in body)) throw new ApiError(`${path} body has no "json" field`);
-  return body['json'] as WireNode;
+  return (await readJson(response, path)) as PlainJson;
 }
 
 /** The descriptor routes: a descriptor of a format version the editor reads, or null on 404. */
@@ -110,12 +112,12 @@ async function readDescriptor(base: string, path: string): Promise<Descriptor | 
 }
 
 /** GET /api/state — the node's default log. */
-export function getState(base: string): Promise<WireNode> {
+export function getState(base: string): Promise<PlainJson> {
   return readState(base, '/api/state');
 }
 
 /** GET /api/model/{id}/state — one hosted model. A malformed id (400) and an unhosted one (404) both throw. */
-export function getModelState(base: string, id: ModelId): Promise<WireNode> {
+export function getModelState(base: string, id: ModelId): Promise<PlainJson> {
   return readState(base, modelPath(id, 'state'));
 }
 
@@ -222,12 +224,29 @@ export async function registerModel(
   return { modelId, metamodelId, created: reply['created'] === true };
 }
 
-/** The op routes share one envelope, {"JsonKind": op}, and one answer, {"success", "message"}. */
-async function submitOp(base: string, path: string, op: JsonOp): Promise<OpResult> {
+/**
+ * A `ModelOp` as the node's `serde_json` reads it.
+ *
+ * `Scalar::Float` carries the double's bit pattern, a `u64` that does not fit
+ * a JavaScript number, so the encoder builds it as a `bigint` and it is
+ * written here as an unquoted JSON integer — which is the only spelling
+ * serde reads back as a `u64`. Every other value goes through
+ * `JSON.stringify` untouched.
+ */
+export function stringifyModelOp(op: ModelOp): string {
+  const marker = '\u0000bigint:';
+  const text = JSON.stringify(op, (_key, value: unknown) =>
+    typeof value === 'bigint' ? `${marker}${value}` : value,
+  );
+  return text.replace(/"\\u0000bigint:(\d+)"/g, '$1');
+}
+
+/** The op routes take the operation as the whole body, and answer {"success", "message"}. */
+async function submitOp(base: string, path: string, op: ModelOp): Promise<OpResult> {
   const response = await request(base, path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ JsonKind: op }),
+    body: stringifyModelOp(op),
   });
   const body = (await readJson(response, path)) as Record<string, unknown>;
   if (!response.ok) {
@@ -245,12 +264,12 @@ async function submitOp(base: string, path: string, op: JsonOp): Promise<OpResul
  * ApiError); refused ops come back HTTP 200 with success:false — returned
  * as-is for the caller to surface.
  */
-export function postOp(base: string, op: JsonOp): Promise<OpResult> {
+export function postOp(base: string, op: ModelOp): Promise<OpResult> {
   return submitOp(base, '/api/op', op);
 }
 
 /** POST /api/model/{id}/op — one hosted model, the same contract as postOp; an unhosted id is 404 and throws. */
-export function postModelOp(base: string, id: ModelId, op: JsonOp): Promise<OpResult> {
+export function postModelOp(base: string, id: ModelId, op: ModelOp): Promise<OpResult> {
   return submitOp(base, modelPath(id, 'op'), op);
 }
 
@@ -260,9 +279,9 @@ export function validateDescriptor(body: unknown): Descriptor {
     throw new ApiError('metamodel descriptor is not a JSON object');
   }
   const desc = body as Partial<Descriptor>;
-  // Version 2 added the merge rule and its provenance to every feature entry
-  // and removed nothing, so the keys this editor reads are the same in both.
-  if (desc.formatVersion !== 1 && desc.formatVersion !== 2) {
+  // Version 2 is the one an interpreted node reads: it carries the merge rule
+  // every feature is routed by, and the slot table is computed from it.
+  if (desc.formatVersion !== 2) {
     throw new ApiError(`unsupported descriptor formatVersion: ${String(desc.formatVersion)}`);
   }
   if (typeof desc.classes !== 'object' || desc.classes === null || !Array.isArray(desc.rootClasses)) {

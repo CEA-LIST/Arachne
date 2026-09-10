@@ -1,4 +1,4 @@
-import type { JsonOp, OpResult } from '../api/types';
+import type { ModelOp, OpResult } from '../api/types';
 
 /**
  * A single global FIFO for op batches.
@@ -25,11 +25,11 @@ export class OpQueue {
   private chain: Promise<void> = Promise.resolve();
   private pending = 0;
 
-  private readonly post: (op: JsonOp) => Promise<OpResult>;
+  private readonly post: (op: ModelOp) => Promise<OpResult>;
   private readonly onPendingChange: (count: number) => void;
 
   constructor(
-    post: (op: JsonOp) => Promise<OpResult>,
+    post: (op: ModelOp) => Promise<OpResult>,
     onPendingChange: (count: number) => void = () => {},
   ) {
     this.post = post;
@@ -40,7 +40,7 @@ export class OpQueue {
     return this.pending;
   }
 
-  enqueue(ops: JsonOp[]): Promise<BatchOutcome> {
+  enqueue(ops: ModelOp[]): Promise<BatchOutcome> {
     if (ops.length === 0) {
       return Promise.resolve({ outcome: 'ok', applied: 0 });
     }

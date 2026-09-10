@@ -14,7 +14,8 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ApiError, getHealth, getMetamodels, getModels, registerModel } from '../api/client';
-import type { Descriptor, JsonOp, MetamodelId, ModelId, Path, PlainJson } from '../api/types';
+import type { Descriptor, MetamodelId, ModelId, Path, PlainJson } from '../api/types';
+import type { EditOp } from '../crdt/ops';
 import { openBrowserStore, type ModelStore } from '../model/store';
 import { initialState, reducer, selectedTab, type AppState, type LogEntry, type ModelTab } from '../state/store';
 import { FieldRegistry } from './fieldRegistry';
@@ -66,13 +67,13 @@ export interface SyncApi {
   sendOpsTo: (
     id: ModelId | null,
     description: string,
-    ops: JsonOp[],
+    ops: EditOp[],
     optimistic?: { path: Path; value: PlainJson },
   ) => Promise<BatchOutcome>;
   /** `sendOpsTo` for the selected model. */
   sendOps: (
     description: string,
-    ops: JsonOp[],
+    ops: EditOp[],
     optimistic?: { path: Path; value: PlainJson },
   ) => Promise<BatchOutcome>;
   clearBanner: () => void;

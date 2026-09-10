@@ -17,9 +17,11 @@
  */
 
 import { ApiError, getModelMetamodel, getModelState, postModelOp } from '../api/client';
-import type { Descriptor, JsonOp, ModelHeader, ModelId, Path, PlainJson } from '../api/types';
-import { MODEL_HEADER_REFUSAL, opTouchesModelHeader } from '../crdt/ops';
+import type { Descriptor, ModelHeader, ModelId, Path, PlainJson } from '../api/types';
+import { encodeBatch } from '../crdt/encode';
+import { MODEL_HEADER_REFUSAL, opTouchesModelHeader, type EditOp } from '../crdt/ops';
 import { setAtPath } from '../crdt/path';
+import { slotTable, type SlotTable } from '../crdt/table';
 import {
   applyModel,
   describeBinding,
@@ -69,6 +71,13 @@ export class ModelSession {
 
   #descriptor: Descriptor | null = null;
   #descriptorSource: 'node' | 'file' | null = null;
+  // The slot table the operations this session sends are addressed by
+  // (crdt/table.ts), derived from the descriptor in effect and recomputed
+  // whenever that changes. A descriptor the table cannot be read from is not
+  // a failed sync — the document still renders — but no edit can be encoded
+  // under it, so the reason is kept and said at the first attempt.
+  #table: SlotTable | null = null;
+  #tableError: string | null = null;
   #doc: PlainJson = null;
   // The binding check's memory (model/binding.ts): the header recorded at the
   // first apply that carried one, and the last verdict, so a change is
@@ -96,6 +105,27 @@ export class ModelSession {
 
   get descriptor(): Descriptor | null {
     return this.#descriptor;
+  }
+
+  /** The slot table the session encodes with, or null when the descriptor in effect yields none. */
+  get table(): SlotTable | null {
+    return this.#table;
+  }
+
+  /** Read the descriptor in effect into a slot table, keeping the reason when it cannot be read. */
+  #retable(): void {
+    if (this.#descriptor === null) {
+      this.#table = null;
+      this.#tableError = 'no metamodel descriptor is in effect, so no operation can be addressed';
+      return;
+    }
+    try {
+      this.#table = slotTable(this.#descriptor);
+      this.#tableError = null;
+    } catch (err) {
+      this.#table = null;
+      this.#tableError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   get doc(): PlainJson {
@@ -140,8 +170,10 @@ export class ModelSession {
       const descriptor = await getModelMetamodel(this.nodeUrl, this.id);
       this.#descriptor = descriptor;
       this.#descriptorSource = descriptor === null ? null : 'node';
+      this.#retable();
       this.#patch({ metamodel: descriptor, metamodelSource: this.#descriptorSource });
     } catch (err) {
+      this.#retable();
       this.#patch({ metamodel: null, metamodelSource: null });
       this.#banner(`metamodel fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -173,6 +205,7 @@ export class ModelSession {
   loadDescriptorFile(descriptor: Descriptor): void {
     this.#descriptor = descriptor;
     this.#descriptorSource = 'file';
+    this.#retable();
     this.#patch({ metamodel: descriptor, metamodelSource: 'file' });
   }
 
@@ -250,9 +283,9 @@ export class ModelSession {
    * after open. The document always comes from the node.
    */
   async refreshOnce(): Promise<void> {
-    const wire = await getModelState(this.nodeUrl, this.id);
+    const served = await getModelState(this.nodeUrl, this.id);
     if (this.#closed) return;
-    const result = await applyModel(wire, this.#descriptor, this.#recorded);
+    const result = await applyModel(served, this.#descriptor, this.#recorded);
     if (this.#closed) return;
     const changed = this.#binding === null || !sameBinding(this.#binding, result.binding);
     this.#binding = result.binding;
@@ -300,7 +333,7 @@ export class ModelSession {
    */
   async sendOps(
     description: string,
-    ops: JsonOp[],
+    ops: EditOp[],
     optimistic?: { path: Path; value: PlainJson },
   ): Promise<BatchOutcome> {
     const refuse = (outcome: BatchOutcome['outcome'], detail: string): BatchOutcome => {
@@ -317,11 +350,24 @@ export class ModelSession {
     // wire, for a caller that did not come through a control.
     if (this.#binding !== null && isRefusal(this.#binding)) return refuse('refused', describeBinding(this.#binding));
     if (this.#closed) return refuse('error', 'the model is closed');
+    // The encoding, against the document the intents were computed from and
+    // before the optimistic patch moves it: an intent this session cannot
+    // address is refused here, naming the feature, rather than sent as a
+    // well-formed operation that would land somewhere else.
+    if (this.#table === null) {
+      return refuse('refused', this.#tableError ?? 'no slot table for this model');
+    }
+    let encoded;
+    try {
+      encoded = encodeBatch(this.#table, this.#doc, ops);
+    } catch (err) {
+      return refuse('refused', err instanceof Error ? err.message : String(err));
+    }
     if (optimistic !== undefined) {
       this.#doc = setAtPath(this.#doc, optimistic.path, optimistic.value);
       this.#patch({ doc: this.#doc });
     }
-    const result = await this.#queue.enqueue(ops);
+    const result = await this.#queue.enqueue(encoded);
     this.#log({ ts: Date.now(), description, ops, outcome: result.outcome, detail: result.detail });
     if (result.outcome !== 'ok') {
       this.#banner(

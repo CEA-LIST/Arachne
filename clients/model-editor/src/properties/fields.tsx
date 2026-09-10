@@ -30,7 +30,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JsonOp, Path } from '../api/types';
+import type { Path } from '../api/types';
+import type { EditOp } from '../crdt/ops';
 import { pathKey } from '../crdt/path';
 import { setBooleanOps, setNumberOps, setStringOps } from '../crdt/ops';
 import { FieldRegistry, TYPING_THRESHOLD_MS } from '../sync/fieldRegistry';
@@ -44,7 +45,7 @@ export const OK_FLASH_MS = 1200;
 
 export type SendOps = (
   description: string,
-  ops: JsonOp[],
+  ops: EditOp[],
   optimistic?: { path: Path; value: import('../api/types').PlainJson },
 ) => Promise<BatchOutcome>;
 

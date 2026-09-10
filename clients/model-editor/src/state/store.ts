@@ -13,7 +13,8 @@
  * how a session's late event after its tab was closed cannot resurrect it.
  */
 
-import type { Descriptor, HostedModel, JsonOp, MetamodelListing, ModelId, PlainJson } from '../api/types';
+import type { Descriptor, HostedModel, MetamodelListing, ModelId, PlainJson } from '../api/types';
+import type { EditOp } from '../crdt/ops';
 import type { Binding } from '../model/binding';
 import type { Diagnostic } from '../model/conformance';
 import type { Projection } from '../model/projection';
@@ -24,7 +25,7 @@ export interface LogEntry {
   id: number;
   ts: number;
   description: string;
-  ops: JsonOp[];
+  ops: EditOp[];
   /**
    * ok = all applied; refused = the node answered success:false; error =
    * HTTP/network failure; diagnostic = the converged document violates an
