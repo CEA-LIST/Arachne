@@ -4,33 +4,33 @@ A metamodel-agnostic web editor for the models a moirai node hosts. It talks onl
 
 ## Run
 
-The usual way is the Compose rig, which starts a whole cluster and publishes two replicas for browsers:
-
-```
-cd ../../../moirai-modelsward/docker && ./rig.sh --edit --no-load
-npm install && npm run dev      # in this directory
-```
-
-Then open the printed URL, connect to `http://127.0.0.1:8081` (or `:8082` for the second replica — two browser windows on the two replicas is how convergence is demonstrated), and open a model from the **Models** tab: the rig's pinned default log is listed there as `default log`, and any model created on one replica can be joined by its id on the other.
-
-`editor-a` and `editor-b` join the same cluster as the scaled replicas and serve the descriptors under `/metamodels` (`METAMODEL_DIR`), the baked-in one on `/api/metamodel` as well (`METAMODEL_PATH` overrides which one). `--no-load` keeps the load driver's random writes out of the document during a session with people. `./rig.sh down` removes everything.
-
-Two peered nodes without Docker, when that is all you need (from `generated/json_crdt`; `nice -n 10 … -j 2` is the machine discipline for a build, not a requirement of the binary):
+The editor talks to interpreted replicas — `model_node`, which reads its merge rules from the metamodel descriptor at run time. Two of them, from the moirai worktree:
 
 ```sh
-nice -n 10 cargo build --example network_node -j 2
-REPLICA_ID=a LISTEN_PORT=7101 HTTP_PORT=3101 PEERS=b:127.0.0.1:7102 \
-  METAMODEL_DIR=../../examples ./target/debug/examples/network_node &
-REPLICA_ID=b LISTEN_PORT=7102 HTTP_PORT=3102 PEERS=a:127.0.0.1:7101 \
-  METAMODEL_DIR=../../examples ./target/debug/examples/network_node &
+cd <moirai worktree>/docker/compose
+./stack_interpreter.sh infra up
+./stack_interpreter.sh up alice --port 8081
+./stack_interpreter.sh up bob   --port 8082
 ```
+
+Then in this directory:
+
+```sh
+npm install && npm run dev
+```
+
+Open the printed URL in two windows, connect one to `http://127.0.0.1:8081` and the other to `http://127.0.0.1:8082`, and in the first window create a model from the **Models** tab. Its id is listed there in full; copy it, and in the second window use **Join by id**, pasting the id and choosing the same metamodel. Both windows now edit one model on two replicas, which is how convergence is demonstrated.
+
+**A model created on one replica is not listed on the other until that replica is asked to host it.** That is not a bug and it is the first thing that looks like one: a node lists what it hosts, there is no cluster-wide catalog, and joining by id is how a second replica comes to host a model. `./stack_interpreter.sh --help` documents the rest; `down-all` removes everything.
+
+The editor speaks the interpreted `ModelOp` dialect and nothing else. A generated `network_node` answers every operation it sends with `400 Invalid op JSON`, so the old `rig.sh --edit` path no longer works for it.
 
 Scripts in this directory:
 
 ```sh
 npm run dev        # dev server
-npm test           # unit tests (vitest), plus mp27 and mp28 against two live nodes when the binary above exists
-npm run e2e        # the level-4 harness: mp26 in headless Chrome against two live nodes (see below)
+npm test           # unit tests (vitest), plus the live-node scenarios when the model_node binary exists
+npm run e2e        # the level-4 harness: ip-editor against a running stack, and mp26 in headless Chrome (see below)
 npm run lint       # oxlint
 npm run build      # type-check + production bundle in dist/
 ```
@@ -54,14 +54,14 @@ Keyboard: `↑ ↓` move, `→ ←` expand/collapse or step in and out, `Home`/`
 A model is its log: the node hosts any number, each under a 32-hex `ModelId`, and `GET /api/models` lists them with the `{nsURI, digest}` of the metamodel each was registered under (`null` for the node's default log, which the unscoped routes serve and which the list shows as `default log`). The Models tab is that list, refreshed on connect, after every registration and on demand, and three things can be done from it:
 
 - **Open** a hosted model in a tab.
-- **New model**: choose one of the descriptors the node holds (`GET /api/metamodels`, shown as package and nsURI) and `POST /api/models {metamodel_id}`. The node mints the id and writes the `__model` header as the log's first operations; the editor never chooses an id. The model opens in a tab.
-- **Join by id**: paste an id learned out of band and choose the metamodel it is bound to, then `POST /api/models {model_id, metamodel_id}`. The node hosts the id with no history and asks its peers for the model; the header arrives with it. There is no cluster-wide catalog: a node lists what it hosts and nothing else, and a model's replication factor is the number of nodes that registered it.
+- **New model**: choose one of the descriptors the node holds (`GET /api/metamodels`, shown as package and nsURI) and `POST /api/models {metamodel_id}`. The node mints the id and opens the model's log with the `Install` operation that carries the descriptor; the editor never chooses an id. The model opens in a tab, and its id is listed in full in the panel, which is what another replica needs to join it.
+- **Join by id**: paste an id learned out of band and choose the metamodel it is bound to, then `POST /api/models {model_id, metamodel_id}`. The node hosts the id with no history and asks its peers for the model; the log arrives from them, the `Install` operation with it. There is no cluster-wide catalog: a node lists what it hosts and nothing else, and a model's replication factor is the number of nodes that registered it.
 
 Each open tab is one `ModelSession` (`src/sync/modelSession.ts`) addressed to its model's routes on the node it was opened against: its own document, its own descriptor (`GET /api/model/{id}/metamodel`), its own poll of `GET /api/model/{id}/state` on every interval whether or not it is the selected tab, its own op queue posting to `POST /api/model/{id}/op`, its own field registry so one tab's caret never writes into another's document, and its own binding verdict, store outcome and recorded header. The reducer (`src/state/store.ts`) holds the tabs as a map keyed by id; a session's event for a tab that has been closed is dropped. Disconnecting closes every tab, since every tab was opened against that connection.
 
 ## Metamodel discovery
 
-When a model is opened the editor calls `GET /api/model/{id}/metamodel`, which serves the descriptor the model was registered under. The node answers with a formatVersion-1 descriptor (classes with attributes/containments/references, root classes, enums) that `arachne-codegen` emits as `metamodel.json` beside every generated crate; `network_node` holds every `.json` descriptor found under `METAMODEL_DIR`, keyed by digest, and the file named by `METAMODEL_PATH` (default `./metamodel.json`) beside them.
+When a model is opened the editor calls `GET /api/model/{id}/metamodel`, which serves the descriptor the model was registered under. The node answers with a formatVersion-2 descriptor: classes with attributes/containments/references, root classes and enums as before, and on every feature the merge rule the node routes it by. The editor reads that rule — an interpreted replica addresses an operation by slot, and both sides compute the slots from the same descriptor. `model_node` holds every `.json` descriptor found under `METAMODEL_DIR`, keyed by digest, and the file named by `METAMODEL_PATH` (default `./metamodel.json`) beside them.
 
 If the node answers 404 (a model with no descriptor to serve), the Metamodel tab offers the labelled fallback: load a descriptor file produced by `arachne describe <file.ecore>`; the binding check then runs against that file.
 
@@ -73,9 +73,15 @@ Every action lands in the action log with its exact op payloads and the node's v
 
 ## How edits reach the wire
 
-Every edit intent is mapped by `src/crdt/ops.ts` to a sequence of `JsonKind` ops posted **one at a time** (`POST /api/model/{id}/op` takes exactly one op — `moirai-network/src/http_api.rs`); string edits are diffed into at most one `DeleteRange` plus single-character `Insert`s (the wire accepts one character per op), numbers commit as a single relative `Inc`, array/containment creation uses the insert-then-update idiom with the mandatory `eClass` field first. One FIFO queue per open model serializes that model's batches so sequences never interleave. Every open tab polls its `GET /api/model/{id}/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are surfaced three ways — at the field, in the alert dock, and in the log, where the row names its model — and the log is exportable.
+Every edit intent is mapped by `src/crdt/ops.ts` to an `EditOp` — what the user did, said in the vocabulary of the document — and `src/crdt/encode.ts` turns that into the `ModelOp`s an interpreted replica routes, posted **one at a time** (`POST /api/model/{id}/op` takes exactly one op, as the whole body, with nothing wrapping it).
+
+An operation is a path of slots ending in one write: `Variant(class)` for every object on the path, `Field(feature)` for every step into a feature, then the collection step (`Seq`, `Opt`) and the leaf write. `src/crdt/table.ts` computes those slots from the model's own descriptor exactly as `moirai-semantics/src/parse.rs` does — classes sorted by name, enums numbered separately, and a feature's position among its class's *visible* features, own and inherited, sorted by name. Getting that wrong is silent, because an operation addressing the wrong feature is well-formed and the node applies it, so the encoder refuses rather than guesses: a class the document does not name, a feature the class cannot see, a keyed collection or a transparent class all throw at encode time, naming what could not be addressed, and the batch is refused before anything is posted.
+
+The rule decides the write, not the JavaScript type: a text leaf is diffed into at most one `DeleteRange` plus single-character `InsertChar`s, a counter moves by `Inc`/`Dec` at the width the descriptor declares, a flag is `Enable`/`Disable`, a register or an enum is one `Write`, and a set is addressed by value and never by position. A path is encoded against the document the node last served, which is where the class of every object on it comes from; a batch advances a shadow document as it encodes, so a mint and the writes into what it made travel together. One FIFO queue per open model serializes that model's batches so sequences never interleave. Every open tab polls its `GET /api/model/{id}/state` (500 ms, configurable); a field being typed in is never clobbered by a refresh (focus + 500 ms typing threshold, selection restored otherwise). Refused ops (`success:false`) and HTTP errors are surfaced three ways — at the field, in the alert dock, and in the log, where the row names its model — and the log is exportable.
 
 ### The binding check at apply
+
+**Against an interpreted node this check is inert, and that is open work.** An interpreted replica writes no `__model` into the document — a model's identity lives in the `Install` operation that opened its log and in the node's own registration, which `GET /api/models` answers — so every verdict is `unbound`, the document is applied under the descriptor the node serves for it, and everything keyed on `bound` below (the projection file, the conformance report) does not happen. The scenarios that assert those behaviours skip with an `E2E-SKIP` line saying exactly this. What follows describes the check as built.
 
 A model's document carries `__model` — its id and the `{nsURI, digest}` of the metamodel it is bound to — written once by the node that created it. Before a fetched state reaches a tab, `src/model/binding.ts` hashes the descriptor the document would be rendered under (the SHA-256 over canonical JSON the node computes, `src/model/digest.ts`) and compares it with the header's digest; it also compares the header with the one it recorded at the first apply, because the header is immutable by rule. On a match the state is applied. On a mismatch nothing is: the alert dock and the action log name both pairs, the tab's model panel says so, the top bar reads `not applied`, and the edit gate holds every control with the same sentence; the tab's session refuses batches at the wire for as long as it lasts, and refuses any batch that would write `__model` regardless. The check is per tab: a refused model in one tab leaves the others editable. A log with no header — the default log of a step-1 deployment — is applied under the loaded descriptor exactly as before, and the top bar reads `unbound`. The digest is always computed over the descriptor's bytes, never read from a label the node reports, so a node that serves the wrong file under the right name is caught too; the editor keeps no descriptor cache keyed by a reported digest for the same reason, each tab fetching its own descriptor once when it opens.
 
@@ -85,9 +91,11 @@ After an apply the binding check lets through as `bound`, `src/model/projection.
 
 ### The level-4 harness
 
-`npm run e2e` runs the validation plan's mp26 end to end (`e2e/mp26.e2e.ts`, under `vitest.e2e.config.ts`): it builds the editor with `vite build` and serves it with `vite preview` on the loopback interface (a secure context, which the store's OPFS and the digest's `crypto.subtle` need), starts two `network_node` processes peered with each other with `METAMODEL_DIR` holding both `bt.metamodel.json` and `uml.metamodel.json` (`src/testing/liveNodes.ts`, the e2e process backend's recipe), launches the system Chrome headless through `puppeteer-core` with a throwaway profile, and drives two pages in two browser contexts through the editor's own controls: connect each to its node; create a behaviour-tree model on editor-a and join it by id on editor-b; create a SimpleUML model on editor-b and join it by id on editor-a; four tabs; rename a Sequence in the behaviour-tree tab and add a Class named Door in the UML tab. It asserts per-model convergence through `GET /api/model/{id}/state` on both nodes and through what each tab renders (the console's Document JSON view), no cross-talk (the behaviour-tree document never holds a `Class` or a UML key, the UML document never a `Sequence` or a behaviour-tree key), that each tab was served the descriptor its header names, and that each browser context's store holds exactly one file per model whose bytes are the canonical JSON of that model's converged state. Nodes, Chrome and the preview server are killed however the run ends.
+`npm run e2e` runs two scenarios. **ip-editor** (`e2e/ipEditor.e2e.ts`) drives the editor's own `ModelSession` — the same encoder, queue and client a control in the browser goes through — against the two replicas of the stack above, named by `MOIRAI_LIVE_NODES` (default `:8081,:8082`): it creates a model and an element, edits a string attribute and reads the characters back in order, inserts children into an ordered containment at chosen positions and reads the order back, has the second replica's session edit the same model until both agree, and checks that the two things the editor refuses on its own — the model header, and a feature no class can see — are refused before anything is posted. Unit tests cannot make that claim: they compare operations with operations, and a wrong slot is a well-formed operation. With no stack up it prints an `E2E-SKIP` line and skips.
 
-It needs the node binary (`generated/json_crdt/target/debug/examples/network_node`, or `MOIRAI_E2E_NODE_BIN`) and Chrome (`/usr/bin/google-chrome`, or `CHROME_BIN`); without either it prints an `E2E-SKIP` line and skips, the discipline the e2e suite uses. `npm test` follows the same rule for mp27 (a model opened on a node whose descriptor file was edited is refused, both pairs shown, editing held, nothing stored) and mp28 (the store file equals the converged model, and a restart after the file is tampered trusts the log), which run the sync path against two live nodes with the directory store and no browser.
+**mp26** runs the validation plan's scenario end to end (`e2e/mp26.e2e.ts`, under `vitest.e2e.config.ts`): it builds the editor with `vite build` and serves it with `vite preview` on the loopback interface (a secure context, which the store's OPFS and the digest's `crypto.subtle` need), starts two `model_node` processes peered with each other with `METAMODEL_DIR` holding both `bt.metamodel.json` and `uml.metamodel.json` (`src/testing/liveNodes.ts`, the e2e process backend's recipe), launches the system Chrome headless through `puppeteer-core` with a throwaway profile, and drives two pages in two browser contexts through the editor's own controls: connect each to its node; create a behaviour-tree model on editor-a and join it by id on editor-b; create a SimpleUML model on editor-b and join it by id on editor-a; four tabs; rename a Sequence in the behaviour-tree tab and add a Class named Door in the UML tab. It asserts per-model convergence through `GET /api/model/{id}/state` on both nodes and through what each tab renders (the console's Document JSON view), no cross-talk (the behaviour-tree document never holds a `Class` or a UML key, the UML document never a `Sequence` or a behaviour-tree key), that each tab was served the descriptor its header names, and that each browser context's store holds exactly one file per model whose bytes are the canonical JSON of that model's converged state. Nodes, Chrome and the preview server are killed however the run ends.
+
+It needs the interpreted node binary (`moirai-model-plane/target/debug/examples/model_node`, or `MOIRAI_E2E_NODE_BIN`) and Chrome (`/usr/bin/google-chrome`, or `CHROME_BIN`); without either it prints an `E2E-SKIP` line and skips, the discipline the e2e suite uses. `npm test` follows the same rule for mp27 (a model opened on a node whose descriptor file was edited is refused, both pairs shown, editing held, nothing stored), mp28 (the store file equals the converged model, and a restart after the file is tampered trusts the log) and mp37 (two replicas each accept one half of a duplicate and both report it with editing left enabled), which run the sync path against two live nodes with the directory store and no browser. All three, and mp26 with them, currently skip on the header above: they need a model's identity to reach the editor from its registration rather than from the document.
 
 ### The edit gate, and why edits are held
 
@@ -111,6 +119,8 @@ Measured production bundle: **JS 299.4 kB raw / 90.9 kB gzip, CSS 29.8 kB / 5.8 
 - No access control or security.
 - No eOpposite maintenance: setting one side of an opposite pair does not update the other.
 - Reordering a collection element is delete + full re-create at the target index (no move op on the wire) — see the edit gate above.
-- `Object.Remove` resets a key to its type default rather than deleting it; an object slot counts as present only while its `eClass` is non-empty.
+- No keyed (`uw-map`) collections and no transparent classes: the encoder refuses an operation that would address one, naming the feature, rather than misrouting it.
+- No way to empty a single-valued containment: the interpreted node has no operation that does it, so the control refuses naming the feature. An optional one unsets normally.
+- No `__model` header on the interpreted path, so the binding check answers `unbound`, no projection file is written and no conformance report is produced — see the binding check above.
 - The action log is per-browser-tab client state; it does not survive a reload and is not stored on the replica.
 - No cluster-wide model catalog: a node lists what it hosts, and a model created elsewhere is joined by an id learned out of band, together with the metamodel it is bound to, which the node requires at registration.
