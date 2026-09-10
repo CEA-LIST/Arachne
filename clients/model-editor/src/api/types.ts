@@ -1,31 +1,27 @@
 /**
  * Wire-level and metamodel-descriptor types for the moirai HTTP API.
  *
- * Wire truth (verified against a live network_node on this base):
- * - GET /api/state returns {"json": <WireNode>}; a fresh node returns {"json": "Unset"}.
- * - Every populated node is wrapped: {"Value": {...}}; strings are char arrays.
- * - POST /api/op takes {"JsonKind": <JsonOp>} and answers {"success": bool, "message": string}.
- * - GET /api/metamodel returns a formatVersion 1 or 2 descriptor, or 404 when the node serves none.
- * - GET /api/model/{id}/state, POST /api/model/{id}/op and GET /api/model/{id}/metamodel are
- *   the same, scoped to one hosted model; a malformed id is 400, an id the node does not host is 404.
+ * Wire truth (verified against a live interpreted `model_node` on this base):
+ * - GET /api/state and GET /api/model/{id}/state return the model document as
+ *   plain JSON: an object per element carrying `eClass` and one key per
+ *   feature its class can see, and bare `null` for a model whose root has not
+ *   been written. There is no envelope and no per-character array: the
+ *   interpreted node renders the canonical form itself.
+ * - POST /api/op and POST /api/model/{id}/op take a `ModelOp` as the whole
+ *   body — `{"Instance": ...}` or `{"Install": ...}`, nothing wrapping it —
+ *   and answer {"success": bool, "message": string}. A body of any other
+ *   shape is HTTP 400 with `Invalid op JSON`.
+ * - GET /api/metamodel returns a formatVersion 2 descriptor, or 404 when the
+ *   node serves none.
  * - GET /api/models lists the hosted models as {"models": [{model_id, metamodel_id}]}, the
  *   metamodel_id null for the default log; POST /api/models registers one: {metamodel_id} creates
  *   (201, the node mints the id), {model_id, metamodel_id} joins (200); 409 already hosted, 422
  *   unknown metamodel, both with an "error" text.
  */
 
-/* ---------- CRDT state as serialized by the node ---------- */
+/* ---------- The document as the node serves it ---------- */
 
-export type WireNode = 'Unset' | { Value: WireValue };
-
-export type WireValue =
-  | { Object: Record<string, WireNode> }
-  | { Array: WireNode[] }
-  | { String: string[] }
-  | { Number: number }
-  | { Boolean: boolean };
-
-/** Decoded, plain-JSON view of the document. `null` means "Unset" (empty doc). */
+/** Decoded, plain-JSON view of the document. `null` means an unwritten root (empty doc). */
 export type PlainJson =
   | null
   | string
@@ -34,34 +30,84 @@ export type PlainJson =
   | PlainJson[]
   | { [key: string]: PlainJson };
 
-/* ---------- Operations (the JsonKind grammar) ---------- */
+/* ---------- Operations (the interpreted `ModelOp` grammar) ---------- */
 
-export type ObjectOp =
-  | { Update: [string, JsonOp] }
-  | { Remove: string }
+/**
+ * One value a leaf can hold (moirai-interp/src/leaf.rs `Scalar`).
+ *
+ * `Float` carries the IEEE-754 bit pattern of the `f64`, not the value, which
+ * is what makes the Rust type `Eq + Hash + Ord`; it is a `bigint` here
+ * because the pattern does not fit a JavaScript number, and `stringifyModelOp`
+ * in api/client.ts is what writes it as an unquoted JSON integer.
+ */
+export type Scalar =
+  | 'Null'
+  | { Bool: boolean }
+  | { Int: number }
+  | { Float: bigint }
+  | { Char: string }
+  | { Str: string }
+  /** [slot of the enum in the table's `enums`, position of the literal in its declaration order] */
+  | { Enum: [number, number] };
+
+/** One write to one leaf (moirai-interp/src/leaf.rs `LeafOp`). The leaf's own rule decides which it takes. */
+export type LeafOp =
+  | { InsertChar: { pos: number; ch: string } }
+  | { DeleteChar: { pos: number } }
+  | { DeleteRange: { start: number; len: number } }
+  | { Inc: Scalar }
+  | { Dec: Scalar }
+  | 'Reset'
+  | 'Enable'
+  | 'Disable'
+  | { Write: Scalar }
+  | { Add: Scalar }
+  | { Remove: Scalar }
   | 'Clear';
 
-export type ArrayOp =
-  | { Insert: { pos: number; op: JsonOp } }
-  | { Update: { pos: number; op: JsonOp } }
+/** A sequence step; `pos` is a position among the visible children, resolved against the writer's own version. */
+export type SeqOp =
+  | { Insert: { pos: number; op: InstanceOp } }
+  | { Update: { pos: number; op: InstanceOp } }
   | { Delete: { pos: number } };
 
-export type StringOp =
-  | { Insert: { content: string; pos: number } } // content MUST be exactly one char
-  | { Delete: { pos: number } }
-  | { DeleteRange: { start: number; len: number } };
+/** An optional step. */
+export type OptOp = { Set: InstanceOp } | 'Unset';
 
-export type JsonOp =
-  | { Object: ObjectOp }
-  | { Array: ArrayOp }
-  | { String: StringOp }
-  | { Number: { Inc: number } }
-  | { Boolean: 'Enable' | 'Disable' };
+/** A keyed step; the key is carried by value and never resolved against a version. */
+export type MapOp =
+  | { Update: { key: Scalar; op: InstanceOp } }
+  | { Remove: { key: Scalar } }
+  | 'Clear';
 
-/** POST /api/op envelope. */
-export interface OpEnvelope {
-  JsonKind: JsonOp;
-}
+/**
+ * One step of the path from the model root to the write at its end
+ * (moirai-interp/src/op.rs `InstanceOp`).
+ *
+ * `Field` carries a feature's VISIBLE slot: its position in the class's
+ * visible features, own and inherited, sorted by name (crdt/table.ts computes
+ * it exactly as moirai-semantics/src/parse.rs does). `Variant` names the
+ * concrete class of the object sitting in a containment, on every operation
+ * that reaches through the slot and not only on the one that created it.
+ */
+export type InstanceOp =
+  | { Field: [number, InstanceOp] }
+  | { Variant: [number, InstanceOp] }
+  | { Seq: SeqOp }
+  | { Opt: OptOp }
+  | { Map: MapOp }
+  | 'New'
+  | { Leaf: LeafOp };
+
+/**
+ * One operation on a model log: the whole body of a POST to an op route.
+ *
+ * The editor never writes `Install`: the node that creates the model opens
+ * its log, and a joiner receives it by transfer or by delta replay.
+ */
+export type ModelOp =
+  | { Install: { model_id: string; metamodel_id: string; descriptor: string } }
+  | { Instance: InstanceOp };
 
 /** POST /api/op response body (HTTP 200 even when the op is refused). */
 export interface OpResult {
@@ -69,7 +115,7 @@ export interface OpResult {
   message: string;
 }
 
-/* ---------- Metamodel descriptor (formatVersion 1 and 2) ---------- */
+/* ---------- Metamodel descriptor (formatVersion 2) ---------- */
 
 export type AttributeKind = 'string' | 'int' | 'float' | 'bool' | 'enum';
 
@@ -107,9 +153,11 @@ export interface ProvenanceDesc {
 
 /** The collection a feature's values sit in. */
 export interface ShapeDesc {
-  kind: 'single' | 'optional' | 'sequence' | 'set' | 'bag' | 'orderedSet';
+  kind: 'single' | 'optional' | 'sequence' | 'set' | 'bag' | 'keyed' | 'orderedSet';
   /** Set when kind === 'set'. */
   tie?: 'aw' | 'rw';
+  /** Set when kind === 'keyed': what the entries are addressed by. */
+  key?: { kind: string; num?: string; class?: string };
 }
 
 /** The innermost CRDT of an attribute. */
@@ -177,6 +225,14 @@ export interface ReferenceDesc extends FeatureSemantics {
 
 export interface ClassDesc {
   abstract: boolean;
+  /**
+   * The one feature the generator represents this class as
+   * (`urn:arachne:representation` kind="transparent"), by name; absent on
+   * every other class. Such a class has no record of its own: the read-out
+   * renders an instance of it as that feature's value, with no `eClass` and
+   * no wrapper.
+   */
+  transparent?: string | null;
   superTypes: string[];
   attributes: AttributeDesc[];
   containments: ContainmentDesc[];
