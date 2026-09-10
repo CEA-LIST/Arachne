@@ -1,8 +1,8 @@
 /**
  * The model list of one node: what `GET /api/models` lists, a way to open
  * any of it in a tab, a way to create a model against one of the descriptors
- * the node holds (`GET /api/metamodels`; the node mints the id and writes the
- * header), and a way to join a model by an id learned out of band.
+ * the node holds (`GET /api/metamodels`; the node mints the id), and a way to
+ * join a model by an id learned out of band.
  *
  * The list is the node's and nothing wider: there is no cluster-wide
  * catalog, so a model created on another node is reached by pasting its id
@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { isModelId, type HostedModel, type MetamodelId, type MetamodelListing, type ModelId } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
-import { DEFAULT_LOG_LABEL, packageOf, shortId } from '../ui/modelLabel';
+import { DEFAULT_LOG_LABEL, packageOf } from '../ui/modelLabel';
 import { Plug, RefreshCw } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 
@@ -112,14 +112,13 @@ export function ModelsPanel({
               data-model-id={model.modelId}
             >
               <span className="me-models__pkg">{pkg}</span>
-              <span className="me-mono me-models__id" title={model.modelId}>
-                {shortId(model.modelId)}…
+              {/* Always a cell, empty for the default log, so the button keeps its column. */}
+              <span
+                className="me-subtle me-truncate me-models__ns"
+                {...(model.metamodelId !== null ? { title: `digest ${model.metamodelId.digest}` } : {})}
+              >
+                {model.metamodelId?.nsURI ?? ''}
               </span>
-              {model.metamodelId !== null && (
-                <span className="me-subtle me-truncate me-models__ns" title={`digest ${model.metamodelId.digest}`}>
-                  {model.metamodelId.nsURI}
-                </span>
-              )}
               <button
                 type="button"
                 className={open ? 'me-btn me-btn--sm' : 'me-btn me-btn--sm me-btn--primary'}
@@ -128,6 +127,14 @@ export function ModelsPanel({
               >
                 {open ? 'Show' : 'Open'}
               </button>
+              {/*
+                All 32 characters, on a line of their own, and `user-select:
+                all` so one click takes the whole id and nothing around it.
+                Truncated, this was the one thing in the panel nobody could
+                use: a model created on one replica is not listed on the
+                other, so joining it means moving its id by hand.
+              */}
+              <span className="me-mono me-models__id">{model.modelId}</span>
             </li>
           );
         })}
@@ -153,7 +160,8 @@ export function ModelsPanel({
           />
         </label>
         <p className="me-connect__hint">
-          The node mints the id and writes the <code>__model</code> header; the model opens in a tab.
+          The node mints the id and opens the model&apos;s log; the model opens in a tab. Its id is listed
+          above, in full: that is what another replica needs to join it.
         </p>
         <button type="submit" className="me-btn me-btn--primary" disabled={metamodels.length === 0}>
           Create model
@@ -206,7 +214,7 @@ export function ModelsPanel({
         </label>
         {joinError !== null && <p className="me-connect__error">{joinError}</p>}
         <p className="me-connect__hint">
-          This node hosts the id with no history and asks its peers for the model; the header arrives with it.
+          This node hosts the id with no history and asks its peers for the model; the log arrives from them.
         </p>
         <button type="submit" className="me-btn" disabled={metamodels.length === 0}>
           Join model

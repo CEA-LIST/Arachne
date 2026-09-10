@@ -345,12 +345,29 @@
 
 .me-models__row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-2);
   min-height: var(--h-row);
   padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-200);
+}
+
+/*
+ * The id gets the whole width and a line of its own: 32 monospace characters
+ * beside the package, the nsURI and the button would either wrap the row or
+ * push the button out of reach, and the type is not the thing to shrink.
+ *
+ * `user-select: all` makes one click take the id and only the id, so it can
+ * be copied without a drag that catches the labels around it.
+ */
+.me-models__id {
+  grid-column: 1 / -1;
+  color: var(--c-fg-muted);
+  font-size: var(--fs-100);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
 }
 
 .me-models__row:hover {
