@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { JsonOp, OpResult } from '../api/types';
+import type { ModelOp, OpResult } from '../api/types';
 import { FieldRegistry, TYPING_THRESHOLD_MS } from './fieldRegistry';
 import { OpQueue } from './opQueue';
 
-const op = (n: number): JsonOp => ({ Number: { Inc: n } });
+/** A counter write, the smallest well-formed operation, distinguished by how far it moves. */
+const op = (n: number): ModelOp => ({ Instance: { Field: [0, { Leaf: { Inc: { Int: n } } }] } });
+
+/** How far that operation moves its counter: what the ordering assertions read. */
+const by = (o: ModelOp): number => {
+  const leaf = (o as { Instance: { Field: [number, { Leaf: { Inc: { Int: number } } }] } }).Instance.Field[1];
+  return leaf.Leaf.Inc.Int;
+};
 
 describe('OpQueue', () => {
   it('posts ops of a batch strictly in order', async () => {
-    const sent: JsonOp[] = [];
+    const sent: ModelOp[] = [];
     const queue = new OpQueue(async (o) => {
       sent.push(o);
       return { success: true, message: 'ok' };
@@ -20,7 +27,7 @@ describe('OpQueue', () => {
   it('never interleaves batches, even when posts are slow', async () => {
     const sent: number[] = [];
     const queue = new OpQueue(async (o) => {
-      const n = (o as { Number: { Inc: number } }).Number.Inc;
+      const n = by(o);
       // First batch's ops are slower than the second batch's.
       await new Promise((r) => setTimeout(r, n < 10 ? 10 : 0));
       sent.push(n);
@@ -35,7 +42,7 @@ describe('OpQueue', () => {
   it('a refused op (200 + success:false) aborts the rest of its batch and is reported', async () => {
     const sent: number[] = [];
     const queue = new OpQueue(async (o) => {
-      const n = (o as { Number: { Inc: number } }).Number.Inc;
+      const n = by(o);
       sent.push(n);
       const refuse = n === 2;
       return { success: !refuse, message: refuse ? 'Operation not enabled' : 'ok' };

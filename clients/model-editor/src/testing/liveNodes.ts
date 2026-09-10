@@ -1,13 +1,17 @@
 /// <reference types="node" />
 /**
- * Live `network_node` processes for the level-4 tests and the headless-Chrome
- * harness: started the way the e2e process backend starts them
+ * Live interpreted `model_node` processes for the level-4 tests and the
+ * headless-Chrome harness: started the way the e2e process backend starts them
  * (moirai-network/tests/e2e_convergence.rs, `ProcessBackend`), on free
  * loopback ports, peered by `PEERS=id:host:port`, with `METAMODEL_DIR`
  * holding the descriptors each node serves, and killed when the test is done.
  *
- * The binary is `MOIRAI_E2E_NODE_BIN` when set, else the example built beside
- * the generated crate (`generated/json_crdt/target/debug/examples/network_node`).
+ * The binary is `MOIRAI_E2E_NODE_BIN` when set, else the interpreted node
+ * example built in the moirai worktree beside this one
+ * (`moirai-model-plane/target/debug/examples/model_node`). It is the
+ * interpreted replica and not the generated `network_node`, because the
+ * editor speaks the interpreted `ModelOp` dialect and a generated node
+ * answers every one of its operations with a 400.
  * Without it a test follows the suite's skip contract: it prints
  * `E2E-SKIP <scenario>: <why>` and skips, so the unit run stays green on a
  * machine with no Rust toolchain, and a CI that greps the marker fails.
@@ -21,8 +25,11 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { JsonOp, MetamodelId, ModelId, PlainJson, WireNode } from '../api/types';
-import { decodeState } from '../crdt/decode';
+import { stringifyModelOp } from '../api/client';
+import type { Descriptor, MetamodelId, ModelId, ModelOp, PlainJson } from '../api/types';
+import { encodeBatch } from '../crdt/encode';
+import type { EditOp } from '../crdt/ops';
+import { slotTable } from '../crdt/table';
 
 /** The repository's `examples/`, the descriptors the rig image ships under `/metamodels`. */
 export const EXAMPLES_DIR = fileURLToPath(new URL('../../../../examples/', import.meta.url));
@@ -35,7 +42,7 @@ export function nodeBinary(): string | null {
   const fromEnv = process.env['MOIRAI_E2E_NODE_BIN'];
   if (fromEnv !== undefined && fromEnv.length > 0) return existsSync(fromEnv) ? fromEnv : null;
   const built = fileURLToPath(
-    new URL('../../../../generated/json_crdt/target/debug/examples/network_node', import.meta.url),
+    new URL('../../../../../moirai-model-plane/target/debug/examples/model_node', import.meta.url),
   );
   return existsSync(built) ? built : null;
 }
@@ -43,7 +50,30 @@ export function nodeBinary(): string | null {
 /** The `E2E-SKIP` line for `scenario` when no binary is present, else null. */
 export function skipReason(scenario: string): string | null {
   if (nodeBinary() !== null) return null;
-  const reason = `E2E-SKIP ${scenario}: no node binary; build the network_node example in generated/json_crdt or set MOIRAI_E2E_NODE_BIN`;
+  const reason = `E2E-SKIP ${scenario}: no node binary; build the model_node example in moirai-model-plane or set MOIRAI_E2E_NODE_BIN`;
+  console.warn(reason);
+  return reason;
+}
+
+/**
+ * The `E2E-SKIP` line for a scenario that needs a `__model` header in the
+ * document, which an interpreted replica does not write.
+ *
+ * A model's identity lives in the `Install` operation that opened its log and
+ * in the node's own registration (`GET /api/models` answers the pair), and
+ * the state route serves the model document and nothing else. So the binding
+ * check (model/binding.ts) never answers `bound` against an interpreted node,
+ * and every behaviour keyed on that verdict — the projection file and the
+ * conformance report among them — is out of reach until the check is given
+ * the registration as its source for the pair.
+ *
+ * Skipped rather than deleted, and said out loud, because that is a decision
+ * about where a model's identity comes from and not a test to quietly drop.
+ */
+export function headerlessSkip(scenario: string): string {
+  const reason =
+    `E2E-SKIP ${scenario}: the interpreted node writes no __model header into the document, so the binding ` +
+    `check never answers \`bound\`; the scenario needs the model's identity to come from its registration instead`;
   console.warn(reason);
   return reason;
 }
@@ -273,26 +303,23 @@ export async function hostedIds(node: LiveNode): Promise<ModelId[]> {
   return (body.models ?? []).map((m) => m.model_id ?? '').sort();
 }
 
-/** GET /api/model/{id}/state on `node`, raw. */
-export async function modelWire(node: LiveNode, id: ModelId): Promise<WireNode> {
+/**
+ * GET /api/model/{id}/state on `node`: the document itself, which is what an
+ * interpreted node serves and what every assertion reads.
+ */
+export async function modelState(node: LiveNode, id: ModelId): Promise<PlainJson> {
   const response = await fetch(`${node.url}/api/model/${id}/state`);
   if (!response.ok) throw new Error(`${node.name} /api/model/${id}/state: ${response.status}`);
-  const body = (await response.json()) as { json: WireNode };
-  return body.json;
-}
-
-/** GET /api/model/{id}/state on `node`, decoded: the oracle every assertion reads. */
-export async function modelState(node: LiveNode, id: ModelId): Promise<PlainJson> {
-  return decodeState(await modelWire(node, id));
+  return (await response.json()) as PlainJson;
 }
 
 /** Apply `ops` to one model on `node`, one at a time, failing on the first refusal. */
-export async function applyOps(node: LiveNode, id: ModelId, ops: JsonOp[]): Promise<void> {
+export async function applyOps(node: LiveNode, id: ModelId, ops: ModelOp[]): Promise<void> {
   for (const op of ops) {
     const response = await fetch(`${node.url}/api/model/${id}/op`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ JsonKind: op }),
+      body: stringifyModelOp(op),
     });
     const body = (await response.json()) as { success?: boolean; message?: string; error?: string };
     if (!response.ok || body.success !== true) {
@@ -346,4 +373,19 @@ export function sortKeys(value: PlainJson): PlainJson {
     );
   }
   return value;
+}
+
+/**
+ * Apply edit intents to one model on `node`: the slot table is read from
+ * `descriptor` and the intents are encoded against the state the node
+ * currently serves, which is what a session does when it sends them.
+ */
+export async function applyEdits(
+  node: LiveNode,
+  id: ModelId,
+  descriptor: Descriptor,
+  edits: EditOp[],
+): Promise<void> {
+  const doc = await modelState(node, id);
+  await applyOps(node, id, encodeBatch(slotTable(descriptor), doc, edits));
 }

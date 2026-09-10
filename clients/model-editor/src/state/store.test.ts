@@ -47,7 +47,7 @@ describe('mp29 the model list and the tabs', () => {
 
     // Opening it gives a tab bound to THAT model's descriptor, as its session
     // fetched it from /api/model/{id}/metamodel, not whatever was loaded before.
-    const descriptor = { formatVersion: 1, package: 'behaviortree', nsURI: bt.nsURI, rootClasses: [], classes: {}, enums: {} };
+    const descriptor = { formatVersion: 2, package: 'behaviortree', nsURI: bt.nsURI, rootClasses: [], classes: {}, enums: {} };
     state = reducer(state, { type: 'tab', id: A, patch: { metamodel: descriptor, metamodelSource: 'node' } });
     state = reducer(state, {
       type: 'tab',

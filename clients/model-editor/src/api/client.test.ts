@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ModelOp } from './types';
 import {
   ApiError,
   getMetamodels,
@@ -7,6 +8,7 @@ import {
   getModelState,
   postModelOp,
   registerModel,
+  stringifyModelOp,
   validateMetamodelListing,
 } from './client';
 
@@ -53,10 +55,13 @@ const ID = 'a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4';
 describe('the model-scoped routes', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('getModelState reads the {"json": ...} envelope from /api/model/{id}/state', async () => {
-    const fetch = answering(200, { json: 'Unset' });
+  it('getModelState serves the document itself, `null` for a model with no root', async () => {
+    const doc = { eClass: 'Root', behaviortrees: [] };
+    vi.stubGlobal('fetch', answering(200, null));
+    expect(await getModelState('http://node:8081', ID)).toBeNull();
+    const fetch = answering(200, doc);
     vi.stubGlobal('fetch', fetch);
-    expect(await getModelState('http://node:8081', ID)).toBe('Unset');
+    expect(await getModelState('http://node:8081', ID)).toEqual(doc);
     expect(fetch).toHaveBeenCalledWith(`http://node:8081/api/model/${ID}/state`, undefined);
   });
 
@@ -74,7 +79,7 @@ describe('the model-scoped routes', () => {
   });
 
   it('getModelMetamodel returns the validated descriptor from /api/model/{id}/metamodel', async () => {
-    const descriptor = { formatVersion: 1, package: 'p', nsURI: 'u', rootClasses: [], classes: {}, enums: {} };
+    const descriptor = { formatVersion: 2, package: 'p', nsURI: 'u', rootClasses: [], classes: {}, enums: {} };
     const fetch = answering(200, descriptor);
     vi.stubGlobal('fetch', fetch);
     expect(await getModelMetamodel('http://node:8081/', ID)).toEqual(descriptor);
@@ -193,17 +198,29 @@ describe('getModels', () => {
 describe('postModelOp', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("posts the {JsonKind} envelope to the model's own op route and returns the node's verdict", async () => {
+  it("posts the operation itself to the model's own op route and returns the node's verdict", async () => {
     const { fetch, calls } = capturing(200, { success: false, message: 'operation not enabled' });
     vi.stubGlobal('fetch', fetch);
-    const op = { Number: { Inc: 1 } } as const;
+    // An interpreted node reads the body as a `ModelOp`: `Install` or
+    // `Instance`, with nothing wrapping it. A `{"JsonKind": …}` envelope is
+    // the 400 this editor was answering before.
+    const op: ModelOp = { Instance: { Variant: [17, 'New'] } };
     expect(await postModelOp('http://node:8081', ID, op)).toEqual({ success: false, message: 'operation not enabled' });
     expect(calls[0].url).toBe(`http://node:8081/api/model/${ID}/op`);
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ JsonKind: op });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual(op);
+  });
+
+  it('writes a float scalar as the unquoted integer serde reads back as a u64', () => {
+    // `Scalar::Float` carries the bit pattern, which does not fit a
+    // JavaScript number: 3.5 is 0x400C000000000000.
+    const op: ModelOp = { Instance: { Leaf: { Write: { Float: 0x400c000000000000n } } } };
+    expect(stringifyModelOp(op)).toBe('{"Instance":{"Leaf":{"Write":{"Float":4615063718147915776}}}}');
   });
 
   it('throws with the status on an id the node does not host', async () => {
     vi.stubGlobal('fetch', answering(404, { error: 'not hosted' }));
-    await expect(postModelOp('http://node:8081', ID, { Number: { Inc: 1 } })).rejects.toMatchObject({ status: 404 });
+    await expect(
+      postModelOp('http://node:8081', ID, { Instance: 'New' }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

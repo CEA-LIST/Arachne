@@ -2,13 +2,12 @@
 /**
  * Fixtures the model-plane tests share: the repository's two descriptors and
  * the digests Rust recorded for them (examples/fixtures/metamodel-digests.json,
- * held to by test mp6), a behaviour-tree document under a header, and the
- * node's wire encoding of a plain document. Test-only: imported by *.test.ts
- * files, never by the app, which is why the node types are scoped here.
+ * held to by test mp6), and a behaviour-tree document under a header.
+ * Test-only: imported by *.test.ts files, never by the app.
  */
 
 import { readFileSync } from 'node:fs';
-import type { Descriptor, MetamodelId, ModelHeader, PlainJson, WireNode } from '../api/types';
+import type { Descriptor, MetamodelId, ModelHeader, PlainJson } from '../api/types';
 
 /** The repository's `examples/`: the descriptors the rig image ships under `/metamodels`. */
 export const examples = new URL('../../../../examples/', import.meta.url);
@@ -40,17 +39,5 @@ export function btDocument(header: ModelHeader | null): PlainJson {
         child: { eClass: 'Sequence', name: 'root' },
       },
     ],
-  };
-}
-
-/** The node's wire encoding of a plain document (strings as char arrays, every node wrapped). */
-export function encodeWire(value: PlainJson): WireNode {
-  if (value === null) return 'Unset';
-  if (typeof value === 'string') return { Value: { String: Array.from(value) } };
-  if (typeof value === 'number') return { Value: { Number: value } };
-  if (typeof value === 'boolean') return { Value: { Boolean: value } };
-  if (Array.isArray(value)) return { Value: { Array: value.map(encodeWire) } };
-  return {
-    Value: { Object: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encodeWire(v)])) },
   };
 }

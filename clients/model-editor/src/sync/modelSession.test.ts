@@ -2,10 +2,10 @@
 // to its own model's descriptor and addresses its own routes; the poll, the
 // queue, the funnel guard and the close are per session.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Descriptor, ModelId, PlainJson, WireNode } from '../api/types';
+import type { Descriptor, ModelId, PlainJson } from '../api/types';
 import { createRootOps, MODEL_HEADER_REFUSAL, setStringOps } from '../crdt/ops';
 import type { ModelStore, StoredFile } from '../model/store';
-import { bt, btDocument, btHeader, btId, encodeWire, MODEL_ID, uml, umlId } from '../model/testFixtures';
+import { bt, btDocument, btHeader, btId, MODEL_ID, uml, umlId } from '../model/testFixtures';
 import { recordSession } from '../testing/sessionRecorder';
 import { ModelSession } from './modelSession';
 
@@ -25,7 +25,8 @@ async function until(predicate: () => boolean, timeoutMs = 5_000): Promise<void>
 
 interface FakeModel {
   descriptor: Descriptor | null;
-  wire: WireNode;
+  /** The document the state route serves: an interpreted node serves it as it is. */
+  wire: PlainJson;
   /** What the node answers to an op; success by default. */
   verdict?: { success: boolean; message: string };
 }
@@ -43,9 +44,9 @@ function fakeNode(models: Record<ModelId, FakeModel>) {
     const [, id, leaf] = match;
     const model = models[id];
     if (model === undefined) return json(404, { error: `${id} is not hosted` });
-    if (leaf === 'state') return json(200, { json: model.wire });
+    if (leaf === 'state') return json(200, model.wire);
     if (leaf === 'metamodel') return model.descriptor === null ? json(404, {}) : json(200, model.descriptor);
-    posted.push({ id, op: (JSON.parse(String(init?.body)) as { JsonKind: unknown }).JsonKind });
+    posted.push({ id, op: JSON.parse(String(init?.body)) as unknown });
     return json(200, model.verdict ?? { success: true, message: 'ok' });
   });
   return { fetch, urls, posted };
@@ -79,8 +80,8 @@ describe('mp29 a session per model', () => {
 
   it('mp29_a_tab_is_bound_to_its_own_models_descriptor_and_addresses_its_own_routes', async () => {
     const node = fakeNode({
-      [MODEL_ID]: { descriptor: bt, wire: encodeWire(btDocument(btHeader)) },
-      [UML_ID]: { descriptor: uml, wire: encodeWire(umlDoc) },
+      [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) },
+      [UML_ID]: { descriptor: uml, wire: umlDoc },
     });
     vi.stubGlobal('fetch', node.fetch);
     const one = recordSession();
@@ -106,11 +107,13 @@ describe('mp29 a session per model', () => {
         `${NODE}/api/model/${UML_ID}/state`,
       ]);
       // An edit in one tab goes to that model's op route, and only there.
+      // One intent, five operations: a text leaf takes `m` out and puts the
+      // four characters of `Door` in, one at a time.
       const ops = setStringOps(['name'], 'm', 'Door');
       const outcome = await c.sendOps('set Model.name', ops, { path: ['name'], value: 'Door' });
-      expect(outcome).toEqual({ outcome: 'ok', applied: ops.length });
-      expect(node.posted.map((p) => p.id)).toEqual(ops.map(() => UML_ID));
-      expect(node.posted.map((p) => p.op)).toEqual(ops);
+      expect(outcome).toEqual({ outcome: 'ok', applied: 5 });
+      expect(node.posted.map((p) => p.id)).toEqual(Array<string>(5).fill(UML_ID));
+      expect(JSON.stringify(node.posted.map((p) => p.op))).toContain('"InsertChar":{"pos":0,"ch":"D"}');
       expect(two.tab(UML_ID, NODE).doc).toMatchObject({ name: 'Door' });
       expect(one.tab(MODEL_ID, NODE).doc).toEqual(btDocument(btHeader));
       expect(two.rows.at(-1)).toMatchObject({ description: 'set Model.name', outcome: 'ok', ops });
@@ -128,8 +131,8 @@ describe('mp29 a session per model', () => {
     // claim is that polls keep coming for an open session and stop for a
     // closed one, not that exactly n fire in n intervals.
     const node = fakeNode({
-      [MODEL_ID]: { descriptor: bt, wire: encodeWire(btDocument(btHeader)) },
-      [UML_ID]: { descriptor: uml, wire: encodeWire(umlDoc) },
+      [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) },
+      [UML_ID]: { descriptor: uml, wire: umlDoc },
     });
     vi.stubGlobal('fetch', node.fetch);
     const polls = (id: ModelId) => node.urls.filter((url) => url.endsWith('/state') && url.includes(id)).length;
@@ -161,8 +164,8 @@ describe('mp29 a session per model', () => {
 
   it('the projection is written per model, under that model id, from the store the session was given', async () => {
     const node = fakeNode({
-      [MODEL_ID]: { descriptor: bt, wire: encodeWire(btDocument(btHeader)) },
-      [UML_ID]: { descriptor: uml, wire: encodeWire(umlDoc) },
+      [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) },
+      [UML_ID]: { descriptor: uml, wire: umlDoc },
     });
     vi.stubGlobal('fetch', node.fetch);
     const { store, files } = memoryStore();
@@ -182,8 +185,8 @@ describe('mp29 a session per model', () => {
   it('a model whose header names another descriptor than the one served is refused in its own tab only', async () => {
     // The bt document served under the uml descriptor: M-A5's bad day, per tab.
     const node = fakeNode({
-      [MODEL_ID]: { descriptor: uml, wire: encodeWire(btDocument(btHeader)) },
-      [UML_ID]: { descriptor: uml, wire: encodeWire(umlDoc) },
+      [MODEL_ID]: { descriptor: uml, wire: btDocument(btHeader) },
+      [UML_ID]: { descriptor: uml, wire: umlDoc },
     });
     vi.stubGlobal('fetch', node.fetch);
     const { store, files } = memoryStore();
@@ -218,12 +221,12 @@ describe('mp29 a session per model', () => {
   });
 
   it('refuses a batch that would write the header before posting anything', async () => {
-    const node = fakeNode({ [MODEL_ID]: { descriptor: bt, wire: encodeWire(btDocument(btHeader)) } });
+    const node = fakeNode({ [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) } });
     vi.stubGlobal('fetch', node.fetch);
     const one = recordSession();
     const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 60_000, events: one.events });
     await a.open();
-    const outcome = await a.sendOps('rewrite header', [{ Object: { Remove: '__model' } }]);
+    const outcome = await a.sendOps('rewrite header', [{ kind: 'unset', path: ['__model'] }]);
     a.close();
     expect(outcome).toEqual({ outcome: 'refused', applied: 0, detail: MODEL_HEADER_REFUSAL });
     expect(node.posted).toEqual([]);
@@ -234,7 +237,7 @@ describe('mp29 a session per model', () => {
     const node = fakeNode({
       [MODEL_ID]: {
         descriptor: bt,
-        wire: encodeWire(btDocument(btHeader)),
+        wire: btDocument(btHeader),
         verdict: { success: false, message: 'operation not enabled' },
       },
     });
@@ -242,7 +245,8 @@ describe('mp29 a session per model', () => {
     const one = recordSession();
     const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 60_000, events: one.events });
     await a.open();
-    const outcome = await a.sendOps('set x', setStringOps(['x'], '', 'ab'));
+    // Two characters, so a refusal on the first has a second to drop.
+    const outcome = await a.sendOps('set x', setStringOps(['behaviortrees', 0, 'ID'], 'main', 'mainxy'));
     a.close();
     expect(outcome.outcome).toBe('refused');
     expect(node.posted).toHaveLength(1);
@@ -270,7 +274,7 @@ describe('mp29 a session per model', () => {
   });
 
   it('a node that serves no descriptor for the model is not a failure: the tab opens with no metamodel and a file can be loaded', async () => {
-    const node = fakeNode({ [MODEL_ID]: { descriptor: null, wire: encodeWire(btDocument(btHeader)) } });
+    const node = fakeNode({ [MODEL_ID]: { descriptor: null, wire: btDocument(btHeader) } });
     vi.stubGlobal('fetch', node.fetch);
     const one = recordSession();
     const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 60_000, events: one.events });
@@ -287,7 +291,7 @@ describe('mp29 a session per model', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const node = fakeNode({ [MODEL_ID]: { descriptor: bt, wire: encodeWire(btDocument(btHeader)) } });
+    const node = fakeNode({ [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) } });
     const slow = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/state') && node.urls.length > 1) await gate;
       return node.fetch(url, init);

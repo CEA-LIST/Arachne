@@ -13,6 +13,7 @@ import {
   joinModel,
   modelState,
   scratchDir,
+  headerlessSkip,
   skipReason,
   startNodes,
   waitFor,
@@ -37,7 +38,7 @@ import {
 } from './binding';
 import { fsModelStore } from './fsStore';
 import { projectModel } from './projection';
-import { bt, btDocument, btHeader, btId, encodeWire as encode, MODEL_ID, uml, umlHeader, umlId } from './testFixtures';
+import { bt, btDocument, btHeader, btId, MODEL_ID, uml, umlHeader, umlId } from './testFixtures';
 
 function refused(result: ApplyResult): Refused {
   if (result.applied) throw new Error('expected the apply to be refused');
@@ -105,7 +106,7 @@ describe('mp9 the binding check at apply', () => {
     // A behaviour-tree state whose header names the bt digest, served the uml
     // descriptor: the bad day of M-A5, in which Sequence matches no class and
     // the tree used to render as blank rows.
-    const result = refused(await applyModel(encode(btDocument(btHeader)), uml, null));
+    const result = refused(await applyModel(btDocument(btHeader), uml, null));
     expect(result.binding.kind).toBe('mismatch');
 
     // The report names both pairs, nsURI and digest each.
@@ -127,7 +128,7 @@ describe('mp9 the binding check at apply', () => {
 
     // Control: the same state under the descriptor its header names applies,
     // and that apply is what the store records.
-    const control = await applyModel(encode(btDocument(btHeader)), bt, null);
+    const control = await applyModel(btDocument(btHeader), bt, null);
     expect(control.applied).toBe(true);
     if (control.applied) {
       expect(control.binding.kind).toBe('bound');
@@ -141,7 +142,7 @@ describe('mp9 the binding check at apply', () => {
     // A descriptor that carries bt's nsURI and package but uml's classes: the
     // node claims bt, the bytes say otherwise. Comparing labels would apply it.
     const relabelled: Descriptor = { ...uml, nsURI: bt.nsURI, package: bt.package };
-    const result = refused(await applyModel(encode(btDocument(btHeader)), relabelled, null));
+    const result = refused(await applyModel(btDocument(btHeader), relabelled, null));
     expect(result.binding.kind).toBe('mismatch');
     if (result.binding.kind === 'mismatch') {
       expect(result.binding.served.digest).not.toBe(btId.digest);
@@ -149,7 +150,7 @@ describe('mp9 the binding check at apply', () => {
   });
 
   it('a state with no header is applied under whatever descriptor is loaded, as before', async () => {
-    const result = await applyModel(encode(btDocument(null)), uml, null);
+    const result = await applyModel(btDocument(null), uml, null);
     expect(result.applied).toBe(true);
     if (result.applied) {
       expect(result.binding).toEqual({ kind: 'unbound' });
@@ -159,7 +160,7 @@ describe('mp9 the binding check at apply', () => {
   });
 
   it('a state with a header and no descriptor is applied and flagged', async () => {
-    const result = await applyModel(encode(btDocument(btHeader)), null, null);
+    const result = await applyModel(btDocument(btHeader), null, null);
     expect(result.applied).toBe(true);
     if (result.applied) expect(result.binding.kind).toBe('no-descriptor');
   });
@@ -167,7 +168,7 @@ describe('mp9 the binding check at apply', () => {
 
 describe('mp19 the header recorded at the first apply', () => {
   it('mp19_a_remote_op_that_rewrites_the_header_is_detected_at_apply', async () => {
-    const first = await applyModel(encode(btDocument(btHeader)), bt, null);
+    const first = await applyModel(btDocument(btHeader), bt, null);
     expect(first.applied).toBe(true);
     const recorded = first.applied && first.binding.kind !== 'unbound' ? first.binding.header : null;
     expect(recorded).toEqual(btHeader);
@@ -177,7 +178,7 @@ describe('mp19 the header recorded at the first apply', () => {
     // arrangement the served-versus-header comparison alone would wave
     // through: only the header recorded at the first apply can refuse it.
     const rewritten = btDocument(umlHeader);
-    const second = refused(await applyModel(encode(rewritten), uml, recorded));
+    const second = refused(await applyModel(rewritten, uml, recorded));
     expect(second.binding.kind).toBe('header-rewritten');
 
     // The report names both headers.
@@ -188,12 +189,12 @@ describe('mp19 the header recorded at the first apply', () => {
     expect(second.message).toContain(MODEL_ID);
 
     // With the node still serving bt it is refused as well, for the same reason.
-    const third = refused(await applyModel(encode(rewritten), bt, recorded));
+    const third = refused(await applyModel(rewritten, bt, recorded));
     expect(third.binding.kind).toBe('header-rewritten');
   });
 
   it('a header that vanished after being recorded is refused too', async () => {
-    const result = refused(await applyModel(encode(btDocument(null)), bt, btHeader));
+    const result = refused(await applyModel(btDocument(null), bt, btHeader));
     expect(result.binding.kind).toBe('header-rewritten');
     expect(result.message).toContain('no header at all');
   });
@@ -256,7 +257,7 @@ describe('the verdict as the UI reads it', () => {
 
 describe('level 4, against live nodes', () => {
   it('mp27_the_editor_refuses_to_open_a_model_under_the_wrong_descriptor', { timeout: 120_000 }, async (ctx) => {
-    const skip = skipReason('mp27');
+    const skip = skipReason('mp27') ?? headerlessSkip('mp27');
     if (skip !== null) return ctx.skip(skip);
     const run = scratchDir('mp27');
     // The bt descriptor as shipped, and the same file edited after the fact

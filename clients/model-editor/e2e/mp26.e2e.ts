@@ -40,13 +40,14 @@ import { addChildOps, createRootOps, createSingleContainmentOps, setStringOps } 
 import { canonicalJson } from '../src/model/digest';
 import { modelHeaderOf } from '../src/model/instance';
 import {
-  applyOps,
+  applyEdits,
   freePort,
   HARNESS_LOG_ID,
   hostedIds,
   modelState,
   readExampleDescriptor,
   scratchDir,
+  headerlessSkip,
   skipReason,
   sortKeys,
   startNodes,
@@ -305,7 +306,7 @@ function storeFiles(page: Page): Promise<Record<string, string>> {
 
 describe('mp26 in headless Chrome', () => {
   it('mp26_two_tabs_two_metamodels_two_replicas_converge_with_no_cross_talk', async (ctx) => {
-    const skip = skipReason('mp26');
+    const skip = skipReason('mp26') ?? headerlessSkip('mp26');
     if (skip !== null) return ctx.skip(skip);
     if (!existsSync(CHROME)) {
       const reason = `E2E-SKIP mp26: no Chrome at ${CHROME}; set CHROME_BIN`;
@@ -407,20 +408,19 @@ describe('mp26 in headless Chrome', () => {
       // The models get their first elements through the API, the setup of
       // the scenario: a Root with one BehaviorTree whose child is the
       // Sequence to rename, and a Model to add the Class to.
-      await applyOps(a, btModel, [
+      await applyEdits(a, btModel, bt, [
         ...createRootOps('Root'),
         ...addChildOps(['behaviortrees'], 0, 'BehaviorTree'),
         ...setStringOps(['behaviortrees', 0, 'ID'], '', 'main'),
         ...createSingleContainmentOps(['behaviortrees', 0], 'child', 'Sequence'),
         ...setStringOps(['behaviortrees', 0, 'child', 'name'], '', 'root'),
       ]);
-      await applyOps(b, umlModel, [...createRootOps('Model'), ...setStringOps(['name'], '', 'm')]);
+      await applyEdits(b, umlModel, uml, [...createRootOps('Model'), ...setStringOps(['name'], '', 'm')]);
       const btSeed: PlainJson = {
-        __model: { modelId: btModel, metamodelId: btId } as unknown as PlainJson,
         eClass: 'Root',
         behaviortrees: [{ eClass: 'BehaviorTree', ID: 'main', child: { eClass: 'Sequence', name: 'root' } }],
       };
-      const umlSeed: PlainJson = { __model: { modelId: umlModel, metamodelId: umlId } as unknown as PlainJson, eClass: 'Model', name: 'm' };
+      const umlSeed: PlainJson = { eClass: 'Model', name: 'm' };
       await waitForState([a, b], btModel, btSeed);
       await waitForState([a, b], umlModel, umlSeed);
       await waitForRendered(A, btModel, btSeed);

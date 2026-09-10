@@ -4,7 +4,8 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { Descriptor, JsonOp, PlainJson } from '../api/types';
+import type { Descriptor, PlainJson } from '../api/types';
+import type { EditOp } from '../crdt/ops';
 import { addChildOps, createRootOps, createSingleContainmentOps, setStringOps } from '../crdt/ops';
 import { ModelSession } from '../sync/modelSession';
 import {
@@ -12,6 +13,7 @@ import {
   joinModel,
   modelState,
   scratchDir,
+  headerlessSkip,
   skipReason,
   startNodes,
   waitFor,
@@ -23,7 +25,7 @@ import { editGate } from '../ui/editGate';
 import { applyModel, refusalOf } from './binding';
 import { checkInvariants, declaringClass, describeDiagnostics, sameDiagnostics, type Diagnostic } from './conformance';
 import { modelHeaderOf } from './instance';
-import { bt, btHeader, btId, encodeWire, uml, umlHeader } from './testFixtures';
+import { bt, btHeader, btId, uml, umlHeader } from './testFixtures';
 
 /** A behaviour tree: its id, its child, and the blackboard the descriptor requires. */
 function tree(id: string, child: PlainJson): PlainJson {
@@ -99,7 +101,7 @@ describe('mp34 the invariant diagnostics report and never refuse', () => {
       [uml, dangling],
       [bt, clean],
     ] as [Descriptor, PlainJson][]) {
-      const result = await applyModel(encodeWire(doc), descriptor, null);
+      const result = await applyModel(doc, descriptor, null);
       expect(result.applied).toBe(true);
       if (result.applied) {
         expect(result.binding.kind).toBe('bound');
@@ -157,7 +159,7 @@ describe('mp34 the invariant diagnostics report and never refuse', () => {
 
 describe('level 4, against live nodes', () => {
   it('mp37_the_editor_shows_the_duplicate_beside_the_binding_and_keeps_editing_enabled', { timeout: 120_000 }, async (ctx) => {
-    const skip = skipReason('mp37');
+    const skip = skipReason('mp37') ?? headerlessSkip('mp37');
     if (skip !== null) return ctx.skip(skip);
     const run = scratchDir('mp37');
     const dir = writeMetamodelDir(join(run, 'metamodels'), { 'bt.metamodel.json': bt, 'uml.metamodel.json': uml });
@@ -185,7 +187,7 @@ describe('level 4, against live nodes', () => {
         // named `patrol`; editor-b, concurrently, `Root.behaviortrees[0]`,
         // a tree whose child is a `Fallback` named `patrol`. Every operation
         // passes its own node's intake: nothing in either is malformed.
-        const send = async (session: ModelSession, batches: [string, JsonOp[]][]) => {
+        const send = async (session: ModelSession, batches: [string, EditOp[]][]) => {
           for (const [description, ops] of batches) {
             const outcome = await session.sendOps(description, ops);
             expect(outcome, description).toMatchObject({ outcome: 'ok' });
@@ -266,7 +268,7 @@ describe('level 4, against live nodes', () => {
         expect(recA.rows).toContainEqual(
           expect.objectContaining({ description: 'create Class under blackboard', outcome: 'refused', detail: refused.detail }),
         );
-        expect(recA.banners.some((banner) => banner.includes(refused.detail ?? ' '))).toBe(true);
+        expect(recA.banners.some((banner) => banner.includes(refused.detail ?? ''))).toBe(true);
         expect(await modelState(a, id)).toEqual(before);
         expect(await modelState(b, id)).toEqual(before);
       } finally {

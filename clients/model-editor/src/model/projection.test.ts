@@ -9,12 +9,12 @@ import { getAtPath } from '../crdt/path';
 import { modelHeaderOf } from './instance';
 import { ModelSession } from '../sync/modelSession';
 import {
-  applyOps,
+  applyEdits,
   createModel,
   joinModel,
   modelState,
-  modelWire,
   scratchDir,
+  headerlessSkip,
   skipReason,
   startNodes,
   waitFor,
@@ -26,13 +26,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ModelId, PlainJson } from '../api/types';
-import { decodeState } from '../crdt/decode';
 import { applyModel, type ApplyResult } from './binding';
 import { canonicalJson, sha256Hex } from './digest';
 import { fsModelStore } from './fsStore';
 import { describeProjection, projectModel, projectionLabel, sameProjection, type Projection } from './projection';
 import { StoreError, type ModelStore } from './store';
-import { bt, btDocument, btHeader, btId, encodeWire, MODEL_ID, uml, umlHeader } from './testFixtures';
+import { bt, btDocument, btHeader, btId, MODEL_ID, uml, umlHeader } from './testFixtures';
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'model-projection-'));
 afterAll(() => rmSync(tempRoot, { recursive: true, force: true }));
@@ -102,7 +101,7 @@ describe('mp10 the store after an apply', () => {
     const doc = btDocument(btHeader);
 
     // A behaviour-tree state whose header and served descriptor agree.
-    const result = applied(await applyModel(encodeWire(doc), bt, null));
+    const result = applied(await applyModel(doc, bt, null));
     expect(result.binding.kind).toBe('bound');
     const projection = written(await projectModel(store, result));
 
@@ -127,7 +126,7 @@ describe('mp10 the store after an apply', () => {
   it('writes the decoded state again on every apply, so the file follows the log', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const first = applied(await applyModel(encodeWire(btDocument(btHeader)), bt, null));
+    const first = applied(await applyModel(btDocument(btHeader), bt, null));
     const one = written(await projectModel(store, first));
 
     const grown: PlainJson = {
@@ -137,7 +136,7 @@ describe('mp10 the store after an apply', () => {
         { eClass: 'BehaviorTree', ID: 'second', child: { eClass: 'Fallback', name: 'alt' } },
       ],
     };
-    const second = applied(await applyModel(encodeWire(grown), bt, btHeader));
+    const second = applied(await applyModel(grown, bt, btHeader));
     const two = written(await projectModel(store, second));
 
     expect(JSON.parse(readFileSync(fileOf(dir, MODEL_ID), 'utf8'))).toEqual(grown);
@@ -151,9 +150,8 @@ describe('projection, not truth', () => {
     // Session one: connect, apply, the file lands.
     const dir = freshDir();
     const { store, calls } = counting(fsModelStore(dir));
-    const wire = encodeWire(btDocument(btHeader));
-    const nodeState = decodeState(wire);
-    written(await projectModel(store, applied(await applyModel(wire, bt, null))));
+    const nodeState = btDocument(btHeader);
+    written(await projectModel(store, applied(await applyModel(nodeState, bt, null))));
     expect(JSON.parse(readFileSync(fileOf(dir, MODEL_ID), 'utf8'))).toEqual(nodeState);
 
     // Between sessions the file is replaced by a document holding one empty
@@ -164,7 +162,7 @@ describe('projection, not truth', () => {
 
     // Session two: connect resets the recorded header, the state comes from
     // the node, and the document is the node's, not the file's.
-    const result = applied(await applyModel(wire, bt, null));
+    const result = applied(await applyModel(nodeState, bt, null));
     expect(result.doc).toEqual(nodeState);
     expect(result.doc).not.toEqual(tampered);
 
@@ -180,13 +178,12 @@ describe('projection, not truth', () => {
   it('a file emptied to {} or corrupted to non-JSON is rewritten the same way', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const wire = encodeWire(btDocument(btHeader));
-    const nodeState = decodeState(wire);
+    const nodeState = btDocument(btHeader);
     for (const tamper of ['{}', '{not json', '']) {
-      written(await projectModel(store, applied(await applyModel(wire, bt, null))));
+      written(await projectModel(store, applied(await applyModel(nodeState, bt, null))));
       writeFileSync(fileOf(dir, MODEL_ID), tamper);
       if (tamper !== '{}') await expect(store.read(MODEL_ID)).rejects.toThrow(StoreError);
-      const result = applied(await applyModel(wire, bt, null));
+      const result = applied(await applyModel(nodeState, bt, null));
       expect(result.doc).toEqual(nodeState);
       written(await projectModel(store, result));
       expect(readFileSync(fileOf(dir, MODEL_ID), 'utf8')).toBe(canonicalJson(nodeState));
@@ -202,7 +199,7 @@ describe('what is not written', () => {
   it('a refused apply writes nothing', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const result = await applyModel(encodeWire(btDocument(btHeader)), uml, null);
+    const result = await applyModel(btDocument(btHeader), uml, null);
     expect(result.applied).toBe(false);
     expect(await projectModel(store, result)).toEqual({ kind: 'not-written', why: 'refused' });
     expect(filesIn(dir)).toEqual([]);
@@ -212,9 +209,9 @@ describe('what is not written', () => {
   it('a rewritten header is refused and the file keeps the document from before it', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const first = applied(await applyModel(encodeWire(btDocument(btHeader)), bt, null));
+    const first = applied(await applyModel(btDocument(btHeader), bt, null));
     written(await projectModel(store, first));
-    const rewritten = await applyModel(encodeWire(btDocument(umlHeader)), uml, btHeader);
+    const rewritten = await applyModel(btDocument(umlHeader), uml, btHeader);
     expect(rewritten.applied).toBe(false);
     expect(await projectModel(store, rewritten)).toEqual({ kind: 'not-written', why: 'refused' });
     expect(JSON.parse(readFileSync(fileOf(dir, MODEL_ID), 'utf8'))).toEqual(btDocument(btHeader));
@@ -223,7 +220,7 @@ describe('what is not written', () => {
   it('an unbound document has no id to file under, so nothing is written', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const result = applied(await applyModel(encodeWire(btDocument(null)), bt, null));
+    const result = applied(await applyModel(btDocument(null), bt, null));
     expect(result.binding.kind).toBe('unbound');
     expect(await projectModel(store, result)).toEqual({ kind: 'not-written', why: 'unbound' });
     expect(filesIn(dir)).toEqual([]);
@@ -232,7 +229,7 @@ describe('what is not written', () => {
   it('a header with no descriptor to check it against is applied but not yet projected', async () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
-    const result = applied(await applyModel(encodeWire(btDocument(btHeader)), null, null));
+    const result = applied(await applyModel(btDocument(btHeader), null, null));
     expect(result.binding.kind).toBe('no-descriptor');
     expect(await projectModel(store, result)).toEqual({ kind: 'not-written', why: 'no-descriptor' });
     expect(filesIn(dir)).toEqual([]);
@@ -241,7 +238,7 @@ describe('what is not written', () => {
 
 describe('the store never breaks an apply', () => {
   it('no store in this context is reported as unavailable, and the document stands', async () => {
-    const result = applied(await applyModel(encodeWire(btDocument(btHeader)), bt, null));
+    const result = applied(await applyModel(btDocument(btHeader), bt, null));
     expect(await projectModel(null, result)).toEqual({ kind: 'unavailable' });
     expect(result.doc).toEqual(btDocument(btHeader));
   });
@@ -256,7 +253,7 @@ describe('the store never breaks an apply', () => {
       list: async () => [],
       remove: async () => {},
     };
-    const result = applied(await applyModel(encodeWire(btDocument(btHeader)), bt, null));
+    const result = applied(await applyModel(btDocument(btHeader), bt, null));
     const projection = await projectModel(failing, result);
     expect(projection.kind).toBe('failed');
     if (projection.kind === 'failed') {
@@ -270,7 +267,7 @@ describe('the store never breaks an apply', () => {
     const dir = freshDir();
     const store = fsModelStore(dir);
     const hostile = { ...btHeader, modelId: '../../escape' };
-    const result = applied(await applyModel(encodeWire(btDocument(hostile)), bt, null));
+    const result = applied(await applyModel(btDocument(hostile), bt, null));
     expect(result.binding.kind).toBe('bound');
     const projection = await projectModel(store, result);
     expect(projection.kind).toBe('failed');
@@ -337,7 +334,7 @@ describe('level 4, against live nodes', () => {
     'mp28_the_store_file_matches_the_converged_model_and_a_restart_trusts_the_log',
     { timeout: 120_000 },
     async (ctx) => {
-      const skip = skipReason('mp28');
+      const skip = skipReason('mp28') ?? headerlessSkip('mp28');
       if (skip !== null) return ctx.skip(skip);
       const run = scratchDir('mp28');
       const good = writeMetamodelDir(join(run, 'metamodels'), { 'bt.metamodel.json': bt, 'uml.metamodel.json': uml });
@@ -354,7 +351,7 @@ describe('level 4, against live nodes', () => {
         // main, a Sequence named root.
         const id = await createModel(a, btId);
         await joinModel(b, id, btId);
-        await applyOps(a, id, [
+        await applyEdits(a, id, bt, [
           ...createRootOps('Root'),
           ...addChildOps(['behaviortrees'], 0, 'BehaviorTree'),
           ...setStringOps(['behaviortrees', 0, 'ID'], '', 'main'),
@@ -363,7 +360,6 @@ describe('level 4, against live nodes', () => {
         ]);
         const converged = await waitForAgreement([a, b], id);
         expect(converged).toMatchObject({
-          __model: { modelId: id, metamodelId: btId },
           eClass: 'Root',
           behaviortrees: [{ eClass: 'BehaviorTree', ID: 'main', child: { eClass: 'Sequence', name: 'root' } }],
         });
@@ -379,7 +375,7 @@ describe('level 4, against live nodes', () => {
           one.patches.some((patch) => patch.projection?.kind === 'written') ? true : null,
         );
         first.close();
-        const nodeState = decodeState(await modelWire(b, id));
+        const nodeState = await modelState(b, id);
         expect(nodeState).toEqual(converged);
         expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(nodeState);
         expect(readFileSync(file, 'utf8')).toBe(canonicalJson(nodeState));

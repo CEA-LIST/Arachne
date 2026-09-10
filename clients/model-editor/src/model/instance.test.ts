@@ -20,7 +20,7 @@ import {
 
 /** A compact bt-shaped descriptor exercising every concept the module handles. */
 const bt: Descriptor = {
-  formatVersion: 1,
+  formatVersion: 2,
   package: 'behaviortree',
   nsURI: 'http://www.example.org/behaviortree',
   rootClasses: ['Root'],

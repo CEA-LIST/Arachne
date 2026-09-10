@@ -8,7 +8,7 @@ import { countElements, elementKey, featureKey, flattenTree, highlightParts } fr
  * from any sample metamodel, and neither must its tests.
  */
 const descriptor: Descriptor = {
-  formatVersion: 1,
+  formatVersion: 2,
   package: 'demo',
   nsURI: 'http://example.org/demo',
   rootClasses: ['Container'],
