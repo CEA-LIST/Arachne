@@ -302,6 +302,22 @@ export interface HostedModel {
   metamodelId: MetamodelId | null;
 }
 
+/**
+ * What GET /api/models answers, both halves of it: the models the node hosts,
+ * and the bare ids of models it does not host but has seen traffic for since
+ * it connected.
+ *
+ * `seen` is ids and nothing else. A node cannot say which metamodel a model
+ * it does not host is bound to — that binding lives in the model's first
+ * operation, in a log the node does not hold — so joining one of these still
+ * means choosing the metamodel, and a wrong choice is refused by the node
+ * with a 422 naming the digest.
+ */
+export interface ModelListing {
+  hosted: HostedModel[];
+  seen: ModelId[];
+}
+
 /** What POST /api/models answers: the model's id, minted by the node on a create, and the metamodel it was registered under. */
 export interface Registration {
   modelId: ModelId;

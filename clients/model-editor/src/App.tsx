@@ -328,6 +328,7 @@ export default function App() {
         tab={explorerTab}
         setTab={setExplorerTab}
         hosted={state.hosted}
+        seen={state.seen}
         metamodels={state.metamodels}
         openIds={state.tabs}
         selectedModel={state.selected}

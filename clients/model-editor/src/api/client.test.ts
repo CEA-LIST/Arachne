@@ -179,12 +179,33 @@ describe('getModels', () => {
       ],
     });
     vi.stubGlobal('fetch', fetch);
-    expect(await getModels('http://node:8081')).toEqual([
-      { modelId: dflt, metamodelId: null },
-      { modelId: ID, metamodelId: { nsURI: bt.nsURI, digest: bt.digest } },
-      { modelId: other, metamodelId: { nsURI: '', digest: bt.digest } },
-    ]);
+    expect(await getModels('http://node:8081')).toEqual({
+      hosted: [
+        { modelId: dflt, metamodelId: null },
+        { modelId: ID, metamodelId: { nsURI: bt.nsURI, digest: bt.digest } },
+        { modelId: other, metamodelId: { nsURI: '', digest: bt.digest } },
+      ],
+      // A node that predates the key: an absent `seen` is an empty list, not
+      // an error, which is the whole point of adding a key to an object.
+      seen: [],
+    });
     expect(calls[0].url).toBe('http://node:8081/api/models');
+  });
+
+  it('reads the seen ids beside the hosted models', async () => {
+    const seen = 'b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0';
+    vi.stubGlobal('fetch', answering(200, { models: [{ model_id: ID, metamodel_id: null }], seen: [seen] }));
+    expect(await getModels('http://node:8081')).toEqual({
+      hosted: [{ modelId: ID, metamodelId: null }],
+      seen: [seen],
+    });
+  });
+
+  it('throws on a seen that is not an array of model ids', async () => {
+    vi.stubGlobal('fetch', answering(200, { models: [], seen: 'nope' }));
+    await expect(getModels('http://node:8081')).rejects.toBeInstanceOf(ApiError);
+    vi.stubGlobal('fetch', answering(200, { models: [], seen: ['not-an-id'] }));
+    await expect(getModels('http://node:8081')).rejects.toBeInstanceOf(ApiError);
   });
 
   it('throws on a body without a models array and on a non-OK status', async () => {

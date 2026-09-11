@@ -20,7 +20,7 @@ describe('mp29 the model list and the tabs', () => {
     // An empty node: the list starts empty, nothing is open.
     let state = connected();
     expect(state.hosted).toBeNull();
-    state = reducer(state, { type: 'hosted', models: [] });
+    state = reducer(state, { type: 'hosted', models: [], seen: [] });
     expect(state.hosted).toEqual([]);
     expect(state.tabs).toEqual([]);
     expect(selectedTab(state)).toBeNull();
@@ -37,7 +37,7 @@ describe('mp29 the model list and the tabs', () => {
     // it minted, the listing is re-read and carries it, and it opens in a tab
     // whose routes are the node's. Nothing here chose the id.
     const listed: HostedModel[] = [{ modelId: A, metamodelId: bt }];
-    state = reducer(state, { type: 'hosted', models: listed });
+    state = reducer(state, { type: 'hosted', models: listed, seen: [] });
     state = reducer(state, { type: 'open', id: A, nodeUrl: URL });
     expect(state.hosted).toEqual(listed);
     expect(state.tabs).toEqual([A]);
@@ -70,7 +70,7 @@ describe('mp29 the model list and the tabs', () => {
 
     // A second model, joined by id, gets its own tab with its own document and
     // verdict; the first tab is untouched by the second's patches.
-    state = reducer(state, { type: 'hosted', models: [...listed, { modelId: C, metamodelId: uml }] });
+    state = reducer(state, { type: 'hosted', models: [...listed, { modelId: C, metamodelId: uml }], seen: [] });
     state = reducer(state, { type: 'open', id: C, nodeUrl: URL });
     state = reducer(state, { type: 'tab', id: C, patch: { status: 'open', doc: { eClass: 'Model' }, lastSyncAt: 9 } });
     expect(state.tabs).toEqual([A, C]);
@@ -156,7 +156,7 @@ describe('mp29 the model list and the tabs', () => {
   });
 
   it('disconnect closes every tab and forgets the listing, since every tab was opened against that connection', () => {
-    let state = reducer(connected(), { type: 'hosted', models: [{ modelId: A, metamodelId: bt }] });
+    let state = reducer(connected(), { type: 'hosted', models: [{ modelId: A, metamodelId: bt }], seen: [] });
     state = reducer(state, { type: 'metamodels', listing: [{ ...bt, package: 'behaviortree' }] });
     state = reducer(state, { type: 'open', id: A, nodeUrl: URL });
     state = reducer(state, { type: 'disconnected' });

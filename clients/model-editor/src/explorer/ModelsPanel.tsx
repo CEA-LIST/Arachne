@@ -8,6 +8,11 @@
  * catalog, so a model created on another node is reached by pasting its id
  * here, together with the metamodel it is bound to, which the node requires
  * at registration and cannot infer from an id alone.
+ *
+ * Beside it, the ids the node has seen go by on frames for models it does not
+ * host, which spares the retyping in the common case. That list is traffic,
+ * not a catalog: a model nobody has touched since this node connected has
+ * sent no frame and so is not in it, which is why the join-by-id form stays.
  */
 
 import { useState } from 'react';
@@ -20,6 +25,8 @@ import { ICON } from '../ui/iconProps';
 interface ModelsPanelProps {
   connected: boolean;
   hosted: HostedModel[] | null;
+  /** Ids the node has seen traffic for and does not host; disjoint from `hosted`. */
+  seen: readonly ModelId[];
   metamodels: MetamodelListing[];
   openIds: readonly ModelId[];
   selected: ModelId | null;
@@ -62,6 +69,7 @@ function MetamodelSelect({
 export function ModelsPanel({
   connected,
   hosted,
+  seen,
   metamodels,
   openIds,
   selected,
@@ -72,6 +80,7 @@ export function ModelsPanel({
 }: ModelsPanelProps) {
   const [createDigest, setCreateDigest] = useState('');
   const [joinDigest, setJoinDigest] = useState('');
+  const [seenDigest, setSeenDigest] = useState('');
   const [joinId, setJoinId] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -167,6 +176,59 @@ export function ModelsPanel({
           Create model
         </button>
       </form>
+
+      {/*
+        The fourth block: what this node has *heard from*, which is not the
+        same as what exists. The heading says "since connecting" and the hint
+        says a quiet model is missing, so a reader who knows of a model and
+        does not find it here is told why before they look for a bug.
+      */}
+      <section className="me-models__form" aria-label="Seen since connecting">
+        <h3 className="me-models__heading">Seen since connecting</h3>
+        <p className="me-connect__hint">
+          Models this node has received traffic for and does not host. Not a list of the session: a model
+          nobody has touched since this node connected has sent nothing and is not here — join that one by
+          id below.
+        </p>
+        {seen.length === 0 ? (
+          <p className="me-muted me-models__none">Nothing seen yet.</p>
+        ) : (
+          <>
+            <label className="me-connect__field">
+              <span className="me-connect__label">Bound to</span>
+              <MetamodelSelect
+                label="Metamodel of the seen model to join"
+                metamodels={metamodels}
+                value={seenDigest.length > 0 ? seenDigest : (metamodels[0]?.digest ?? '')}
+                onChange={setSeenDigest}
+              />
+            </label>
+            <ul className="me-models__list me-models__seen" aria-label="Models seen since connecting">
+              {seen.map((id) => (
+                <li key={id} className="me-models__row" data-seen-id={id}>
+                  <span className="me-mono me-models__id">{id}</span>
+                  <button
+                    type="button"
+                    className="me-btn me-btn--sm"
+                    aria-label={`Join ${id}`}
+                    disabled={metamodels.length === 0}
+                    onClick={() => {
+                      const metamodelId = pick(seenDigest);
+                      if (metamodelId !== null) onJoin(id, metamodelId);
+                    }}
+                  >
+                    Join
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="me-connect__hint">
+              The node cannot say which metamodel a model it does not host is bound to, so choose it above;
+              the wrong one is refused by the node, naming the digest it expected.
+            </p>
+          </>
+        )}
+      </section>
 
       <form
         className="me-models__form"

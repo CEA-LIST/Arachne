@@ -44,6 +44,7 @@ interface ExplorerPanelProps {
   setTab: (tab: ExplorerTab) => void;
   /** The node's hosted list and descriptors, and the actions of the Models tab. */
   hosted: HostedModel[] | null;
+  seen: readonly ModelId[];
   metamodels: MetamodelListing[];
   openIds: readonly ModelId[];
   selectedModel: ModelId | null;
@@ -83,6 +84,7 @@ export function ExplorerPanel({
   tab,
   setTab,
   hosted,
+  seen,
   metamodels,
   openIds,
   selectedModel,
@@ -137,6 +139,7 @@ export function ExplorerPanel({
           <ModelsPanel
             connected={connected}
             hosted={hosted}
+            seen={seen}
             metamodels={metamodels}
             openIds={openIds}
             selected={selectedModel}

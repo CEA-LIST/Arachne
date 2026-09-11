@@ -86,6 +86,12 @@ export interface AppState {
   };
   /** GET /api/models on the connected node, as last listed; null before the first listing. */
   hosted: HostedModel[] | null;
+  /**
+   * The `seen` half of the same listing: ids the node has had traffic for and
+   * does not host. Never overlaps `hosted` — the node drops an id from its
+   * seen set the moment it starts hosting it.
+   */
+  seen: ModelId[];
   /** GET /api/metamodels on the connected node: what a new model can be bound to. */
   metamodels: MetamodelListing[];
   /** The open models, keyed by id. */
@@ -104,6 +110,7 @@ export function initialState(url: string): AppState {
   return {
     connection: { url, status: 'idle', replicaId: null, error: null },
     hosted: null,
+    seen: [],
     metamodels: [],
     models: {},
     tabs: [],
@@ -143,7 +150,7 @@ export type Action =
   | { type: 'connected'; replicaId: string }
   | { type: 'connect-error'; error: string }
   | { type: 'disconnected' }
-  | { type: 'hosted'; models: HostedModel[] }
+  | { type: 'hosted'; models: HostedModel[]; seen: ModelId[] }
   | { type: 'metamodels'; listing: MetamodelListing[] }
   /** Open a tab for the model; an id already open is selected and nothing else changes. */
   | { type: 'open'; id: ModelId; nodeUrl: string; registry?: FieldRegistry }
@@ -180,13 +187,14 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         connection: { ...state.connection, status: 'idle', replicaId: null, error: null },
         hosted: null,
+        seen: [],
         metamodels: [],
         models: {},
         tabs: [],
         selected: null,
       };
     case 'hosted':
-      return { ...state, hosted: action.models };
+      return { ...state, hosted: action.models, seen: action.seen };
     case 'metamodels':
       return { ...state, metamodels: action.listing };
     case 'open': {

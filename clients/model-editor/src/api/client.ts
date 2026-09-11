@@ -21,11 +21,13 @@ import type {
   MetamodelId,
   MetamodelListing,
   ModelId,
+  ModelListing,
   ModelOp,
   OpResult,
   PlainJson,
   Registration,
 } from './types';
+import { isModelId } from './types';
 
 export class ApiError extends Error {
   readonly status: number | null;
@@ -180,19 +182,44 @@ function readMetamodelId(raw: unknown, where: string): MetamodelId | null {
   throw new ApiError(`${where} has a metamodel_id that is neither a {nsURI, digest} pair nor a digest`);
 }
 
-/** GET /api/models — the models the node hosts, the default log among them with a null metamodel. */
-export async function getModels(base: string): Promise<HostedModel[]> {
+/**
+ * GET /api/models — the models the node hosts, the default log among them
+ * with a null metamodel, and beside them the ids under `seen`: models this
+ * node does not host but has had traffic for since it connected.
+ *
+ * `seen` is missing on a node that predates it, which reads as an empty list
+ * rather than an error: the key was added to an object that was already an
+ * object precisely so an older node and an older editor keep working.
+ */
+export async function getModels(base: string): Promise<ModelListing> {
   const response = await request(base, '/api/models');
   if (!response.ok) throw await failure(response, '/api/models');
   const body = (await readJson(response, '/api/models')) as Record<string, unknown>;
   const entries = body['models'];
   if (!Array.isArray(entries)) throw new ApiError('/api/models body has no "models" array');
-  return entries.map((entry): HostedModel => {
+  const hosted = entries.map((entry): HostedModel => {
     if (typeof entry !== 'object' || entry === null) throw new ApiError('/api/models entry is not a JSON object');
     const record = entry as Record<string, unknown>;
     const modelId = record['model_id'];
     if (typeof modelId !== 'string') throw new ApiError('/api/models entry has no model_id string');
     return { modelId, metamodelId: readMetamodelId(record['metamodel_id'], '/api/models entry') };
+  });
+  return { hosted, seen: readSeen(body['seen']) };
+}
+
+/**
+ * The `seen` half of a `GET /api/models` body: bare ids, or nothing at all on
+ * a node that does not report them. A present-but-wrong shape is a defect and
+ * throws; an id that is not 32 lowercase hex characters is one too, since the
+ * editor turns these into route segments.
+ */
+function readSeen(raw: unknown): ModelId[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new ApiError('/api/models body has a "seen" that is not an array');
+  return raw.map((entry): ModelId => {
+    if (typeof entry !== 'string') throw new ApiError('/api/models "seen" entry is not a string');
+    if (!isModelId(entry)) throw new ApiError(`/api/models "seen" entry is not a model id: ${entry.slice(0, 40)}`);
+    return entry;
   });
 }
 

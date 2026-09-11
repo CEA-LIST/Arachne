@@ -117,7 +117,8 @@ export function useSync(options: SyncOptions = {}): SyncApi {
   const refreshModels = useCallback(async () => {
     const url = urlRef.current;
     try {
-      dispatch({ type: 'hosted', models: await getModels(url) });
+      const listing = await getModels(url);
+      dispatch({ type: 'hosted', models: listing.hosted, seen: listing.seen });
     } catch (err) {
       dispatch({ type: 'banner', message: `model list failed: ${err instanceof Error ? err.message : String(err)}` });
     }

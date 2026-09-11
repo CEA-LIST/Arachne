@@ -370,6 +370,25 @@
   user-select: all;
 }
 
+/*
+ * A seen row carries an id and a button and nothing else, so the id keeps its
+ * own column here rather than taking a line of its own as it does above, and
+ * the row stays one line at the panel's width.
+ */
+.me-models__seen {
+  width: 100%;
+  padding: 0;
+}
+
+.me-models__seen .me-models__row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-inline: 0;
+}
+
+.me-models__seen .me-models__id {
+  grid-column: auto;
+}
+
 .me-models__row:hover {
   background: var(--c-surface-2);
 }
