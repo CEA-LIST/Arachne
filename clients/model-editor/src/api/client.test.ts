@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ModelOp } from './types';
 import {
+  addMetamodel,
   ApiError,
   getMetamodels,
   getModelMetamodel,
@@ -243,5 +244,70 @@ describe('postModelOp', () => {
     await expect(
       postModelOp('http://node:8081', ID, { Instance: 'New' }),
     ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+/* ---------- adding a metamodel to a running replica ---------- */
+
+describe('addMetamodel', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * A descriptor file as a person hands it over: pretty-printed, with a
+   * trailing newline, keys in the order the tool wrote them. The node hashes
+   * what it parses, so any of that may change without changing the metamodel
+   * — but the client must not be the thing that changes it, because then the
+   * text the node parsed is a text nobody wrote.
+   */
+  const file = `{\n  "formatVersion": 2,\n  "nsURI": "${bt.nsURI}",\n  "package": "behaviortree"\n}\n`;
+
+  it("posts the file's text byte for byte and reads the entry the node listed", async () => {
+    const { fetch, calls } = capturing(201, { added: true, metamodel: bt, metamodels: [bt] });
+    vi.stubGlobal('fetch', fetch);
+    expect(await addMetamodel('http://node:8081/', file)).toEqual({
+      added: true,
+      metamodel: bt,
+      metamodels: [bt],
+    });
+    expect(calls[0].url).toBe('http://node:8081/api/metamodels');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.body).toBe(file);
+  });
+
+  it('reads a descriptor the node already held as added:false, which is not a failure', async () => {
+    vi.stubGlobal('fetch', answering(200, { added: false, metamodel: bt, metamodels: [bt] }));
+    const answer = await addMetamodel('http://node:8081', file);
+    expect(answer.added).toBe(false);
+    expect(answer.metamodel).toEqual(bt);
+  });
+
+  it('returns the listing as it stands afterwards, so no second GET is needed to see the new language', async () => {
+    const other = { nsURI: 'http://www.example.org/classdiagram', package: 'classdiagram', digest: '7'.repeat(64) };
+    vi.stubGlobal('fetch', answering(201, { added: true, metamodel: other, metamodels: [bt, other] }));
+    expect((await addMetamodel('http://node:8081', file)).metamodels).toEqual([bt, other]);
+  });
+
+  it("carries a 422 as an ApiError whose detail is the node's own sentence, not a status", async () => {
+    const why = 'not a descriptor this node can serve: no merge table: keyed containment needs v2';
+    vi.stubGlobal('fetch', answering(422, { error: why }));
+    const refused = await addMetamodel('http://node:8081', file).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(ApiError);
+    expect((refused as ApiError).status).toBe(422);
+    expect((refused as ApiError).detail).toBe(why);
+    expect((refused as ApiError).message).toContain(why);
+  });
+
+  it('carries a 501 from a node started without the upload hook the same way', async () => {
+    vi.stubGlobal('fetch', answering(501, { error: 'adding a metamodel descriptor is not enabled on this node' }));
+    const refused = await addMetamodel('http://node:8081', file).catch((e: unknown) => e);
+    expect((refused as ApiError).status).toBe(501);
+    expect((refused as ApiError).detail).toContain('is not enabled on this node');
+  });
+
+  it('refuses a reply without a listing, and one whose entry has no digest', async () => {
+    vi.stubGlobal('fetch', answering(201, { added: true, metamodel: bt }));
+    await expect(addMetamodel('http://node:8081', file)).rejects.toBeInstanceOf(ApiError);
+    vi.stubGlobal('fetch', answering(201, { added: true, metamodel: { nsURI: bt.nsURI }, metamodels: [] }));
+    await expect(addMetamodel('http://node:8081', file)).rejects.toBeInstanceOf(ApiError);
   });
 });

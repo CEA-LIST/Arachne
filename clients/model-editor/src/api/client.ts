@@ -3,13 +3,16 @@
  *
  * Endpoints (this base): GET /api/health; the model routes GET /api/models,
  * POST /api/models, GET /api/metamodels (the descriptors the node holds, each
- * with its digest), GET /api/model/{id}/state, POST /api/model/{id}/op and
+ * with its digest), POST /api/metamodels (one more, served from the moment it
+ * answers), GET /api/model/{id}/state, POST /api/model/{id}/op and
  * GET /api/model/{id}/metamodel; and the unscoped GET /api/state, POST /api/op
  * and GET /api/metamodel, which serve the node's default log and stay for the
  * compatibility step the design names.
  *
  * Error contract: network failures and non-OK statuses throw ApiError, the
- * status on it and the node's own `error` text in the message; the op routes
+ * status on it and the node's own `error` text both in the message and alone
+ * on `.detail`, which is what a panel shows when the node's sentence is the
+ * whole of what a reader needs; the op routes
  * additionally return {"success": false, ...} with HTTP 200 for well-formed
  * but refused ops — callers MUST branch on `.success`, and the op queue turns
  * that case into a visible error (never swallowed).
@@ -18,6 +21,7 @@
 import type {
   Descriptor,
   HostedModel,
+  MetamodelAdded,
   MetamodelId,
   MetamodelListing,
   ModelId,
@@ -31,11 +35,19 @@ import { isModelId } from './types';
 
 export class ApiError extends Error {
   readonly status: number | null;
+  /**
+   * The node's own `error` text, without the route and status the message
+   * prefixes it with; null when the failure was not the node explaining
+   * itself (a network error, a body that was not JSON, a shape this client
+   * refused).
+   */
+  readonly detail: string | null;
 
-  constructor(message: string, status: number | null = null) {
+  constructor(message: string, status: number | null = null, detail: string | null = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -79,14 +91,18 @@ export async function getHealth(base: string): Promise<HealthInfo> {
 /** A non-OK reply as an ApiError, carrying the body's `error` text when it has one. */
 async function failure(response: Response, path: string): Promise<ApiError> {
   const text = await response.text();
-  let detail = '';
+  let sentence: string | null = null;
   try {
     const body = JSON.parse(text) as Record<string, unknown>;
-    if (typeof body['error'] === 'string') detail = `: ${body['error']}`;
+    if (typeof body['error'] === 'string') sentence = body['error'];
   } catch {
     // Not JSON: the status is the message.
   }
-  return new ApiError(`${path} returned ${response.status}${detail}`, response.status);
+  return new ApiError(
+    `${path} returned ${response.status}${sentence === null ? '' : `: ${sentence}`}`,
+    response.status,
+    sentence,
+  );
 }
 
 /** The scoped route for one hosted model. */
@@ -165,6 +181,43 @@ export function validateMetamodelListing(entry: unknown): MetamodelListing {
     throw new ApiError('metamodel listing entry has no nsURI/digest strings');
   }
   return { nsURI, digest, package: typeof pkg === 'string' ? pkg : '' };
+}
+
+/**
+ * POST /api/metamodels — hand the node one more descriptor, which it serves
+ * from the moment it answers: a model registers under it on the very next
+ * request, with nothing restarted and nothing regenerated.
+ *
+ * `text` is the file as it was read, never a re-serialization of a parsed
+ * object. The node parses the body itself and takes the identity over what it
+ * parsed, so posting bytes this client rewrote would be posting a descriptor
+ * nobody wrote.
+ *
+ * 201 is a descriptor the node did not hold and 200 one it did (`added:
+ * false`); both carry the entry it listed and the listing as it now stands. A
+ * 422 (a descriptor this node cannot serve, with the parser's own reason) and
+ * a 501 (a node started without the upload hook) throw an ApiError carrying
+ * the status and the node's sentence.
+ *
+ * The reach is one replica. No peer learns this language here — a peer learns
+ * it when a model written in it arrives, carrying the descriptor in the
+ * operation that opened its log.
+ */
+export async function addMetamodel(base: string, text: string): Promise<MetamodelAdded> {
+  const response = await request(base, '/api/metamodels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: text,
+  });
+  if (!response.ok) throw await failure(response, '/api/metamodels');
+  const body = (await readJson(response, '/api/metamodels')) as Record<string, unknown>;
+  const entries = body['metamodels'];
+  if (!Array.isArray(entries)) throw new ApiError('POST /api/metamodels reply has no "metamodels" array');
+  return {
+    added: body['added'] === true,
+    metamodel: validateMetamodelListing(body['metamodel']),
+    metamodels: entries.map(validateMetamodelListing),
+  };
 }
 
 /**

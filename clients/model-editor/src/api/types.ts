@@ -324,3 +324,19 @@ export interface Registration {
   metamodelId: MetamodelId;
   created: boolean;
 }
+
+/**
+ * What POST /api/metamodels answers: the entry the node listed for the
+ * descriptor it was given, and the whole listing as it stands afterwards.
+ *
+ * `added` is false when the node already held this digest, which is not a
+ * failure — the same descriptor posted twice is the same metamodel, since the
+ * digest is taken over what the node parsed and not over the file's bytes.
+ * `metamodels` is what `GET /api/metamodels` would answer on the next request,
+ * so a caller that has just posted needs no second round trip to refresh.
+ */
+export interface MetamodelAdded {
+  added: boolean;
+  metamodel: MetamodelListing;
+  metamodels: MetamodelListing[];
+}
