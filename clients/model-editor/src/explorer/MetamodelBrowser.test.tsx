@@ -58,6 +58,10 @@ describe('the Metamodel tab offers both actions, and says which is which', () =>
     const html = markup(descriptor);
     expect(html).toContain('Add to this replica');
     expect(html).toContain('Load into this editor');
+    // Two pickers, each addressable on its own: the harness that drives the
+    // real browser has to be able to hand a file to one and not the other.
+    expect(html).toContain('data-testid="add-metamodel-file"');
+    expect(html).toContain('data-testid="load-descriptor-file"');
   });
 
   it('offers both on a replica that serves no descriptor at all, which is where a language is first given', () => {

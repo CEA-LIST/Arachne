@@ -91,6 +91,7 @@ export function MetamodelBrowser({
           <input
             type="file"
             className="me-sr-only"
+            data-testid="add-metamodel-file"
             accept=".json,application/json"
             disabled={addState.phase === 'sending'}
             onChange={(event) => {
@@ -105,6 +106,7 @@ export function MetamodelBrowser({
         <input
           type="file"
           className="me-sr-only"
+          data-testid="load-descriptor-file"
           accept=".json,application/json"
           onChange={(event) => {
             onFile(event.target.files?.[0]);

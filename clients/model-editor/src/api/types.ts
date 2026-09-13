@@ -13,6 +13,12 @@
  *   shape is HTTP 400 with `Invalid op JSON`.
  * - GET /api/metamodel returns a formatVersion 2 descriptor, or 404 when the
  *   node serves none.
+ * - POST /api/metamodels takes a descriptor's TEXT as the whole body and
+ *   answers {"added", "metamodel", "metamodels"}: 201 when the node did not
+ *   hold that digest, 200 when it did. A descriptor it cannot serve is 422
+ *   with an "error" text that begins `not a descriptor this node can serve:`
+ *   and carries the parser's own reason; a node started without the upload
+ *   hook is 501. Verified against alice on the interpreted stack.
  * - GET /api/models lists the hosted models as {"models": [{model_id, metamodel_id}]}, the
  *   metamodel_id null for the default log; POST /api/models registers one: {metamodel_id} creates
  *   (201, the node mints the id), {model_id, metamodel_id} joins (200); 409 already hosted, 422
