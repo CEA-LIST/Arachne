@@ -43,6 +43,7 @@ export {
   Trash2,
   TriangleAlert,
   Unlink,
+  Upload,
   X,
 } from 'lucide-react';
 

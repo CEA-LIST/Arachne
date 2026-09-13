@@ -22,6 +22,7 @@ import type {
 import { EmptyState } from '../common/EmptyState';
 import { pathText, type Diagnostic } from '../model/conformance';
 import { buildTree, rootCandidates, type ModelNode } from '../model/instance';
+import type { MetamodelAddOutcome } from '../sync/useSync';
 import { AddControl } from '../properties/AddControl';
 import { countElements, flattenTree } from '../ui/flattenTree';
 import { Box, FileWarning, Layers, ListCollapse, Search, X } from '../ui/icons';
@@ -55,6 +56,8 @@ interface ExplorerPanelProps {
   descriptor: Descriptor | null;
   metamodelSource: 'node' | 'file' | null;
   loadDescriptorFile: (descriptor: Descriptor) => void;
+  /** Post a descriptor's text to the connected node, which serves it at once; the Metamodel tab's other action. */
+  addMetamodel: (text: string, fileName: string) => Promise<MetamodelAddOutcome>;
   doc: PlainJson;
   connected: boolean;
   /** The binding check's refusal when the document was not applied (model/binding.ts); null otherwise. */
@@ -95,6 +98,7 @@ export function ExplorerPanel({
   descriptor,
   metamodelSource,
   loadDescriptorFile,
+  addMetamodel,
   doc,
   connected,
   refusal,
@@ -156,6 +160,7 @@ export function ExplorerPanel({
             source={metamodelSource}
             connected={connected}
             loadDescriptorFile={loadDescriptorFile}
+            addMetamodel={addMetamodel}
           />
         </div>
       ) : (

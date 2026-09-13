@@ -9,12 +9,21 @@
  * into reducer actions; the panels read the selected tab. Creating a model
  * posts `{metamodel_id}` and lets the node mint the id; joining posts the id
  * a person learned out of band beside the metamodel it is bound to, which the
- * node requires and cannot infer.
+ * node requires and cannot infer. Adding a metamodel posts a descriptor's
+ * text to `POST /api/metamodels`, which reaches this node and no other: its
+ * peers learn the language when a model written in it reaches them.
  */
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { ApiError, getHealth, getMetamodels, getModels, registerModel } from '../api/client';
-import type { Descriptor, MetamodelId, ModelId, Path, PlainJson } from '../api/types';
+import {
+  addMetamodel as postMetamodel,
+  ApiError,
+  getHealth,
+  getMetamodels,
+  getModels,
+  registerModel,
+} from '../api/client';
+import type { Descriptor, MetamodelId, MetamodelListing, ModelId, Path, PlainJson } from '../api/types';
 import type { EditOp } from '../crdt/ops';
 import { openBrowserStore, type ModelStore } from '../model/store';
 import { initialState, reducer, selectedTab, type AppState, type LogEntry, type ModelTab } from '../state/store';
@@ -31,6 +40,25 @@ function loadStoredUrl(): string {
   } catch {
     return 'http://127.0.0.1:3000';
   }
+}
+
+/**
+ * What handing one descriptor to the connected node came to.
+ *
+ * A refusal is answered rather than thrown: the node's own sentence is the
+ * whole of what a reader needs, and the panel prints it beside the control
+ * that caused it. The action-log row and the failure banner are raised by
+ * `addMetamodel` itself, either way, so a caller that drops this value still
+ * leaves a record.
+ */
+export interface MetamodelAddOutcome {
+  ok: boolean;
+  /** The entry the node listed for the descriptor; null when it refused. */
+  listing: MetamodelListing | null;
+  /** False when the node already held this digest — a success, and a no-op. */
+  added: boolean;
+  /** The node's own sentence when it refused; null on success. */
+  detail: string | null;
 }
 
 export interface SyncApi {
@@ -56,6 +84,13 @@ export interface SyncApi {
   selectModel: (id: ModelId) => void;
   /** Load a descriptor from a file for the selected tab (fallback when the node serves none). */
   loadDescriptorFile: (descriptor: Descriptor) => void;
+  /**
+   * Give the connected node one more descriptor, as text. It serves it from
+   * the moment it answers, and the metamodel list is refreshed from the same
+   * reply, so the create and join dropdowns offer the new language with no
+   * manual reload. One replica: nothing is sent to its peers.
+   */
+  addMetamodel: (text: string, fileName: string) => Promise<MetamodelAddOutcome>;
   /**
    * Post an op batch (one edit intent) to the model `id`. Logs the attempt
    * with its outcome; refused/error outcomes also raise the error banner.
@@ -273,6 +308,36 @@ export function useSync(options: SyncOptions = {}): SyncApi {
     sessionsRef.current.get(id)?.loadDescriptorFile(descriptor);
   }, []);
 
+  const addMetamodel = useCallback(
+    async (text: string, fileName: string): Promise<MetamodelAddOutcome> => {
+      const url = urlRef.current;
+      const description = `add metamodel ${fileName}`;
+      try {
+        const answer = await postMetamodel(url, text);
+        // The reply carries the listing as it stands on the node that has
+        // just taken the descriptor, so the dropdowns are refreshed from it
+        // rather than from a second GET that could answer before the node's
+        // own write and lose the language it was posted.
+        dispatch({ type: 'metamodels', listing: answer.metamodels });
+        log({
+          ts: Date.now(),
+          description,
+          ops: [],
+          outcome: 'ok',
+          detail: `${answer.added ? 'this replica now serves' : 'this replica already served'} ${answer.metamodel.nsURI} (digest ${answer.metamodel.digest}); no peer holds it until a model written in it reaches that peer`,
+        });
+        return { ok: true, listing: answer.metamodel, added: answer.added, detail: null };
+      } catch (err) {
+        const detail =
+          err instanceof ApiError ? (err.detail ?? err.message) : err instanceof Error ? err.message : String(err);
+        log({ ts: Date.now(), description, ops: [], outcome: 'error', detail });
+        dispatch({ type: 'banner', message: `${description}: ${detail}` });
+        return { ok: false, listing: null, added: false, detail };
+      }
+    },
+    [log],
+  );
+
   const clearBanner = useCallback(() => dispatch({ type: 'banner', message: null }), []);
 
   const selected = selectedTab(state);
@@ -294,6 +359,7 @@ export function useSync(options: SyncOptions = {}): SyncApi {
     closeModel,
     selectModel,
     loadDescriptorFile,
+    addMetamodel,
     sendOpsTo,
     sendOps,
     clearBanner,

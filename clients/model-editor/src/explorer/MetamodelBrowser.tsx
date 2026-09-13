@@ -1,9 +1,18 @@
 /**
- * The discovered metamodel, browsable.
+ * The discovered metamodel, browsable — and the two things a person can do
+ * with a descriptor file, which are not the same thing.
  *
- * When the node serves no descriptor (GET /api/metamodel -> 404) this tab
- * hosts the clearly-labelled degraded mode: load a descriptor file produced by
- * `arachne describe <file.ecore>`. Rejection shows the validator's own message.
+ * **Load into this editor** parses the file, validates it, and hands it to the
+ * open model's session for display and typing. Nothing leaves the browser.
+ * That is the labelled degraded mode for a node that serves no descriptor
+ * (GET /api/metamodel -> 404), and it is what this tab did and only did.
+ *
+ * **Add to this replica** posts the file's text to `POST /api/metamodels` on
+ * the node this window is connected to, which serves it from the moment it
+ * answers: a model registers under it on the very next request, with nothing
+ * restarted and nothing regenerated. The reach is exactly one replica, which
+ * the success line says out loud — see `servedHereLine` in
+ * `addMetamodel.ts`, which is where both actions' behaviour lives.
  */
 
 import { useMemo, useState } from 'react';
@@ -11,7 +20,9 @@ import { validateDescriptor } from '../api/client';
 import type { Descriptor } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
 import type { ClassDesc } from '../api/types';
-import { FileWarning, Plug, Search } from '../ui/icons';
+import type { MetamodelAddOutcome } from '../sync/useSync';
+import { addDescriptorFile, type AddState } from './addMetamodel';
+import { FileWarning, Plug, Search, Upload } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 
 /**
@@ -35,6 +46,8 @@ interface MetamodelBrowserProps {
   source: 'node' | 'file' | null;
   connected: boolean;
   loadDescriptorFile: (descriptor: Descriptor) => void;
+  /** Post a descriptor's text to the connected node; raises the banner and logs on its own. */
+  addMetamodel: (text: string, fileName: string) => Promise<MetamodelAddOutcome>;
 }
 
 export function MetamodelBrowser({
@@ -42,8 +55,10 @@ export function MetamodelBrowser({
   source,
   connected,
   loadDescriptorFile,
+  addMetamodel,
 }: MetamodelBrowserProps) {
   const [fileError, setFileError] = useState<string | null>(null);
+  const [addState, setAddState] = useState<AddState>({ phase: 'idle' });
   const [query, setQuery] = useState('');
 
   const onFile = (file: File | undefined) => {
@@ -54,6 +69,70 @@ export function MetamodelBrowser({
       .then((text) => loadDescriptorFile(validateDescriptor(JSON.parse(text))))
       .catch((err) => setFileError(err instanceof Error ? err.message : String(err)));
   };
+
+  const onAddFile = (file: File | undefined) => {
+    if (file === undefined) return;
+    setAddState({ phase: 'sending', file: file.name });
+    void addDescriptorFile(file, addMetamodel).then(setAddState);
+  };
+
+  /*
+   * Both pickers clear their input after a choice. Without it the second
+   * choice of the SAME file fires no change event, which is exactly the
+   * sequence a refusal puts a person in: pick the wrong file, read why, fix
+   * it on disk, pick it again — and nothing happens.
+   */
+  const actions = (
+    <div className="me-meta__actions">
+      {connected && (
+        <label className="me-btn me-btn--primary">
+          <Upload {...ICON} size={14} aria-hidden="true" />
+          Add to this replica…
+          <input
+            type="file"
+            className="me-sr-only"
+            accept=".json,application/json"
+            disabled={addState.phase === 'sending'}
+            onChange={(event) => {
+              onAddFile(event.target.files?.[0]);
+              event.target.value = '';
+            }}
+          />
+        </label>
+      )}
+      <label className="me-btn">
+        Load into this editor…
+        <input
+          type="file"
+          className="me-sr-only"
+          accept=".json,application/json"
+          onChange={(event) => {
+            onFile(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+      </label>
+    </div>
+  );
+
+  const notes = (
+    <>
+      {addState.phase === 'sending' && (
+        <p className="me-meta__note me-subtle">sending {addState.file} to this replica…</p>
+      )}
+      {addState.phase === 'served' && (
+        <p className="me-meta__note me-meta__note--ok" role="status">
+          {addState.line}
+        </p>
+      )}
+      {addState.phase === 'refused' && (
+        <p className="me-meta__note me-meta__note--bad" role="alert">
+          {addState.detail}
+        </p>
+      )}
+      {fileError !== null && <p className="me-form__error">descriptor rejected: {fileError}</p>}
+    </>
+  );
 
   const classes = useMemo(() => {
     if (metamodel === null) return [];
@@ -79,23 +158,15 @@ export function MetamodelBrowser({
         title="This replica serves no metamodel"
         body={
           <>
-            <code>GET /api/metamodel</code> returned 404. Load a descriptor file to edit with types,
-            or use the Document JSON tab in the console to inspect the raw state.
+            <code>GET /api/metamodel</code> returned 404. Give this replica a descriptor so models can
+            be created in that language, or load one into the editor to read a document with types.
           </>
         }
         tone="warn"
       >
-        <label className="me-btn">
-          Load descriptor…
-          <input
-            type="file"
-            className="me-sr-only"
-            accept=".json,application/json"
-            onChange={(e) => onFile(e.target.files?.[0])}
-          />
-        </label>
+        {actions}
         <p className="me-well">arachne describe &lt;file.ecore&gt;</p>
-        {fileError !== null && <p className="me-form__error">descriptor rejected: {fileError}</p>}
+        {notes}
       </EmptyState>
     );
   }
@@ -116,6 +187,11 @@ export function MetamodelBrowser({
         <dt>source</dt>
         <dd>{source === 'node' ? 'served by the node' : 'loaded from file'}</dd>
       </dl>
+
+      {/* Under the summary rather than under the class list: a control at the
+          foot of a hundred rows is a control nobody finds. */}
+      {actions}
+      {notes}
 
       <div className="me-panel__toolbar">
         <span className="me-panel__search">

@@ -339,6 +339,7 @@ export default function App() {
         descriptor={descriptor}
         metamodelSource={selected?.metamodelSource ?? null}
         loadDescriptorFile={sync.loadDescriptorFile}
+        addMetamodel={sync.addMetamodel}
         doc={doc}
         connected={connected}
         refusal={refusal}

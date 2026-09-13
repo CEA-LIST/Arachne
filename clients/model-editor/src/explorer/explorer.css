@@ -324,6 +324,41 @@
   color: var(--c-fg-muted);
 }
 
+/* The two things a descriptor file can be used for, side by side: given to
+   this replica, or read into this editor. They wrap rather than shrink — a
+   button whose label is cut is a button nobody dares press. */
+.me-meta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+}
+
+.me-empty__actions .me-meta__actions {
+  padding: 0;
+}
+
+/* The outcome of an add, under the control that caused it. Wrapped, because
+   the sentence about the one replica this reached is the point of it. */
+.me-meta__note {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+}
+
+.me-meta__note--ok {
+  border-radius: var(--r-1);
+  background: var(--c-ok-weak);
+  color: var(--c-ok);
+}
+
+.me-meta__note--bad {
+  border-radius: var(--r-1);
+  background: var(--c-danger-weak);
+  color: var(--c-danger);
+}
+
 /* ---------- the model list (Models tab) ---------- */
 
 .me-models {

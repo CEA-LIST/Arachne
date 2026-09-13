@@ -65,6 +65,12 @@ When a model is opened the editor calls `GET /api/model/{id}/metamodel`, which s
 
 If the node answers 404 (a model with no descriptor to serve), the Metamodel tab offers the labelled fallback: load a descriptor file produced by `arachne describe <file.ecore>`; the binding check then runs against that file.
 
+## Giving a replica a language
+
+The Metamodel tab's other action, beside that one and deliberately not the same action: **Add to this replica** posts a descriptor file's text to `POST /api/metamodels` on the node this window is connected to. The node parses it, serves it from the moment it answers, and a model registers under it on the very next request — nothing restarts and nothing is regenerated, which is the half of the claim a node generated from one metamodel cannot answer at all. The metamodel list is refreshed from that same reply, so the new language is in the New model and Join by id dropdowns immediately. The text is posted exactly as read: the node takes the metamodel's identity over what it parsed, so a re-serialization would be a descriptor nobody wrote. A descriptor the node cannot serve comes back 422 with the parser's own sentence, and that sentence is what the panel prints.
+
+It reaches **one** replica. Bob, next door, goes on listing the metamodels he was started with, and the panel says so in as many words: *This replica serves classdiagram now; another replica learns it only when a model written in classdiagram reaches it.* The route is in-band — the descriptor travels inside the `Install` operation that opened the model's log — so joining a model written in the new language is what makes the second replica serve it too, and that is the demonstration rather than a caveat.
+
 ## Editing
 
 The tree is the descriptor's containment structure (labels come from the element's id attribute — the first `isId` attribute, else one named `ID`/`name`, else the first string attribute — falling back to the class name). Selecting an element opens a typed form: text inputs for strings, number inputs (commit on blur/Enter) for int/float, a switch for booleans, a literal dropdown for enums. Containments offer create/add with a concrete-subtype menu where the target class is abstract, plus remove and move up/down; references are pickers over the document's existing instances of the target family, stored as the target's id value. On a fresh document the editor offers root creation from the descriptor's root classes.
