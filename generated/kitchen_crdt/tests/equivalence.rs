@@ -1504,3 +1504,249 @@ fn ip29_the_oracle_notices_when_the_two_encoders_disagree() {
     assert!(reason.contains("myShort"), "{reason}");
     assert!(reason.contains("interpreted"), "{reason}");
 }
+
+// ---------------------------------------------------------------------------
+// The conflict matrix over `kitchen_sink.ecore`
+// ---------------------------------------------------------------------------
+//
+// `moirai_interp::matrix` holds the whole matrix and assigns this crate the
+// six resettable counter widths, the enable-wins flag, the multi-value
+// register, the bag and the sequence of attribute values. What is here is the
+// cell table for those rows, driven through this file's own encoders and its
+// own projection, unchanged. Every cell opens with `New` and acknowledges with
+// one character into `Foo.myString`, which no cell here contends.
+//
+// The sequence cells keep every element away from its own default at every
+// point of every schedule, because an element at its default is the named
+// divergence `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+// pins, and this file's projection carries no exception for it: seeding the
+// elements at 1 and 2 and only ever incrementing them is what keeps each cell
+// about the ordering and not about that divergence.
+
+use moirai_interp::matrix::{self, Arm, Cell, Construction, pattern as p};
+use moirai_semantics::TieBreak;
+
+fn on(feature: &'static str, elem: Elem) -> Edit {
+    leaf('a', feature, elem)
+}
+
+fn act(feature: &'static str, action: Action) -> Edit {
+    edit('a', feature, action)
+}
+
+fn beat() -> Edit {
+    on("myString", Elem::InsertChar { pos: 0, ch: 'h' })
+}
+
+fn opened(extra: Vec<Edit>) -> Vec<Edit> {
+    let mut out = vec![open()];
+    out.extend(extra);
+    out
+}
+
+fn kitchen_cells() -> Vec<Cell<Edit>> {
+    use serde_json::Value::Null;
+    let mut cells = Vec::new();
+
+    // The six resettable counter widths.
+    for (feature, num, float) in [
+        ("myByte", NumKind::U8, false),
+        ("myShort", NumKind::I16, false),
+        ("myInt", NumKind::I32, false),
+        ("myLong", NumKind::I64, false),
+        ("myFloat", NumKind::F32, true),
+        ("myDouble", NumKind::F64, true),
+    ] {
+        let row = Construction::Counter(num);
+        let pointer: &'static str = Box::leak(format!("/{feature}").into_boxed_str());
+        let inc = move |by: i64| {
+            on(feature, if float { Elem::IncFloat(by as f64) } else { Elem::Inc(by) })
+        };
+        let dec = move |by: i64| {
+            on(feature, if float { Elem::DecFloat(by as f64) } else { Elem::Dec(by) })
+        };
+        let number = move |value: i64| if float { json!(value as f64) } else { json!(value) };
+        let seeded = || opened(vec![inc(10)]);
+        cells.push(
+            Cell::new(row, p::INC_INC, opened(vec![]), vec![vec![inc(2)], vec![inc(3)]], beat())
+                .expect(pointer, number(5)),
+        );
+        cells.push(
+            Cell::new(row, p::INC_DEC, seeded(), vec![vec![inc(2)], vec![dec(3)]], beat())
+                .expect(pointer, number(9)),
+        );
+        cells.push(
+            Cell::new(row, p::INC_RESET, seeded(), vec![vec![inc(2)], vec![on(feature, Elem::Reset)]], beat())
+                .expect(pointer, number(2)),
+        );
+        cells.push(
+            Cell::new(
+                row,
+                p::RESET_RESET,
+                seeded(),
+                vec![vec![on(feature, Elem::Reset)], vec![on(feature, Elem::Reset)]],
+                beat(),
+            )
+            .expect(pointer, Null),
+        );
+    }
+
+    // The enable-wins flag: `Foo.myBoolean`.
+    let row = Construction::EnableWinsFlag;
+    let f = |elem: Elem| vec![on("myBoolean", elem)];
+    let enabled = || opened(vec![on("myBoolean", Elem::Enable)]);
+    cells.push(
+        Cell::new(row, p::ENABLE_DISABLE, opened(vec![]), vec![f(Elem::Enable), f(Elem::Disable)], beat())
+            .expect("/myBoolean", json!(true)),
+    );
+    cells.push(
+        Cell::new(row, p::ENABLE_ENABLE, opened(vec![]), vec![f(Elem::Enable), f(Elem::Enable)], beat())
+            .expect("/myBoolean", json!(true)),
+    );
+    cells.push(
+        Cell::new(row, p::DISABLE_DISABLE, enabled(), vec![f(Elem::Disable), f(Elem::Disable)], beat())
+            .expect("/myBoolean", Null),
+    );
+    cells.push(
+        Cell::new(row, p::ENABLE_CLEAR, enabled(), vec![f(Elem::Enable), f(Elem::ClearFlag)], beat())
+            .expect("/myBoolean", json!(true)),
+    );
+    cells.push(
+        Cell::new(row, p::DISABLE_CLEAR, enabled(), vec![f(Elem::Disable), f(Elem::ClearFlag)], beat())
+            .expect("/myBoolean", Null),
+    );
+
+    // The multi-value register over `EChar`: `Foo.myChar`.
+    let row = Construction::Register(TieBreak::MultiValue);
+    let wr = |ch| vec![on("myChar", Elem::Write(ch))];
+    cells.push(
+        Cell::new(row, p::WRITE_WRITE_DIFFERENT, opened(vec![]), vec![wr('z'), wr('m')], beat())
+            .expect("/myChar", json!({CONFLICT: ["m", "z"]})),
+    );
+    cells.push(
+        Cell::new(row, p::WRITE_WRITE_SAME, opened(vec![]), vec![wr('q'), wr('q')], beat())
+            .expect("/myChar", json!("q")),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::WRITE_CLEAR,
+            opened(vec![on("myChar", Elem::Write('k'))]),
+            vec![wr('m'), vec![on("myChar", Elem::ClearRegister)]],
+            beat(),
+        )
+        .expect("/myChar", json!("m")),
+    );
+    cells.push(
+        Cell::new(row, p::THREE_WRITERS, opened(vec![]), vec![wr('z'), wr('m'), wr('q')], beat())
+            .expect("/myChar", json!({CONFLICT: ["m", "q", "z"]})),
+    );
+
+    // The bag: `Foo.bag`, over `EShort`.
+    let row = Construction::Bag;
+    let b = |action: Action| vec![act("bag", action)];
+    cells.push(
+        Cell::new(
+            row,
+            p::ADD_REMOVE_PRESENT,
+            opened(vec![act("bag", Action::BagAdd(7))]),
+            vec![b(Action::BagRemove(7)), b(Action::BagAdd(7))],
+            beat(),
+        )
+        .expect("/bag", json!([7])),
+    );
+    cells.push(
+        Cell::new(row, p::ADD_ADD_SAME, opened(vec![]), vec![b(Action::BagAdd(7)), b(Action::BagAdd(7))], beat())
+            .expect("/bag", json!([7, 7])),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::ADD_REMOVE_DIFFERENT,
+            opened(vec![act("bag", Action::BagAdd(5))]),
+            vec![b(Action::BagAdd(7)), b(Action::BagRemove(5))],
+            beat(),
+        )
+        .expect("/bag", json!([7])),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::REMOVE_REMOVE_SAME,
+            opened(vec![act("bag", Action::BagAdd(7)), act("bag", Action::BagAdd(7))]),
+            vec![b(Action::BagRemove(7)), b(Action::BagRemove(7))],
+            beat(),
+        )
+        .expect("/bag", Null),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::ADD_CLEAR,
+            opened(vec![act("bag", Action::BagAdd(5))]),
+            vec![b(Action::BagAdd(7)), b(Action::BagClear)],
+            beat(),
+        )
+        .expect("/bag", json!([7])),
+    );
+
+    // The sequence of attribute values: `Foo.bounds0inf`, seeded [1, 2].
+    let row = Construction::SequenceOfValues;
+    let seeded = || {
+        opened(vec![
+            act("bounds0inf", Action::SeqInsert { pos: 0, elem: Elem::Inc(1) }),
+            act("bounds0inf", Action::SeqInsert { pos: 1, elem: Elem::Inc(2) }),
+        ])
+    };
+    let insert = |pos, by| vec![act("bounds0inf", Action::SeqInsert { pos, elem: Elem::Inc(by) })];
+    let update = |pos, by| vec![act("bounds0inf", Action::SeqUpdate { pos, elem: Elem::Inc(by) })];
+    let delete = |pos| vec![act("bounds0inf", Action::SeqDelete { pos })];
+    cells.push(Cell::new(row, p::INSERT_INSERT_SAME_POS, seeded(), vec![insert(1, 5), insert(1, 6)], beat()));
+    cells.push(
+        Cell::new(row, p::INSERT_DELETE, seeded(), vec![insert(1, 5), delete(0)], beat())
+            .expect("/bounds0inf", json!([5, 2])),
+    );
+    cells.push(Cell::new(row, p::DELETE_UPDATE_SAME, seeded(), vec![delete(0), update(0, 3)], beat()));
+    cells.push(
+        Cell::new(row, p::DELETE_DELETE_SAME, seeded(), vec![delete(0), delete(0)], beat())
+            .expect("/bounds0inf", json!([2])),
+    );
+    cells.push(
+        Cell::new(row, p::UPDATE_UPDATE_SAME, seeded(), vec![update(0, 3), update(0, 4)], beat())
+            .expect("/bounds0inf", json!([8, 2])),
+    );
+    cells.push(Cell::new(
+        row,
+        p::THREE_INSERTS_SAME_POS,
+        seeded(),
+        vec![insert(1, 5), insert(1, 6), insert(1, 7)],
+        beat(),
+    ));
+    cells
+}
+
+/// **The conflict matrix** over `kitchen_sink.ecore`: every cell the registry
+/// assigns to this crate, each under every schedule.
+#[test]
+fn conflict_matrix_over_kitchen_sink_ecore() {
+    let meta = Meta::new();
+    moirai_interp::testing::install_fixture(&meta.sem, ROOT);
+    let interp_encode = |edit: &Edit, _: &Value| interp_op(&meta, edit);
+    let gen_encode = |edit: &Edit, _: &Value| typed_op(edit);
+    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(Read::<Value>::new()));
+    let gen_read =
+        |replica: &GenReplica| without_defaults(project(&replica.query(Read::<TestValue>::new())));
+    let interp = Arm {
+        name: "interpreted",
+        encode: &interp_encode,
+        read: &interp_read,
+    };
+    let generated = Arm {
+        name: "generated",
+        encode: &gen_encode,
+        read: &gen_read,
+    };
+    let cells = kitchen_cells();
+    matrix::run_matrix(matrix::KITCHEN, &meta.sem, &cells, &interp, &generated)
+        .unwrap_or_else(|reason| panic!("{reason}"));
+}
