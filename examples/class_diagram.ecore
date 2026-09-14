@@ -21,9 +21,11 @@
   `class_diagram.rs`'s `RelationType::rank`, Associates < Aggregates <
   Composes < Implements < Extends, and not in that file's declaration order:
   a concurrent Aggregates and Associates settles on Aggregates, as in the
-  CoPaMO 2025 paper's first scenario. `Visibility` keeps the Rust enum's
-  declaration order, Public, Private, Protected, Package, which is not the
-  order of its `rank` (Public < Protected < Package < Private).
+  CoPaMO 2025 paper's first scenario. `Visibility` is likewise declared in
+  the order of its `rank`, Public < Protected < Package < Private, and not in
+  the Rust enum's declaration order (Public, Private, Protected, Package): the
+  more restrictive visibility wins, so a concurrent Private and Package on
+  `Feature.visibility` settles on Private.
 
   WHAT IS ADDED, AND WHY. `class_diagram.rs` reaches four Moirai leaves:
   `MVRegister`, `TORegister`, `EWFlag` and `UWMapLog`. Eight constructions of
@@ -117,9 +119,9 @@
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EEnum" name="Visibility">
         <eLiterals name="Public"/>
-        <eLiterals name="Private" value="1"/>
-        <eLiterals name="Protected" value="2"/>
-        <eLiterals name="Package" value="3"/>
+        <eLiterals name="Protected" value="1"/>
+        <eLiterals name="Package" value="2"/>
+        <eLiterals name="Private" value="3"/>
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EEnum" name="PrimitiveType">
         <eLiterals name="String"/>

@@ -31,9 +31,9 @@ __classifiers::record!(
 pub enum Visibility {
     #[default]
     Public,
-    Private,
     Protected,
     Package,
+    Private,
 }
 __classifiers::record!(
     Feature { name : __classifiers::EventGraph < __classifiers::List < char > >, typ :

@@ -1273,7 +1273,7 @@ fn ip30_one_write_of_every_construction_reads_the_same_on_both_paths() {
     assert_eq!(read["stereotype"], json!("delta"));
     assert_eq!(read["layer"], json!("gamma"));
     assert_eq!(read["isAbstract"], json!(true));
-    assert_eq!(read["visibility"], json!("Private"));
+    assert_eq!(read["visibility"], json!("Protected"));
     assert_eq!(read["tags"], json!(["alpha", "beta"]));
     assert_eq!(read["invariants"], json!(["gamma"]));
 }
@@ -1331,10 +1331,10 @@ fn ip30_every_contended_register_settles_the_same_way_on_both_paths() {
     // Partial order over `String`, which is totally ordered, so the greater
     // one survives here too and the conflict set holds one value.
     assert_eq!(read["stereotype"], json!("gamma"));
-    // Multi-value over an enum literal: both survive, sorted by name.
+    // Multi-value over an enum literal: both survive, in declaration order.
     assert_eq!(
         read["visibility"],
-        json!({CONFLICT: ["Public", "Protected"]}),
+        json!({CONFLICT: ["Public", "Package"]}),
         "two concurrent literals both survive, in the enum's declaration order"
     );
 
@@ -1343,8 +1343,8 @@ fn ip30_every_contended_register_settles_the_same_way_on_both_paths() {
         .apply(&edit('a', "visibility", Elem::WriteLiteral(3)))
         .unwrap_or_else(|r| panic!("{r}"));
     harness.deliver().unwrap_or_else(|r| panic!("{r}"));
-    assert_eq!(harness.interp_doc('a')["visibility"], json!("Package"));
-    assert_eq!(harness.gen_doc('b')["visibility"], json!("Package"));
+    assert_eq!(harness.interp_doc('a')["visibility"], json!("Private"));
+    assert_eq!(harness.gen_doc('b')["visibility"], json!("Private"));
 }
 
 /// A concurrent add and remove of the same element settles add-wins on `tags`
@@ -1450,7 +1450,7 @@ fn ip30_the_two_paths_spell_an_enum_literal_the_same_way_only_because_the_file_d
             "`{literal}` is not already the Rust variant the generator writes"
         );
     }
-    assert_eq!(meta.literals, ["Public", "Private", "Protected", "Package"]);
+    assert_eq!(meta.literals, ["Public", "Protected", "Package", "Private"]);
 }
 
 /// **ip30** — thirty seeded scripts, ten sequential and twenty with a
@@ -1910,7 +1910,7 @@ fn ip31_three_replicas_write_every_construction_and_agree() {
     assert_eq!(read["stereotype"], json!("delta"));
     assert_eq!(read["layer"], json!("gamma"));
     assert_eq!(read["isAbstract"], json!(true));
-    assert_eq!(read["visibility"], json!("Private"));
+    assert_eq!(read["visibility"], json!("Protected"));
     assert_eq!(read["tags"], json!(["alpha", "beta"]));
     assert_eq!(read["invariants"], json!(["gamma"]));
 }
@@ -1975,7 +1975,7 @@ fn ip31_three_concurrent_writes_to_every_register_settle_the_same_way_on_both_pa
     // declaration order.
     assert_eq!(
         read["visibility"],
-        json!({CONFLICT: ["Public", "Private", "Protected"]}),
+        json!({CONFLICT: ["Public", "Protected", "Package"]}),
         "three concurrent literals all survive"
     );
 
@@ -1985,8 +1985,8 @@ fn ip31_three_concurrent_writes_to_every_register_settle_the_same_way_on_both_pa
         .unwrap_or_else(|r| panic!("{r}"));
     trio.deliver().unwrap_or_else(|r| panic!("{r}"));
     for writer in WRITERS {
-        assert_eq!(trio.interp_doc(writer)["visibility"], json!("Package"));
-        assert_eq!(trio.gen_doc(writer)["visibility"], json!("Package"));
+        assert_eq!(trio.interp_doc(writer)["visibility"], json!("Private"));
+        assert_eq!(trio.gen_doc(writer)["visibility"], json!("Private"));
     }
 }
 
@@ -2588,7 +2588,7 @@ fn ip32_the_adopted_replica_writes_and_the_session_converges() {
     assert_eq!(read["qualifiedName"], json!("delta"));
     assert_eq!(read["author"], json!("delta"));
     assert_eq!(read["layer"], json!("delta"), "`delta` is the greatest word");
-    assert_eq!(read["visibility"], json!("Package"));
+    assert_eq!(read["visibility"], json!("Private"));
     assert!(
         read["tags"]
             .as_array()
@@ -2685,7 +2685,7 @@ fn ip32_a_joiners_write_concurrent_with_a_donors_settles_the_same_way_on_both_pa
     assert_eq!(read["stereotype"], json!("delta"));
     assert_eq!(
         read["visibility"],
-        json!({CONFLICT: ["Public", "Protected"]}),
+        json!({CONFLICT: ["Public", "Package"]}),
         "the joiner's literal and the donor's are concurrent, so both survive"
     );
     assert_eq!(
@@ -3070,16 +3070,16 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
     }
 
     // The enum register: `Class.visibility`, a multi-value register over
-    // `Visibility`'s literals Public, Private, Protected, Package.
+    // `Visibility`'s literals Public, Protected, Package, Private.
     let row = Construction::EnumRegister(moirai_semantics::TieBreak::MultiValue);
     let lit = |index| vec![on("visibility", Elem::WriteLiteral(index))];
     cells.push(
         Cell::new(row, p::WRITE_WRITE_DIFFERENT, setup(vec![]), vec![lit(0), lit(2)], beat())
-            .expect("/visibility", json!({CONFLICT: ["Public", "Protected"]})),
+            .expect("/visibility", json!({CONFLICT: ["Public", "Package"]})),
     );
     cells.push(
         Cell::new(row, p::WRITE_WRITE_SAME, setup(vec![]), vec![lit(1), lit(1)], beat())
-            .expect("/visibility", json!("Private")),
+            .expect("/visibility", json!("Protected")),
     );
     cells.push(
         Cell::new(
@@ -3093,7 +3093,7 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
     );
     cells.push(
         Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![lit(2), lit(0), lit(1)], beat())
-            .expect("/visibility", json!({CONFLICT: ["Public", "Private", "Protected"]})),
+            .expect("/visibility", json!({CONFLICT: ["Public", "Protected", "Package"]})),
     );
 
     // The two sets. What each settles on is where they differ, and it is
@@ -3629,11 +3629,11 @@ fn copamo_scenario_1_composes_against_associates_reads_composes_on_both_paths() 
     concurrent_relation_types("Composes", "Associates", "Composes");
 }
 
-/// `RelationType`'s literals, as the descriptor this crate was generated from
-/// holds them, are in `class_diagram.rs`'s rank order, and the generated enum
-/// orders them the same way.
+/// `RelationType`'s and `Visibility`'s literals, as the descriptor this crate
+/// was generated from holds them, are in `class_diagram.rs`'s rank order, and
+/// the generated enums order them the same way.
 #[test]
-fn relation_type_literals_are_in_class_diagram_rs_rank_order() {
+fn enum_literals_are_in_class_diagram_rs_rank_order() {
     let meta = RelationMeta::new(&Meta::new().sem);
     assert_eq!(
         meta.literals,
@@ -3645,4 +3645,15 @@ fn relation_type_literals_are_in_class_diagram_rs_rank_order() {
     assert!(RelationType::Composes < RelationType::Implements);
     assert!(RelationType::Implements < RelationType::Extends);
     assert_eq!(RelationType::default(), RelationType::Associates);
+
+    // `Visibility::rank`: the more restrictive visibility is the greater.
+    assert_eq!(
+        Meta::new().literals,
+        ["Public", "Protected", "Package", "Private"]
+    );
+    use classdiagram_crdt::classifiers::Visibility;
+    assert!(Visibility::Public < Visibility::Protected);
+    assert!(Visibility::Protected < Visibility::Package);
+    assert!(Visibility::Package < Visibility::Private);
+    assert_eq!(Visibility::default(), Visibility::Public);
 }

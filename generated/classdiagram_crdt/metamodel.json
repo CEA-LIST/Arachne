@@ -484,9 +484,9 @@
     ],
     "Visibility": [
       "Public",
-      "Private",
       "Protected",
-      "Package"
+      "Package",
+      "Private"
     ]
   },
   "formatVersion": 2,
