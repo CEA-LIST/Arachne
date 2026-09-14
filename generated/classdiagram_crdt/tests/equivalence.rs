@@ -92,7 +92,8 @@
 //!
 //! The one exception is `Relation.typ`, the only total-order register over an
 //! enumeration any checked-in metamodel has, which is driven on a second pair
-//! rooted at `Relation` and never beside `Class`: see section 15.
+//! rooted at `Relation` and never beside `Class`: see section 15, where the
+//! CoPaMO 2025 paper's first scenario is also replayed.
 //!
 //! # Every script opens with `New`, and the edits contend
 //!
@@ -3305,7 +3306,7 @@ fn conflict_matrix_reports_a_tie_break_rebound_on_one_path() {
 // module note makes for `""` in a string register: [`without_relation_defaults`]
 // drops `typ` at `null` or at the first literal, on both sides, and so a write
 // of `Associates` alone is invisible to the comparison. A write that wins over
-// it is not.
+// it is not, which is what the CoPaMO tests assert.
 
 /// The root class of this section's pair.
 const RELATION: &str = "Relation";
@@ -3495,4 +3496,153 @@ fn relation_cells() -> Vec<Cell<Edit>> {
         Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![lit(0), lit(2), lit(1)], beat())
             .expect("/typ", json!("Composes")),
     ]
+}
+
+/// Two replicas per path rooted at `Relation`, for the CoPaMO tests.
+struct RelationPair {
+    meta: RelationMeta,
+    ia: InterpReplica,
+    ib: InterpReplica,
+    ga: GenReplica,
+    gb: GenReplica,
+}
+
+impl RelationPair {
+    fn new() -> RelationPair {
+        let meta = RelationMeta::new(&Meta::new().sem);
+        let (ia, ib) = twins(&meta.sem, RELATION);
+        let (ga, gb) = twins_log::<ClassdiagramLog>();
+        RelationPair { meta, ia, ib, ga, gb }
+    }
+
+    /// One edit on both paths at one writer; the two events, undelivered.
+    fn send(&mut self, writer: char, edit: &Edit) -> (EventMessage<InstanceOp>, EventMessage<Classdiagram>) {
+        let interp = relation_interp_op(&self.meta, edit);
+        let generated = relation_typed_op(&self.meta, edit);
+        let events = if writer == 'a' {
+            (self.ia.send(interp), self.ga.send(generated))
+        } else {
+            (self.ib.send(interp), self.gb.send(generated))
+        };
+        match events {
+            (Some(i), Some(g)) => (i, g),
+            other => panic!("both intakes take {}: {other:?}", edit.show()),
+        }
+    }
+
+    fn receive(&mut self, at: char, events: (EventMessage<InstanceOp>, EventMessage<Classdiagram>)) {
+        if at == 'a' {
+            self.ia.receive(events.0);
+            self.ga.receive(events.1);
+        } else {
+            self.ib.receive(events.0);
+            self.gb.receive(events.1);
+        }
+    }
+
+    /// The four read-outs, interpreted then generated at `a`, then at `b`.
+    fn docs(&self) -> [Value; 4] {
+        let interp = |replica: &InterpReplica| {
+            without_relation_defaults(&self.meta, replica.query(Read::<Value>::new()))
+        };
+        let generated = |replica: &GenReplica| {
+            without_relation_defaults(
+                &self.meta,
+                project_relation(&replica.query(Read::<ClassdiagramValue>::new())),
+            )
+        };
+        [interp(&self.ia), generated(&self.ga), interp(&self.ib), generated(&self.gb)]
+    }
+
+    /// Each replica's two paths agree.
+    fn agree(&self, when: &str) {
+        let [ia, ga, ib, gb] = self.docs();
+        assert_eq!(ia, ga, "replica a, {when}");
+        assert_eq!(ib, gb, "replica b, {when}");
+    }
+}
+
+/// Two replicas and one `Relation`; `a` writes `typ` at one literal and `b`
+/// at another, concurrently; each delivery order is run with each seat
+/// assignment, and every read-out of both paths at both replicas must hold
+/// `expected` once both writes have crossed.
+fn concurrent_relation_types(left: &str, right: &str, expected: &str) {
+    for (a_writes, b_writes) in [(left, right), (right, left)] {
+        for a_receives_first in [true, false] {
+            let when = format!(
+                "a writes {a_writes}, b writes {b_writes}, {} receives first",
+                if a_receives_first { "a" } else { "b" }
+            );
+            let mut pair = RelationPair::new();
+            let new = pair.send('a', &open());
+            pair.receive('b', new);
+            pair.agree(&format!("{when}, after New"));
+
+            let lit = |name| on("typ", Elem::WriteLiteral(pair.meta.literal(name)));
+            let (from_a, from_b) = (lit(a_writes), lit(b_writes));
+            let from_a = pair.send('a', &from_a);
+            pair.agree(&format!("{when}, after a's write"));
+            let from_b = pair.send('b', &from_b);
+            pair.agree(&format!("{when}, after b's write"));
+
+            if a_receives_first {
+                pair.receive('a', from_b);
+                pair.agree(&format!("{when}, after a received"));
+                pair.receive('b', from_a);
+            } else {
+                pair.receive('b', from_a);
+                pair.agree(&format!("{when}, after b received"));
+                pair.receive('a', from_b);
+            }
+            pair.agree(&format!("{when}, after both received"));
+
+            // The value, and not only agreement: all four read-outs.
+            for (at, doc) in ["interpreted a", "generated a", "interpreted b", "generated b"]
+                .iter()
+                .zip(pair.docs())
+            {
+                assert_eq!(doc["typ"], json!(expected), "{at}, {when}: {doc}");
+            }
+            // The interpreted read-out before any pruning, so the bridge in
+            // `without_relation_defaults` is not what makes it pass.
+            for replica in [&pair.ia, &pair.ib] {
+                let raw = replica.query(Read::<Value>::new());
+                assert_eq!(raw["typ"], json!(expected), "{when}: {raw}");
+            }
+        }
+    }
+}
+
+/// **CoPaMO 2025, scenario 1**: Alice sets a relation to Aggregates while Bob
+/// concurrently sets it to Associates, and the merge reads Aggregates, because
+/// aggregation is the more specific relation and `RelationType::rank` puts it
+/// above association. Both paths, both replicas, both delivery orders.
+#[test]
+fn copamo_scenario_1_aggregates_against_associates_reads_aggregates_on_both_paths() {
+    concurrent_relation_types("Aggregates", "Associates", "Aggregates");
+}
+
+/// The same rule one step further up the rank: Composes against Associates
+/// reads Composes.
+#[test]
+fn copamo_scenario_1_composes_against_associates_reads_composes_on_both_paths() {
+    concurrent_relation_types("Composes", "Associates", "Composes");
+}
+
+/// `RelationType`'s literals, as the descriptor this crate was generated from
+/// holds them, are in `class_diagram.rs`'s rank order, and the generated enum
+/// orders them the same way.
+#[test]
+fn relation_type_literals_are_in_class_diagram_rs_rank_order() {
+    let meta = RelationMeta::new(&Meta::new().sem);
+    assert_eq!(
+        meta.literals,
+        ["Associates", "Aggregates", "Composes", "Implements", "Extends"]
+    );
+    use classdiagram_crdt::classifiers::RelationType;
+    assert!(RelationType::Associates < RelationType::Aggregates);
+    assert!(RelationType::Aggregates < RelationType::Composes);
+    assert!(RelationType::Composes < RelationType::Implements);
+    assert!(RelationType::Implements < RelationType::Extends);
+    assert_eq!(RelationType::default(), RelationType::Associates);
 }
