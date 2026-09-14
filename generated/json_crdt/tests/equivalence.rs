@@ -233,6 +233,9 @@ enum Action {
     PutKey { key: String, kind: Kind },
     /// Take `key` out of the object here.
     RemoveKey { key: String },
+    /// Take every key out of the object here. The seeded scripts never
+    /// propose it; the conflict matrix below does.
+    ClearKeys,
     /// Make the whole document a seeded value of `kind`. Only ever the first
     /// edit of a script, when the document is `null`.
     Open { kind: Kind },
@@ -352,6 +355,7 @@ fn interp_action(meta: &Meta, action: &Action) -> InstanceOp {
             InstanceOp::entry(Scalar::text(key.clone()), interp_seed(meta, *kind))
         }
         Action::RemoveKey { key } => InstanceOp::remove(Scalar::text(key.clone())),
+        Action::ClearKeys => InstanceOp::clear(),
         Action::Open { .. } => unreachable!("handled by `interp_op`"),
     }
 }
@@ -422,6 +426,7 @@ fn typed_action(action: &Action) -> Value {
         Action::DeleteItem { pos } => json!({"Delete": {"pos": pos}}),
         Action::PutKey { key, kind } => json!({"Update": [key, typed_seed(*kind)]}),
         Action::RemoveKey { key } => json!({"Remove": key}),
+        Action::ClearKeys => json!("Clear"),
         Action::Open { .. } => unreachable!("handled by `typed_json`"),
     }
 }
@@ -1195,4 +1200,129 @@ fn ip28_the_oracle_notices_when_the_two_encoders_disagree() {
         .compare()
         .expect_err("the two documents now differ and the oracle has to say so");
     assert!(reason.contains("interpreted"), "{reason}");
+}
+
+// ---------------------------------------------------------------------------
+// 8. The conflict matrix over `json.ecore`
+// ---------------------------------------------------------------------------
+//
+// `moirai_interp::matrix` holds the whole matrix and assigns this crate the
+// keyed map, `Object.entry`, the only keyed feature in the corpus. The cells
+// run on this file's own encoders and its raw comparison, which carries no
+// exclusion of any kind.
+//
+// The model is opened as an array of three: a string, the object under test
+// at index 1, seeded with one `seed` entry, and a number at index 2 that every
+// cell acknowledges on. So the heartbeat is an increment of a sibling value
+// and never an edit of the map a cell contends, which is also why the map is
+// one level down rather than at the root.
+
+use moirai_interp::matrix::{self, Arm, Cell, Construction, pattern as p};
+
+fn json_at(steps: Vec<Step>, action: Action) -> Edit {
+    Edit {
+        writer: 'a',
+        path: Path { steps },
+        action,
+    }
+}
+
+/// The object under test.
+fn map_path() -> Vec<Step> {
+    vec![Step::Index(1)]
+}
+
+fn key_path(key: &str) -> Vec<Step> {
+    vec![Step::Index(1), Step::Key(key.to_string())]
+}
+
+fn json_beat() -> Edit {
+    json_at(vec![Step::Index(2)], Action::Inc(1))
+}
+
+fn json_cells() -> Vec<Cell<Edit>> {
+    let opened = |extra: Vec<Edit>| {
+        let mut out = vec![
+            json_at(vec![], Action::Open { kind: Kind::Array }),
+            json_at(vec![], Action::InsertItem { pos: 1, kind: Kind::Object }),
+            json_at(vec![], Action::InsertItem { pos: 2, kind: Kind::Number }),
+        ];
+        out.extend(extra);
+        out
+    };
+    let put = |key: &str, kind: Kind| {
+        json_at(map_path(), Action::PutKey { key: key.to_string(), kind })
+    };
+    let holding_k = || opened(vec![put("k", Kind::Number)]);
+    let inc_k = |by: i64| vec![json_at(key_path("k"), Action::Inc(by))];
+    let remove_k = || vec![json_at(map_path(), Action::RemoveKey { key: "k".to_string() })];
+    let row = Construction::KeyedMap;
+    vec![
+        // Update-wins: the increment concurrent with the removal survives it,
+        // the seeded 1 below the removal does not.
+        Cell::new(row, p::UPDATE_REMOVE_KEY, holding_k(), vec![inc_k(10), remove_k()], json_beat())
+            .expect("/1/k", json!(10.0))
+            .expect("/1/seed", json!("s")),
+        Cell::new(row, p::UPDATE_UPDATE_KEY, holding_k(), vec![inc_k(2), inc_k(3)], json_beat())
+            .expect("/1/k", json!(6.0)),
+        Cell::new(
+            row,
+            p::TWO_KINDS_ONE_KEY,
+            opened(vec![]),
+            vec![vec![put("k", Kind::Number)], vec![put("k", Kind::String)]],
+            json_beat(),
+        )
+        .expect("/1/k", json!({CONFLICT: [1.0, "s"]})),
+        // A removed key is not dropped on either path: `UWMap::Remove` resets
+        // the entry rather than tombstoning it, and a reset `Number` is still a
+        // `Number`, so both read `0.0` where the key was. `moirai-interp`'s
+        // `a_key_removed_with_nothing_concurrent_keeps_the_emptied_entry` says
+        // the same of a string.
+        Cell::new(row, p::REMOVE_REMOVE_KEY, holding_k(), vec![remove_k(), remove_k()], json_beat())
+            .expect("/1/k", json!(0.0))
+            .expect("/1/seed", json!("s")),
+        Cell::new(
+            row,
+            p::UPDATE_CLEAR,
+            holding_k(),
+            vec![inc_k(10), vec![json_at(map_path(), Action::ClearKeys)]],
+            json_beat(),
+        )
+        .expect("/1/k", json!(10.0))
+        .expect("/1/seed", json!("")),
+        Cell::new(
+            row,
+            p::TWO_KEYS,
+            opened(vec![]),
+            vec![vec![put("k", Kind::Number)], vec![put("j", Kind::String)]],
+            json_beat(),
+        )
+        .expect("/1/k", json!(1.0))
+        .expect("/1/j", json!("s")),
+    ]
+}
+
+/// **The conflict matrix** over `json.ecore`: every cell the registry assigns
+/// to this crate, each under every schedule.
+#[test]
+fn conflict_matrix_over_json_ecore() {
+    let meta = Meta::new(&json_descriptor());
+    moirai_interp::testing::install_fixture(&meta.sem, "Json");
+    let interp_encode = |edit: &Edit, doc: &Value| interp_op(&meta, doc, edit);
+    let gen_encode = |edit: &Edit, doc: &Value| typed_op(doc, edit);
+    let interp_read = |replica: &InterpReplica| replica.query(Read::<Value>::new());
+    let gen_read = |replica: &GenReplica| project(&replica.query(Read::<JsonValue>::new()));
+    let interp = Arm {
+        name: "interpreted",
+        encode: &interp_encode,
+        read: &interp_read,
+    };
+    let generated = Arm {
+        name: "generated",
+        encode: &gen_encode,
+        read: &gen_read,
+    };
+    let cells = json_cells();
+    matrix::run_matrix(matrix::JSON, &meta.sem, &cells, &interp, &generated)
+        .unwrap_or_else(|reason| panic!("{reason}"));
 }
