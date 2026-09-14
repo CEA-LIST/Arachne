@@ -541,11 +541,13 @@ fn leaf_rule(feature: &Structural, ctx: &Ctx) -> (LeafRule, FacetSource) {
         "dw-flag" => Some(LeafRule::Flag {
             wins: FlagWins::Disable,
         }),
-        "mv-register" => Some(register(TieBreak::MultiValue)),
-        "lww-register" => Some(register(TieBreak::LastWriterWins)),
-        "fair-register" => Some(register(TieBreak::Fair)),
-        "po-register" | "partial-order-register" => Some(register(TieBreak::PartialOrder)),
-        "to-register" | "total-order-register" => Some(register(TieBreak::TotalOrder)),
+        "mv-register" => Some(register(from_type, TieBreak::MultiValue)),
+        "lww-register" => Some(register(from_type, TieBreak::LastWriterWins)),
+        "fair-register" => Some(register(from_type, TieBreak::Fair)),
+        "po-register" | "partial-order-register" => {
+            Some(register(from_type, TieBreak::PartialOrder))
+        }
+        "to-register" | "total-order-register" => Some(register(from_type, TieBreak::TotalOrder)),
         "list" => Some(LeafRule::Text),
         _ => None,
     };
@@ -565,8 +567,18 @@ const fn counter(num: NumKind) -> LeafRule {
 }
 
 /// A register over the attribute's own Rust type.
-const fn register(tie: TieBreak) -> LeafRule {
-    LeafRule::Register { tie }
+///
+/// An enum-typed attribute stays an enum leaf under a register annotation,
+/// with the annotation's tie-break: the generator writes `TORegister<RelationType>`
+/// for `class_diagram.ecore`'s `Relation.typ`, which orders literals by
+/// declaration position, and a plain `register` leaf would lose the enum
+/// class, so the interpreted path could only write the literal as a string and
+/// would order it by name.
+const fn register(from_type: LeafRule, tie: TieBreak) -> LeafRule {
+    match from_type {
+        LeafRule::Enum { class, .. } => LeafRule::Enum { class, tie },
+        _ => LeafRule::Register { tie },
+    }
 }
 
 /// The wrapper `attribute.rs:155-218` picks, and the sources of the two facets

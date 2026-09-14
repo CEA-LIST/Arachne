@@ -334,7 +334,8 @@
           "merge": {
             "kind": "attribute",
             "leaf": {
-              "kind": "register",
+              "class": "Visibility",
+              "kind": "enum",
               "tie": "to"
             },
             "shape": {
@@ -399,7 +400,8 @@
           "merge": {
             "kind": "attribute",
             "leaf": {
-              "kind": "register",
+              "class": "RelationType",
+              "kind": "enum",
               "tie": "to"
             },
             "shape": {

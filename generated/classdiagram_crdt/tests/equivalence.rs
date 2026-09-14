@@ -1182,10 +1182,14 @@ fn ip30_the_census_of_what_this_metamodel_reaches() {
         vec!["Set { tie: AddWins }", "Set { tie: RemoveWins }", "Single"],
         "the first two `Shape::Set` features in the checked-in corpus"
     );
+    // Four enum-typed attributes, over three enums: `Class.visibility` and
+    // `Feature.typ` at the multi-value house default, and `Feature.visibility`
+    // and `Relation.typ` under a `to-register` annotation, which keeps the enum
+    // leaf and only changes its tie-break.
     assert_eq!(
         enums,
-        vec!["PrimitiveType", "Visibility"],
-        "two enum-typed attributes carry `LeafRule::Enum`"
+        vec!["PrimitiveType", "RelationType", "Visibility"],
+        "every enum-typed attribute carries `LeafRule::Enum`, annotated or not"
     );
     assert_eq!(counters, 0, "no counter here; `kitchen_sink.ecore` has those");
     eprintln!("ip30 census: register ties {ties:?}, flags {flags:?}, shapes {shapes:?}, enums {enums:?}");
