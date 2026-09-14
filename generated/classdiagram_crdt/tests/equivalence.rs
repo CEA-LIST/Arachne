@@ -3311,19 +3311,32 @@ fn conflict_matrix_reports_a_tie_break_rebound_on_one_path() {
 /// The root class of this section's pair.
 const RELATION: &str = "Relation";
 
-/// `Relation`'s slots, and `RelationType`'s literals in declaration order.
+/// The root class of the `Feature.visibility` pair.
+const FEATURE: &str = "Feature";
+
+/// A root class carrying a total-order enum register, its slots, and the
+/// enum's literals in declaration order: `Relation` and `typ` over
+/// `RelationType` for this section, and `Feature` and `visibility` over
+/// `Visibility` for the CoPaMO visibility tests, which reuse the same pair.
 struct RelationMeta {
     sem: Arc<MetamodelSemantics>,
+    /// The root class's name, and the total-order enum feature driven on it.
+    class: &'static str,
+    feature: &'static str,
     root: ClassSlot,
-    /// The slot of `RelationType` in the table's `enums`.
+    /// The slot of the feature's enum in the table's `enums`.
     relation_type: ClassSlot,
     literals: Vec<String>,
 }
 
 impl RelationMeta {
     fn new(sem: &Arc<MetamodelSemantics>) -> RelationMeta {
-        let root = class_slot(sem, RELATION);
-        let (relation_type, literals) = match sem.rule(root, feature_slot(sem, root, "typ")) {
+        RelationMeta::rooted(sem, RELATION, "typ")
+    }
+
+    fn rooted(sem: &Arc<MetamodelSemantics>, class: &'static str, feature: &'static str) -> RelationMeta {
+        let root = class_slot(sem, class);
+        let (relation_type, literals) = match sem.rule(root, feature_slot(sem, root, feature)) {
             Some(MergeRule::Attribute {
                 shape: Shape::Single,
                 leaf:
@@ -3339,10 +3352,12 @@ impl RelationMeta {
                     .map(|literal| literal.to_string())
                     .collect(),
             ),
-            other => panic!("`Relation.typ` is {other:?} and not a total-order enum leaf"),
+            other => panic!("`{class}.{feature}` is {other:?} and not a total-order enum leaf"),
         };
         RelationMeta {
             sem: Arc::clone(sem),
+            class,
+            feature,
             root,
             relation_type,
             literals,
@@ -3354,7 +3369,7 @@ impl RelationMeta {
         self.literals
             .iter()
             .position(|literal| literal == name)
-            .unwrap_or_else(|| panic!("`{name}` is not a literal of `RelationType`"))
+            .unwrap_or_else(|| panic!("`{name}` is not a literal of `{}.{}`", self.class, self.feature))
     }
 }
 
@@ -3394,7 +3409,7 @@ fn relation_typed_op(meta: &RelationMeta, edit: &Edit) -> Classdiagram {
         }
         (feature, action) => panic!("{action:?} against {feature:?} is not an edit of a `Relation`"),
     };
-    let value = tagged(RELATION, inner);
+    let value = tagged(meta.class, inner);
     serde_json::from_value(value.clone()).unwrap_or_else(|error| {
         panic!(
             "the typed encoder built an operation `Classdiagram` cannot take: {error}\n{}",
@@ -3423,6 +3438,17 @@ fn project_relation(value: &ClassdiagramValue) -> Value {
     Value::Object(out)
 }
 
+/// The generated `Feature` read-out in the canonical form, `visibility` only.
+fn project_feature_visibility(value: &ClassdiagramValue) -> Value {
+    let raw = serde_json::to_value(value).expect("the generated read-out serializes");
+    let feature = raw
+        .get("feature")
+        .expect("the package value carries `Feature` under its field");
+    let visibility = feature.get("visibility").expect("`FeatureValue` has `visibility`");
+    assert!(visibility.is_string(), "an enum literal reads as its name: {visibility}");
+    json!({ECLASS: FEATURE, "visibility": visibility})
+}
+
 /// A canonical `Relation` document with every default-valued key dropped, on
 /// both sides: a `null` anywhere, and `typ` at `RelationType`'s first literal,
 /// for the reason the note above gives. A root left with nothing but its class
@@ -3432,8 +3458,14 @@ fn without_relation_defaults(meta: &RelationMeta, value: Value) -> Value {
         return value;
     };
     map.retain(|key, held| {
-        !(held.is_null() || (key == "typ" && held.as_str() == Some(meta.literals[0].as_str())))
+        !(held.is_null()
+            || (key == meta.feature && held.as_str() == Some(meta.literals[0].as_str())))
     });
+    // A `Feature` is compared on `visibility` alone: the only feature its tests
+    // write, and the projection below renders nothing else.
+    if meta.class == FEATURE {
+        map.retain(|key, _| key == ECLASS || key == meta.feature);
+    }
     if map.len() == 1 && map.contains_key(ECLASS) {
         return Value::Null;
     }
@@ -3509,8 +3541,12 @@ struct RelationPair {
 
 impl RelationPair {
     fn new() -> RelationPair {
-        let meta = RelationMeta::new(&Meta::new().sem);
-        let (ia, ib) = twins(&meta.sem, RELATION);
+        RelationPair::rooted(RELATION, "typ")
+    }
+
+    fn rooted(class: &'static str, feature: &'static str) -> RelationPair {
+        let meta = RelationMeta::rooted(&Meta::new().sem, class, feature);
+        let (ia, ib) = twins(&meta.sem, class);
         let (ga, gb) = twins_log::<ClassdiagramLog>();
         RelationPair { meta, ia, ib, ga, gb }
     }
@@ -3545,10 +3581,15 @@ impl RelationPair {
         let interp = |replica: &InterpReplica| {
             without_relation_defaults(&self.meta, replica.query(Read::<Value>::new()))
         };
+        let project = if self.meta.class == FEATURE {
+            project_feature_visibility
+        } else {
+            project_relation
+        };
         let generated = |replica: &GenReplica| {
             without_relation_defaults(
                 &self.meta,
-                project_relation(&replica.query(Read::<ClassdiagramValue>::new())),
+                project(&replica.query(Read::<ClassdiagramValue>::new())),
             )
         };
         [interp(&self.ia), generated(&self.ga), interp(&self.ib), generated(&self.gb)]
@@ -3567,18 +3608,30 @@ impl RelationPair {
 /// assignment, and every read-out of both paths at both replicas must hold
 /// `expected` once both writes have crossed.
 fn concurrent_relation_types(left: &str, right: &str, expected: &str) {
+    concurrent_total_order_literals(RELATION, "typ", left, right, expected);
+}
+
+/// [`concurrent_relation_types`] on any root carrying a total-order enum
+/// register.
+fn concurrent_total_order_literals(
+    class: &'static str,
+    feature: &'static str,
+    left: &str,
+    right: &str,
+    expected: &str,
+) {
     for (a_writes, b_writes) in [(left, right), (right, left)] {
         for a_receives_first in [true, false] {
             let when = format!(
                 "a writes {a_writes}, b writes {b_writes}, {} receives first",
                 if a_receives_first { "a" } else { "b" }
             );
-            let mut pair = RelationPair::new();
+            let mut pair = RelationPair::rooted(class, feature);
             let new = pair.send('a', &open());
             pair.receive('b', new);
             pair.agree(&format!("{when}, after New"));
 
-            let lit = |name| on("typ", Elem::WriteLiteral(pair.meta.literal(name)));
+            let lit = |name| on(feature, Elem::WriteLiteral(pair.meta.literal(name)));
             let (from_a, from_b) = (lit(a_writes), lit(b_writes));
             let from_a = pair.send('a', &from_a);
             pair.agree(&format!("{when}, after a's write"));
@@ -3601,13 +3654,13 @@ fn concurrent_relation_types(left: &str, right: &str, expected: &str) {
                 .iter()
                 .zip(pair.docs())
             {
-                assert_eq!(doc["typ"], json!(expected), "{at}, {when}: {doc}");
+                assert_eq!(doc[feature], json!(expected), "{at}, {when}: {doc}");
             }
             // The interpreted read-out before any pruning, so the bridge in
             // `without_relation_defaults` is not what makes it pass.
             for replica in [&pair.ia, &pair.ib] {
                 let raw = replica.query(Read::<Value>::new());
-                assert_eq!(raw["typ"], json!(expected), "{when}: {raw}");
+                assert_eq!(raw[feature], json!(expected), "{when}: {raw}");
             }
         }
     }
@@ -3627,6 +3680,23 @@ fn copamo_scenario_1_aggregates_against_associates_reads_aggregates_on_both_path
 #[test]
 fn copamo_scenario_1_composes_against_associates_reads_composes_on_both_paths() {
     concurrent_relation_types("Composes", "Associates", "Composes");
+}
+
+/// **CoPaMO 2025, visibility**: Alice makes a feature Private while Bob
+/// concurrently makes it Package, and the merge reads Private, because
+/// `Visibility::rank` puts the more restrictive visibility above. Driven on a
+/// pair rooted at `Feature`, whose `visibility` is the total-order register
+/// (`Class.visibility` is a multi-value one and keeps both). Both paths, both
+/// replicas, both seat assignments, both delivery orders.
+#[test]
+fn copamo_private_against_package_on_feature_visibility_reads_private_on_both_paths() {
+    concurrent_total_order_literals(FEATURE, "visibility", "Private", "Package", "Private");
+}
+
+/// One step further down the rank: Protected against Public reads Protected.
+#[test]
+fn copamo_protected_against_public_on_feature_visibility_reads_protected_on_both_paths() {
+    concurrent_total_order_literals(FEATURE, "visibility", "Protected", "Public", "Protected");
 }
 
 /// `RelationType`'s and `Visibility`'s literals, as the descriptor this crate
