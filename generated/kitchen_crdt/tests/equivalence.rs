@@ -1750,3 +1750,88 @@ fn conflict_matrix_over_kitchen_sink_ecore() {
     matrix::run_matrix(matrix::KITCHEN, &meta.sem, &cells, &interp, &generated)
         .unwrap_or_else(|reason| panic!("{reason}"));
 }
+
+/// **A finding of the conflict matrix, pinned and not fixed.** Two replicas
+/// that each hold one copy of a bag value and concurrently remove it take the
+/// value's `Counter<usize>` below zero, and both paths panic on it identically:
+/// on the first read of the bag, and again, inside `receive`, the moment the
+/// two removes stabilize.
+///
+/// A bag is `UWMapLog<V, VecLog<Counter<usize>>>` on both paths, an `Add` being
+/// `Inc(1)` and a `Remove` `Dec(1)` (`moirai-crdt/src/bag/aw_bag.rs`,
+/// `moirai-interp/src/leaf.rs`'s `bag_op`). Each remove is enabled locally,
+/// because each writer sees one copy, and a remote operation is never refused.
+/// Once both have crossed, the unstable fold in `Counter::execute_query`
+/// (`resettable_counter.rs:81`) computes `1 - 1 - 1` in `usize`, and once they
+/// stabilize `CounterStable::apply` (`counter/stable.rs`) does the same
+/// subtraction into the stable state, both `attempt to subtract with overflow`
+/// under a debug build. The matrix's own `remove ∥ remove of the same value`
+/// cell seeds two copies so that it tests the merge and not this; this test is
+/// the one-copy case.
+///
+/// It is not an equivalence failure: the two paths reach the same state and
+/// fail at the same line. It is a defect of the bag both paths share, in
+/// `moirai-crdt`, and it is recorded in the vault beside the matrix. When it is
+/// fixed this test turns red and should be flipped to assert what the fixed bag
+/// reads.
+#[test]
+fn matrix_finding_a_concurrent_double_remove_of_one_bag_copy_underflows_on_both_paths() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    /// Both paths, one copy of 7 delivered, then a remove from each writer
+    /// crossed, with nothing read yet.
+    fn crossed() -> Harness {
+        let meta = Meta::new();
+        let mut harness = Harness::new();
+        harness.apply(&open()).unwrap_or_else(|r| panic!("{r}"));
+        harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+        harness
+            .apply(&edit('a', "bag", Action::BagAdd(7)))
+            .unwrap_or_else(|r| panic!("{r}"));
+        harness.deliver().unwrap_or_else(|r| panic!("{r}"));
+        let from_a = edit('a', "bag", Action::BagRemove(7));
+        let from_b = edit('b', "bag", Action::BagRemove(7));
+        let interp_a = harness.ia.send(interp_op(&meta, &from_a)).expect("a sees one copy");
+        let interp_b = harness.ib.send(interp_op(&meta, &from_b)).expect("b sees one copy");
+        let gen_a = harness.ga.send(typed_op(&from_a)).expect("a sees one copy");
+        let gen_b = harness.gb.send(typed_op(&from_b)).expect("b sees one copy");
+        // Delivery of the two removes does not panic on either path.
+        harness.ia.receive(interp_b);
+        harness.ib.receive(interp_a);
+        harness.ga.receive(gen_b);
+        harness.gb.receive(gen_a);
+        harness
+    }
+
+    fn message<T: std::fmt::Debug>(outcome: &std::thread::Result<T>) -> String {
+        match outcome {
+            Ok(held) => format!("did not panic: {held:?}"),
+            Err(payload) => payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| payload.downcast_ref::<&str>().map(|text| text.to_string()))
+                .unwrap_or_default(),
+        }
+    }
+
+    // Reading panics, on both paths, with the same message.
+    let harness = crossed();
+    let interp = catch_unwind(AssertUnwindSafe(|| harness.interp_doc('a')));
+    let generated = catch_unwind(AssertUnwindSafe(|| harness.gen_doc('a')));
+    assert_eq!(message(&interp), "attempt to subtract with overflow", "interpreted read");
+    assert_eq!(message(&generated), "attempt to subtract with overflow", "generated read");
+
+    // Stabilizing panics inside `receive`, on both paths: `b` acknowledges on
+    // `myString`, and `a` receiving it stabilizes both removes.
+    let mut harness = crossed();
+    let meta = Meta::new();
+    let ack = leaf('b', "myString", Elem::InsertChar { pos: 0, ch: 'h' });
+    let interp_ack = harness.ib.send(interp_op(&meta, &ack)).expect("b acknowledges");
+    let gen_ack = harness.gb.send(typed_op(&ack)).expect("b acknowledges");
+    let mut ia = harness.ia;
+    let mut ga = harness.ga;
+    let interp = catch_unwind(AssertUnwindSafe(move || ia.receive(interp_ack)));
+    let generated = catch_unwind(AssertUnwindSafe(move || ga.receive(gen_ack)));
+    assert_eq!(message(&interp), "attempt to subtract with overflow", "interpreted stabilization");
+    assert_eq!(message(&generated), "attempt to subtract with overflow", "generated stabilization");
+}
