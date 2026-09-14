@@ -15,6 +15,16 @@
   Its `Visibility`, `PrimitiveType` and `RelationType` enumerations are
   carried over with the same literals.
 
+  LITERAL ORDER IS MERGE ORDER. Both paths order an enum literal by its
+  position here, so a total-order register over an enumeration keeps the
+  literal declared last. `RelationType` is therefore declared in the order of
+  `class_diagram.rs`'s `RelationType::rank`, Associates < Aggregates <
+  Composes < Implements < Extends, and not in that file's declaration order:
+  a concurrent Aggregates and Associates settles on Aggregates, as in the
+  CoPaMO 2025 paper's first scenario. `Visibility` keeps the Rust enum's
+  declaration order, Public, Private, Protected, Package, which is not the
+  order of its `rank` (Public < Protected < Package < Private).
+
   WHAT IS ADDED, AND WHY. `class_diagram.rs` reaches four Moirai leaves:
   `MVRegister`, `TORegister`, `EWFlag` and `UWMapLog`. Eight constructions of
   `moirai-interp`'s leaf vocabulary are reachable from an `.ecore` file and
@@ -118,10 +128,10 @@
         <eLiterals name="Void" value="3"/>
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EEnum" name="RelationType">
-        <eLiterals name="Extends"/>
-        <eLiterals name="Implements" value="1"/>
+        <eLiterals name="Associates"/>
+        <eLiterals name="Aggregates" value="1"/>
         <eLiterals name="Composes" value="2"/>
-        <eLiterals name="Aggregates" value="3"/>
-        <eLiterals name="Associates" value="4"/>
+        <eLiterals name="Implements" value="3"/>
+        <eLiterals name="Extends" value="4"/>
     </eClassifiers>
 </ecore:EPackage>

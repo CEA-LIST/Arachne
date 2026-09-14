@@ -474,11 +474,11 @@
       "Void"
     ],
     "RelationType": [
-      "Extends",
-      "Implements",
-      "Composes",
+      "Associates",
       "Aggregates",
-      "Associates"
+      "Composes",
+      "Implements",
+      "Extends"
     ],
     "Visibility": [
       "Public",
