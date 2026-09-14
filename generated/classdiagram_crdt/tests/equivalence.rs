@@ -2886,3 +2886,378 @@ fn ip32_an_add_concurrent_with_a_remove_and_a_clear_converges_on_both_paths() {
         "the add is concurrent with the remove the clear retired: {interp_a}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// 14. The conflict matrix over `class_diagram.ecore`
+// ---------------------------------------------------------------------------
+//
+// `moirai_interp::matrix` holds the whole matrix: every construction, every
+// pattern, and which generated crate drives which row. The rows it assigns to
+// this crate are the text leaf, the disable-wins flag, the four policy and
+// order registers, the enum register and the two sets. What is here is the
+// cell table for those rows and the two arms the runner drives, built from
+// this file's own encoders and its own canonical projection, unchanged.
+//
+// Every cell opens with `New`, for the reason section 3's note gives, and
+// acknowledges on a feature the cell does not touch: `Class.name` for every
+// row but text, and `Class.tags` for text.
+
+use moirai_interp::matrix::{self, Arm, Cell, Construction, pattern as p};
+
+/// The five words the matrix cells write, beside `WORDS`, which the seeded
+/// scripts use.
+fn w(word: &'static str) -> Elem {
+    Elem::Write(word)
+}
+
+fn on(feature: &'static str, elem: Elem) -> Edit {
+    edit('a', feature, elem)
+}
+
+/// The heartbeat of every cell but text's: one character into `Class.name`.
+fn beat() -> Edit {
+    on("name", Elem::InsertChar { pos: 0, ch: 'h' })
+}
+
+/// The heartbeat of the text cells: one tag.
+fn tag_beat() -> Edit {
+    on("tags", Elem::Add("heartbeat"))
+}
+
+fn setup(extra: Vec<Edit>) -> Vec<Edit> {
+    let mut out = vec![open()];
+    out.extend(extra);
+    out
+}
+
+fn class_diagram_cells() -> Vec<Cell<Edit>> {
+    use serde_json::Value::Null;
+    let mut cells = Vec::new();
+
+    // Text: `Class.name`, seeded "xy" where a pattern needs characters.
+    let xy = || {
+        setup(vec![
+            on("name", Elem::InsertChar { pos: 0, ch: 'x' }),
+            on("name", Elem::InsertChar { pos: 1, ch: 'y' }),
+        ])
+    };
+    let ins = |pos, ch| vec![on("name", Elem::InsertChar { pos, ch })];
+    let del = |pos| vec![on("name", Elem::DeleteChar { pos })];
+    let text = Construction::Text;
+    cells.push(Cell::new(text, p::INSERT_INSERT_SAME_POS, xy(), vec![ins(1, 'a'), ins(1, 'b')], tag_beat()));
+    cells.push(
+        Cell::new(text, p::INSERT_INSERT_SAME_CHAR, xy(), vec![ins(1, 'a'), ins(1, 'a')], tag_beat())
+            .expect("/name", json!("xaay")),
+    );
+    cells.push(
+        Cell::new(text, p::INSERT_DELETE_SAME_CHAR, xy(), vec![ins(1, 'a'), del(0)], tag_beat())
+            .expect("/name", json!("ay")),
+    );
+    cells.push(
+        Cell::new(text, p::DELETE_DELETE_SAME, xy(), vec![del(0), del(0)], tag_beat())
+            .expect("/name", json!("y")),
+    );
+    cells.push(
+        Cell::new(text, p::DELETE_DELETE_DIFFERENT, xy(), vec![del(0), del(1)], tag_beat())
+            .expect("/name", Null),
+    );
+
+    // The disable-wins flag: `Class.isAbstract`. `false` is the default and
+    // the projection drops it, so it is expected as `null`.
+    let flag = Construction::DisableWinsFlag;
+    let f = |elem: Elem| vec![on("isAbstract", elem)];
+    let enabled = || setup(vec![on("isAbstract", Elem::Enable)]);
+    cells.push(
+        Cell::new(flag, p::ENABLE_DISABLE, setup(vec![]), vec![f(Elem::Enable), f(Elem::Disable)], beat())
+            .expect("/isAbstract", Null),
+    );
+    cells.push(
+        Cell::new(flag, p::ENABLE_ENABLE, setup(vec![]), vec![f(Elem::Enable), f(Elem::Enable)], beat())
+            .expect("/isAbstract", json!(true)),
+    );
+    cells.push(
+        Cell::new(flag, p::DISABLE_DISABLE, enabled(), vec![f(Elem::Disable), f(Elem::Disable)], beat())
+            .expect("/isAbstract", Null),
+    );
+    cells.push(
+        Cell::new(flag, p::ENABLE_CLEAR, enabled(), vec![f(Elem::Enable), f(Elem::Clear)], beat())
+            .expect("/isAbstract", json!(true)),
+    );
+    cells.push(
+        Cell::new(flag, p::DISABLE_CLEAR, enabled(), vec![f(Elem::Disable), f(Elem::Clear)], beat())
+            .expect("/isAbstract", Null),
+    );
+
+    // The two policy registers, whose outcome reads the events.
+    for (feature, tie) in [
+        ("qualifiedName", moirai_semantics::TieBreak::LastWriterWins),
+        ("author", moirai_semantics::TieBreak::Fair),
+    ] {
+        let row = Construction::Register(tie);
+        let pointer: &'static str = if feature == "author" { "/author" } else { "/qualifiedName" };
+        let wr = |word| vec![on(feature, w(word))];
+        cells.push(
+            Cell::new(row, p::WRITE_WRITE_DIFFERENT, setup(vec![on(feature, w("alpha"))]), vec![wr("beta"), wr("gamma")], beat())
+                .tie(),
+        );
+        cells.push(
+            Cell::new(row, p::WRITE_WRITE_SAME, setup(vec![on(feature, w("alpha"))]), vec![wr("beta"), wr("beta")], beat())
+                .expect(pointer, json!("beta")),
+        );
+        cells.push(
+            Cell::new(row, p::TIE_EVERY_RESIDUE, setup(vec![]), vec![wr("beta"), wr("gamma")], beat())
+                .pads(&[0, 1, 2, 3, 4, 5])
+                .tie(),
+        );
+        cells.push(
+            Cell::new(
+                row,
+                p::LAMPORT_DOMINATES,
+                setup(vec![]),
+                vec![vec![on(feature, w("alpha")), on(feature, w("beta"))], wr("gamma")],
+                beat(),
+            )
+            .expect(pointer, json!("beta")),
+        );
+        cells.push(
+            Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![wr("alpha"), wr("beta"), wr("gamma")], beat())
+                .pads(&[0, 1, 2])
+                .tie(),
+        );
+    }
+
+    // The two order registers, whose outcome reads the values.
+    for (feature, tie) in [
+        ("stereotype", moirai_semantics::TieBreak::PartialOrder),
+        ("layer", moirai_semantics::TieBreak::TotalOrder),
+    ] {
+        let row = Construction::Register(tie);
+        let pointer: &'static str = if feature == "layer" { "/layer" } else { "/stereotype" };
+        let wr = |word| vec![on(feature, w(word))];
+        cells.push(
+            Cell::new(row, p::WRITE_WRITE_DIFFERENT, setup(vec![]), vec![wr("beta"), wr("gamma")], beat())
+                .expect(pointer, json!("gamma")),
+        );
+        cells.push(
+            Cell::new(row, p::WRITE_WRITE_SAME, setup(vec![]), vec![wr("beta"), wr("beta")], beat())
+                .expect(pointer, json!("beta")),
+        );
+        cells.push(
+            Cell::new(
+                row,
+                p::WRITE_CLEAR,
+                setup(vec![on(feature, w("alpha"))]),
+                vec![wr("beta"), vec![on(feature, Elem::Clear)]],
+                beat(),
+            )
+            .expect(pointer, json!("beta")),
+        );
+        cells.push(
+            Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![wr("alpha"), wr("gamma"), wr("beta")], beat())
+                .expect(pointer, json!("gamma")),
+        );
+    }
+
+    // The enum register: `Class.visibility`, a multi-value register over
+    // `Visibility`'s literals Public, Private, Protected, Package.
+    let row = Construction::EnumRegister(moirai_semantics::TieBreak::MultiValue);
+    let lit = |index| vec![on("visibility", Elem::WriteLiteral(index))];
+    cells.push(
+        Cell::new(row, p::WRITE_WRITE_DIFFERENT, setup(vec![]), vec![lit(0), lit(2)], beat())
+            .expect("/visibility", json!({CONFLICT: ["Public", "Protected"]})),
+    );
+    cells.push(
+        Cell::new(row, p::WRITE_WRITE_SAME, setup(vec![]), vec![lit(1), lit(1)], beat())
+            .expect("/visibility", json!("Private")),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::WRITE_CLEAR,
+            setup(vec![on("visibility", Elem::WriteLiteral(3))]),
+            vec![lit(0), vec![on("visibility", Elem::Clear)]],
+            beat(),
+        )
+        .expect("/visibility", json!("Public")),
+    );
+    cells.push(
+        Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![lit(2), lit(0), lit(1)], beat())
+            .expect("/visibility", json!({CONFLICT: ["Public", "Private", "Protected"]})),
+    );
+
+    // The two sets. What each settles on is where they differ, and it is
+    // written out for both.
+    for (feature, row, remove_wins) in [
+        ("tags", Construction::AddWinsSet, false),
+        ("invariants", Construction::RemoveWinsSet, true),
+    ] {
+        let pointer: &'static str = if feature == "tags" { "/tags" } else { "/invariants" };
+        let s = |elem: Elem| vec![on(feature, elem)];
+        let holding = |word| setup(vec![on(feature, Elem::Add(word))]);
+        let contested = if remove_wins { Null } else { json!(["alpha"]) };
+        cells.push(
+            Cell::new(row, p::ADD_REMOVE_PRESENT, holding("alpha"), vec![s(Elem::Remove("alpha")), s(Elem::Add("alpha"))], beat())
+                .expect(pointer, contested.clone()),
+        );
+        cells.push(
+            Cell::new(row, p::ADD_REMOVE_ABSENT, setup(vec![]), vec![s(Elem::Add("alpha")), s(Elem::Remove("alpha"))], beat())
+                .expect(pointer, contested),
+        );
+        cells.push(
+            Cell::new(row, p::ADD_REMOVE_DIFFERENT, holding("beta"), vec![s(Elem::Add("alpha")), s(Elem::Remove("beta"))], beat())
+                .expect(pointer, json!(["alpha"])),
+        );
+        cells.push(
+            Cell::new(row, p::ADD_ADD_SAME, setup(vec![]), vec![s(Elem::Add("alpha")), s(Elem::Add("alpha"))], beat())
+                .expect(pointer, json!(["alpha"])),
+        );
+        cells.push(
+            Cell::new(row, p::REMOVE_REMOVE_SAME, holding("alpha"), vec![s(Elem::Remove("alpha")), s(Elem::Remove("alpha"))], beat())
+                .expect(pointer, Null),
+        );
+        cells.push(
+            Cell::new(row, p::ADD_CLEAR, holding("beta"), vec![s(Elem::Add("alpha")), s(Elem::Clear)], beat())
+                .expect(pointer, json!(["alpha"])),
+        );
+        cells.push(
+            Cell::new(
+                row,
+                p::ADD_REMOVE_THEN_CLEAR,
+                setup(vec![]),
+                vec![s(Elem::Add("alpha")), vec![on(feature, Elem::Remove("alpha")), on(feature, Elem::Clear)]],
+                beat(),
+            )
+            .expect(pointer, json!(["alpha"])),
+        );
+    }
+    cells
+}
+
+/// The runner's two arms over one interpreted table: this file's encoders and
+/// this file's projection, unchanged, handed to `moirai_interp::matrix`.
+fn with_arms<T>(
+    interp_sem: &Arc<MetamodelSemantics>,
+    body: impl FnOnce(&Meta, &Arm<'_, Edit, moirai_interp::testing::Harness>, &Arm<'_, Edit, ClassdiagramLog>) -> T,
+) -> T {
+    let meta = Meta::new();
+    moirai_interp::testing::install_fixture(interp_sem, ROOT);
+    let interp_encode = |edit: &Edit, _: &Value| interp_op(&meta, edit);
+    let gen_encode = |edit: &Edit, _: &Value| typed_op(&meta, edit);
+    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(Read::<Value>::new()));
+    let gen_read = |replica: &GenReplica| {
+        without_defaults(project(&meta, &replica.query(Read::<ClassdiagramValue>::new())))
+    };
+    let interp = Arm {
+        name: "interpreted",
+        encode: &interp_encode,
+        read: &interp_read,
+    };
+    let generated = Arm {
+        name: "generated",
+        encode: &gen_encode,
+        read: &gen_read,
+    };
+    body(&meta, &interp, &generated)
+}
+
+/// **The conflict matrix** over `class_diagram.ecore`: every cell the registry
+/// assigns to this crate, each under every schedule, replica against twin and
+/// replica against replica, through stabilization.
+#[test]
+fn conflict_matrix_over_class_diagram_ecore() {
+    let sem = Meta::new().sem;
+    let cells = class_diagram_cells();
+    with_arms(&sem, |meta, interp, generated| {
+        matrix::run_matrix(matrix::CLASSDIAGRAM, &meta.sem, &cells, interp, generated)
+    })
+    .unwrap_or_else(|reason| panic!("{reason}"));
+}
+
+/// `class_diagram.ecore`'s descriptor with one feature's rule replaced, for
+/// the interpreted arm alone.
+fn rebound(feature: &str, merge: Value) -> Arc<MetamodelSemantics> {
+    let mut descriptor = class_diagram_descriptor();
+    let attributes = descriptor["classes"]["Class"]["attributes"]
+        .as_array_mut()
+        .expect("`Class` has attributes");
+    let entry = attributes
+        .iter_mut()
+        .find(|attribute| attribute["name"] == json!(feature))
+        .unwrap_or_else(|| panic!("`Class` declares `{feature}`"));
+    entry["merge"] = merge;
+    Arc::new(from_descriptor(&descriptor).expect("the rebound descriptor parses"))
+}
+
+/// Every cell under a table rebound on the interpreted side alone, and the
+/// (construction, pattern) of every cell that then fails.
+fn failing_cells_under(interp_sem: &Arc<MetamodelSemantics>) -> Vec<(Construction, &'static str, String)> {
+    let cells = class_diagram_cells();
+    with_arms(interp_sem, |_, interp, generated| {
+        cells
+            .iter()
+            .filter_map(|cell| {
+                matrix::run_cell(cell, interp, generated)
+                    .err()
+                    .map(|reason| (cell.construction, cell.pattern, reason))
+            })
+            .collect()
+    })
+}
+
+/// **The matrix's mutation control**, in the spirit of `ip15`: `Class.invariants`
+/// bound to an add-wins set on the interpreted side alone. The matrix has to
+/// report it, and report it at the remove-wins set's own cells and nowhere
+/// else, naming the construction and the pattern.
+#[test]
+fn conflict_matrix_reports_a_set_rebound_on_one_path() {
+    let mutated = rebound(
+        "invariants",
+        json!({"kind": "attribute", "shape": {"kind": "set", "tie": "aw"}, "leaf": {"kind": "text"}}),
+    );
+    let failing = failing_cells_under(&mutated);
+    for (construction, pattern, reason) in &failing {
+        eprintln!("mutation invariants rw -> aw: {construction} / {pattern}\n{reason}\n");
+    }
+    assert!(!failing.is_empty(), "a remove-wins set run as an add-wins set went unnoticed");
+    for (construction, pattern, reason) in &failing {
+        assert_eq!(*construction, Construction::RemoveWinsSet, "{pattern}: {reason}");
+        assert!(reason.contains("remove-wins set"), "{reason}");
+        assert!(reason.contains(pattern), "{reason}");
+    }
+    let patterns: Vec<&str> = failing.iter().map(|(_, pattern, _)| *pattern).collect();
+    assert!(patterns.contains(&p::ADD_REMOVE_PRESENT), "{patterns:?}");
+    assert!(patterns.contains(&p::ADD_REMOVE_ABSENT), "{patterns:?}");
+}
+
+/// The second control, for the cells a seeded script is least likely to
+/// reach: `Class.qualifiedName` bound to a fair register instead of a
+/// last-writer-wins one, on the interpreted side alone. Both keep one write,
+/// both read the Lamport time first, and they differ only on a tie, at the
+/// Lamport residues where the round-robin does not pick the greater origin.
+#[test]
+fn conflict_matrix_reports_a_tie_break_rebound_on_one_path() {
+    let mutated = rebound(
+        "qualifiedName",
+        json!({"kind": "attribute", "shape": {"kind": "single"}, "leaf": {"kind": "register", "tie": "fair"}}),
+    );
+    let failing = failing_cells_under(&mutated);
+    for (construction, pattern, reason) in &failing {
+        eprintln!("mutation qualifiedName lww -> fair: {construction} / {pattern}\n{reason}\n");
+    }
+    assert!(!failing.is_empty(), "a last-writer-wins register run as a fair one went unnoticed");
+    for (construction, pattern, reason) in &failing {
+        assert_eq!(
+            *construction,
+            Construction::Register(moirai_semantics::TieBreak::LastWriterWins),
+            "{pattern}: {reason}"
+        );
+        assert!(reason.contains(pattern), "{reason}");
+    }
+    let patterns: Vec<&str> = failing.iter().map(|(_, pattern, _)| *pattern).collect();
+    // The dominating-write cell fails too, and rightly: its first writes tie
+    // before the dominating second one arrives, and that intermediate state is
+    // compared. A register written the same value by both cannot tell the two
+    // policies apart at any point, so that cell must stay green.
+    assert!(patterns.contains(&p::TIE_EVERY_RESIDUE), "{patterns:?}");
+    assert!(!patterns.contains(&p::WRITE_WRITE_SAME), "the same value cannot tell them apart: {patterns:?}");
+}
