@@ -463,6 +463,35 @@
   max-width: 100%;
 }
 
+/*
+ * The two ways of naming the metamodel of a join, as one group: a fieldset so
+ * the radios share a name and the legend names them both, stripped of the
+ * border a fieldset draws by default so it sits in the form like the fields
+ * above it.
+ */
+.me-models__bound {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.me-models__choice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-200);
+}
+
+/* 64 characters in a panel this narrow: shrink the type rather than the box. */
+.me-models__digest {
+  width: 100%;
+  font-size: var(--fs-100);
+}
+
 /* ---------- conformance diagnostics, under the tree ---------- */
 
 .me-diagnostics {

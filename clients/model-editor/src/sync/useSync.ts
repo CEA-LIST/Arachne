@@ -250,7 +250,15 @@ export function useSync(options: SyncOptions = {}): SyncApi {
           description,
           ops: [],
           outcome: 'ok',
-          detail: `${registered.created ? 'created' : 'joined'} ${registered.modelId} under ${registered.metamodelId.nsURI} (digest ${registered.metamodelId.digest})`,
+          // A join given a bare digest has no nsURI to name: the node reads
+          // only the digest out of a registration, and the nsURI arrives with
+          // the descriptor, inside the model. Naming the digest alone beats
+          // an empty gap where a language's name would be.
+          detail: `${registered.created ? 'created' : 'joined'} ${registered.modelId} under ${
+            registered.metamodelId.nsURI.length > 0
+              ? `${registered.metamodelId.nsURI} (digest ${registered.metamodelId.digest})`
+              : `digest ${registered.metamodelId.digest}`
+          }`,
           modelId: registered.modelId,
         });
         await refreshModels();

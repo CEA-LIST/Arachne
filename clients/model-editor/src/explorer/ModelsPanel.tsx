@@ -13,11 +13,19 @@
  * host, which spares the retyping in the common case. That list is traffic,
  * not a catalog: a model nobody has touched since this node connected has
  * sent no frame and so is not in it, which is why the join-by-id form stays.
+ *
+ * That form names the metamodel two ways, and the second is what makes late
+ * binding reachable from the browser. A dropdown fed by this window's own
+ * `GET /api/metamodels` can only offer what this replica already serves, so a
+ * replica that has never seen a language could not express the join that
+ * would teach it one. A digest typed straight in can; `joinTarget.ts` says
+ * what is checked before it is sent, and what is left to the node.
  */
 
 import { useState } from 'react';
 import { isModelId, type HostedModel, type MetamodelId, type MetamodelListing, type ModelId } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
+import { joinTarget } from './joinTarget';
 import { DEFAULT_LOG_LABEL, packageOf } from '../ui/modelLabel';
 import { Plug, RefreshCw } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
@@ -81,6 +89,8 @@ export function ModelsPanel({
   const [createDigest, setCreateDigest] = useState('');
   const [joinDigest, setJoinDigest] = useState('');
   const [seenDigest, setSeenDigest] = useState('');
+  const [joinPasted, setJoinPasted] = useState('');
+  const [joinSource, setJoinSource] = useState<'held' | 'digest'>('held');
   const [joinId, setJoinId] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -240,13 +250,18 @@ export function ModelsPanel({
             setJoinError('a model id is 32 lowercase hex characters');
             return;
           }
-          const metamodelId = pick(joinDigest);
-          if (metamodelId === null) {
-            setJoinError('choose the metamodel the model is bound to');
+          const target = joinTarget(
+            joinSource === 'held'
+              ? { source: 'held', digest: joinDigest }
+              : { source: 'digest', digest: joinPasted },
+            metamodels,
+          );
+          if (!target.ok) {
+            setJoinError(target.error);
             return;
           }
           setJoinError(null);
-          onJoin(id, metamodelId);
+          onJoin(id, target.metamodelId);
         }}
       >
         <h3 className="me-models__heading">Join by id</h3>
@@ -265,20 +280,86 @@ export function ModelsPanel({
             }}
           />
         </label>
-        <label className="me-connect__field">
-          <span className="me-connect__label">Bound to</span>
+        {/*
+          Two ways of naming the metamodel, and the second one is not a
+          convenience. The dropdown is fed by this window's own
+          /api/metamodels, so it cannot express a digest this replica does not
+          hold — which is exactly the digest a replica needs when it joins a
+          model written in a language it has never seen. Choosing in either
+          control puts that control in force, so the dropdown path is still
+          one click and nothing about it changed.
+        */}
+        <fieldset className="me-models__bound">
+          <legend className="me-connect__label">Bound to</legend>
+          <label className="me-models__choice">
+            <input
+              type="radio"
+              name="join-bound-to"
+              value="held"
+              checked={joinSource === 'held'}
+              onChange={() => {
+                setJoinSource('held');
+                setJoinError(null);
+              }}
+            />
+            <span>a metamodel this replica serves</span>
+          </label>
           <MetamodelSelect
             label="Metamodel of the model to join"
             metamodels={metamodels}
             value={joinDigest.length > 0 ? joinDigest : (metamodels[0]?.digest ?? '')}
-            onChange={setJoinDigest}
+            onChange={(digest) => {
+              setJoinDigest(digest);
+              setJoinSource('held');
+              setJoinError(null);
+            }}
           />
-        </label>
+          <label className="me-models__choice">
+            <input
+              type="radio"
+              name="join-bound-to"
+              value="digest"
+              checked={joinSource === 'digest'}
+              onChange={() => {
+                setJoinSource('digest');
+                setJoinError(null);
+              }}
+            />
+            <span>a digest, typed or pasted</span>
+          </label>
+          <input
+            className="me-input me-mono me-models__digest"
+            type="text"
+            aria-label="Metamodel digest"
+            value={joinPasted}
+            placeholder="64 hex characters, the digest of the metamodel"
+            spellCheck={false}
+            onChange={(event) => {
+              setJoinPasted(event.target.value);
+              setJoinSource('digest');
+              setJoinError(null);
+            }}
+          />
+          <p className="me-connect__hint">
+            A model can be joined under a language this replica does not hold yet, which is why a digest can
+            be given here and not only chosen above: the node hosts the model with its binding pending and
+            the language arrives with the model&apos;s own history. Until it does, the node refuses every
+            write into that model, and says so in its own words.
+          </p>
+        </fieldset>
         {joinError !== null && <p className="me-connect__error">{joinError}</p>}
         <p className="me-connect__hint">
           This node hosts the id with no history and asks its peers for the model; the log arrives from them.
         </p>
-        <button type="submit" className="me-btn" disabled={metamodels.length === 0}>
+        {/*
+          Never disabled on an empty listing, unlike Create above. A create
+          needs a descriptor in hand and there is nothing to write the opening
+          operation from; a join needs only a digest, and a replica serving no
+          descriptor at all is precisely the one that has to type one. An
+          empty dropdown with the dropdown in force is answered on submit,
+          beside the model id's own answer, rather than by a dead button.
+        */}
+        <button type="submit" className="me-btn">
           Join model
         </button>
       </form>

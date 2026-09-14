@@ -3,7 +3,7 @@
 // types, and this directive scopes them to this file.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, metamodelDigest, sha256Hex } from './digest';
+import { canonicalJson, isMetamodelDigest, metamodelDigest, sha256Hex } from './digest';
 
 /** The repository's `examples/`: the descriptors the rig image ships under `/metamodels`. */
 const examples = new URL('../../../../examples/', import.meta.url);
@@ -81,5 +81,19 @@ describe('mp6 the editor digest equals the node digest', () => {
     if (name === undefined) throw new Error('bt declares TreeNode.name');
     name.required = true;
     expect(await metamodelDigest(descriptor)).not.toBe(fixture['bt.metamodel.json'].digest);
+  });
+});
+
+describe('isMetamodelDigest', () => {
+  it('accepts what sha256Hex writes and the node lists', async () => {
+    expect(isMetamodelDigest(await sha256Hex('anything at all'))).toBe(true);
+  });
+
+  it('refuses the near misses: the wrong length, uppercase, and anything around it', () => {
+    expect(isMetamodelDigest('a'.repeat(63))).toBe(false);
+    expect(isMetamodelDigest('a'.repeat(65))).toBe(false);
+    expect(isMetamodelDigest('A'.repeat(64))).toBe(false);
+    expect(isMetamodelDigest(` ${'a'.repeat(64)}`)).toBe(false);
+    expect(isMetamodelDigest('')).toBe(false);
   });
 });

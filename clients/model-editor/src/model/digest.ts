@@ -54,6 +54,20 @@ export function canonicalJson(value: unknown): string {
   throw new Error(`cannot canonicalize a value of type ${typeof value}`);
 }
 
+/**
+ * Whether a string has the shape of a metamodel digest: exactly 64 lowercase
+ * hex characters, which is what `sha256Hex` writes and what the node lists.
+ *
+ * A shape check and nothing more. Whether any replica holds the descriptor
+ * behind a digest is the node's answer to give, not this function's: the Join
+ * by id form lets a digest be typed precisely for the case where this replica
+ * holds no descriptor for it yet, so a check against the local listing would
+ * refuse the one thing the field exists for.
+ */
+export function isMetamodelDigest(value: string): boolean {
+  return /^[0-9a-f]{64}$/.test(value);
+}
+
 /** SHA-256 of the UTF-8 encoding of `text`, as lowercase hex. */
 export async function sha256Hex(text: string): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
