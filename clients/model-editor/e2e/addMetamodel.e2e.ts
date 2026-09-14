@@ -12,7 +12,18 @@
  * reached bob inside the `Install` operation that opened the model's log and
  * by no other route, which is what the success line in the UI says out loud.
  *
- * A fourth step is the refusal: a file the node will not serve comes back 422
+ * **Bob's join is made in bob's own window, through the Join by id form**,
+ * and that is the point of the scenario rather than a detail of how it is
+ * driven. The form's dropdown is fed by bob's own `GET /api/metamodels`, so
+ * it cannot offer a language bob has never held; the digest field beside it
+ * can name one, and this asserts both — that the dropdown does not offer the
+ * digest, and that the join goes through anyway.
+ *
+ * Then the model is edited in bob's window and the edit shows up in alice's,
+ * which is the other half of the claim: bob did not merely receive a
+ * language, bob can write the model under it.
+ *
+ * A last step is the refusal: a file the node will not serve comes back 422
  * and the panel prints the node's own sentence.
  *
  * The replicas are the ones `docker/compose/stack_interpreter.sh` starts:
@@ -46,7 +57,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { describe, expect, it } from 'vitest';
 import { getHealth, getMetamodels } from '../src/api/client';
-import type { MetamodelId, MetamodelListing, ModelId, PlainJson } from '../src/api/types';
+import type { Descriptor, MetamodelListing, ModelId, PlainJson } from '../src/api/types';
 import { servedHereLine } from '../src/explorer/addMetamodel';
 import { freePort, scratchDir, waitFor } from '../src/testing/liveNodes';
 
@@ -212,9 +223,16 @@ async function createRootInUi(page: Page, className: string): Promise<void> {
   await page.waitForSelector('[role="treeitem"]', { timeout: 30_000 });
 }
 
-/** Type `value` into the properties form's input for the attribute `name`. */
+/** Select the root element, which is what puts its features in the properties form. */
+async function selectRootInUi(page: Page): Promise<void> {
+  await showExplorerTab(page, 'model');
+  const root = await page.waitForSelector('[role="treeitem"]', { timeout: 30_000 });
+  if (root === null) throw new Error('no root element in the tree');
+  await root.click();
+}
+
+/** Type `value` into the properties form's input for the attribute `name`, on whatever is selected. */
 async function setAttributeInUi(page: Page, attribute: string, value: string): Promise<void> {
-  await page.click('[role="treeitem"]');
   const selector = `::-p-xpath(//div[contains(@class,"me-field")][.//span[normalize-space(text())="${attribute}"]]//input)`;
   const input = await page.waitForSelector(selector, { timeout: 30_000 });
   if (input === null) throw new Error(`no input for ${attribute}`);
@@ -224,22 +242,159 @@ async function setAttributeInUi(page: Page, attribute: string, value: string): P
   await page.keyboard.press('Tab');
 }
 
+/** The containment card for `feature` on the selected element. */
+function cardXPath(feature: string): string {
+  return `//div[contains(@class,"me-block")][.//span[contains(@class,"me-block__name")][normalize-space(text())="${feature}"]]`;
+}
+
+/**
+ * Click a containment card's Add control.
+ *
+ * The control is held while a structural batch is in flight (ui/editGate.ts),
+ * so this waits for it to be enabled rather than clicking a dead button.
+ */
+async function addChildInUi(page: Page, feature: string, className: string): Promise<void> {
+  const selector = `::-p-xpath(${cardXPath(feature)}//button[normalize-space(.)="Add ${className}"])`;
+  const button = await page.waitForSelector(selector, { timeout: 30_000 });
+  if (button === null) throw new Error(`no Add ${className} control on ${feature}`);
+  await page.waitForFunction((el: Element) => !(el as HTMLButtonElement).disabled, { timeout: 30_000 }, button);
+  await button.click();
+}
+
+/** Select the child at `index` of a containment card, which opens its own features. */
+async function selectChildInUi(page: Page, feature: string, index: number): Promise<void> {
+  const selector = `::-p-xpath(${cardXPath(feature)}//button[contains(@class,"me-block__link")])`;
+  await page.waitForSelector(selector, { timeout: 30_000 });
+  const links = await page.$$(selector);
+  if (links.length <= index) throw new Error(`${feature} has ${links.length} children, wanted index ${index}`);
+  await links[index].click();
+}
+
+/** The digests the Join by id dropdown offers right now: what this replica already serves. */
+function offeredJoinDigests(page: Page): Promise<string[]> {
+  return page.$$eval('select[aria-label="Metamodel of the model to join"] option', (options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+}
+
+/**
+ * Join a model through the Join by id form, naming its metamodel by a digest
+ * typed into the form rather than chosen from the dropdown.
+ *
+ * This is the control the scenario exists for. Typing into the digest field
+ * puts it in force, which is asserted here: a join that quietly went out
+ * under whatever the dropdown happened to show would pass every later
+ * assertion on a replica that holds the language and prove nothing on one
+ * that does not.
+ */
+async function joinByDigestInUi(page: Page, id: ModelId, digest: string): Promise<void> {
+  await showExplorerTab(page, 'models');
+  const form = 'form[aria-label="Join model by id"]';
+  const idField = await page.waitForSelector(`${form} input[aria-label="Model id"]`);
+  if (idField === null) throw new Error('no Model id field');
+  await idField.click({ count: 3 });
+  await idField.type(id);
+  const digestField = await page.waitForSelector(`${form} input[aria-label="Metamodel digest"]`);
+  if (digestField === null) throw new Error('no Metamodel digest field');
+  await digestField.click({ count: 3 });
+  await digestField.type(digest);
+  const inForce = await page.$eval(
+    `${form} input[name="join-bound-to"][value="digest"]`,
+    (el) => (el as HTMLInputElement).checked,
+  );
+  if (!inForce) throw new Error('typing a digest did not put the digest field in force');
+  await page.click(`${form} button[type="submit"]`);
+}
+
+/**
+ * Close a model's tab and open it again from the hosted list.
+ *
+ * Both halves are clicks and nothing else, and the reason for them is
+ * decision D8's own timing: a session asks `GET /api/model/{id}/metamodel`
+ * once, when it opens, and a model joined under a digest this replica did not
+ * hold has no descriptor to answer with at that moment — the language is
+ * still travelling inside the model's history. The tab that opened on the
+ * join therefore renders the document unbound, and a fresh session is what
+ * reads the descriptor the node has adopted since.
+ */
+async function reopenInUi(page: Page, id: ModelId): Promise<void> {
+  const close = await page.waitForSelector(`.me-doctabs__tab[data-model-id="${id}"] .me-doctabs__close`);
+  if (close === null) throw new Error(`no close control on the tab for ${id}`);
+  await close.click();
+  await showExplorerTab(page, 'models');
+  const open = await page.waitForSelector(`button[aria-label="Open ${id}"]`, { timeout: 30_000 });
+  if (open === null) throw new Error(`${id} is not in the hosted list`);
+  await open.click();
+  await waitFor(`${id.slice(0, 8)}… to be open again`, async () =>
+    (await openTabIds(page)).includes(id) ? true : null,
+  );
+}
+
+/* ---------- what to write, read out of the language itself ---------- */
+
+/** A containment to fill, and the text to give each child. */
+interface ChildPlan {
+  feature: string;
+  className: string;
+  attribute: string;
+  titles: string[];
+}
+
+/** The attributes of `className` that hold one string each. */
+function textAttributes(descriptor: Descriptor, className: string): string[] {
+  return (descriptor.classes[className]?.attributes ?? [])
+    .filter((attribute) => attribute.kind === 'string' && !attribute.many)
+    .map((attribute) => attribute.name);
+}
+
+/**
+ * What this scenario writes, derived from the descriptor rather than named in
+ * the file.
+ *
+ * The language is whatever `MOIRAI_DEMO_DESCRIPTOR` points at, and the
+ * scenario has to fill it without knowing its vocabulary: the root's own
+ * text, and a many-valued containment whose target is a concrete class with
+ * text of its own. Where several qualify it takes the one whose target is
+ * described by a single string, because a child that wants two and is given
+ * one leaves a half-written element in the document this scenario prints —
+ * `Library.books` of `Book.title` rather than `Library.writers` of a
+ * `Writer` whose `lastName` would stay empty. A language offering no such
+ * containment is edited at the root alone and the sequence half is skipped
+ * rather than failed: it is the descriptor that has nothing to say, not the
+ * editor.
+ */
+function editPlan(descriptor: Descriptor): {
+  rootClass: string;
+  rootAttribute: string;
+  child: ChildPlan | null;
+} {
+  const rootClass = descriptor.rootClasses[0];
+  const fillable = (descriptor.classes[rootClass]?.containments ?? []).filter((feature) => {
+    const target = descriptor.classes[feature.target];
+    return feature.many && target !== undefined && !target.abstract && textAttributes(descriptor, feature.target).length > 0;
+  });
+  const containment = fillable.find((feature) => textAttributes(descriptor, feature.target).length === 1) ?? fillable[0];
+  return {
+    rootClass,
+    rootAttribute: textAttributes(descriptor, rootClass)[0] ?? 'name',
+    child:
+      containment === undefined
+        ? null
+        : {
+            feature: containment.name,
+            className: containment.target,
+            attribute: textAttributes(descriptor, containment.target)[0],
+            titles: ['The Little Prince', 'A Wizard of Earthsea'],
+          },
+  };
+}
+
 /* ---------- the nodes, read straight ---------- */
 
 async function stateOf(url: string, id: ModelId): Promise<PlainJson> {
   const response = await fetch(`${url}/api/model/${id}/state`);
   if (!response.ok) throw new Error(`${url} /api/model/${id}/state: ${response.status}`);
   return (await response.json()) as PlainJson;
-}
-
-/** POST /api/models on `url`: the raw status and body, since a join's status is part of the claim. */
-async function joinOnNode(url: string, id: ModelId, metamodelId: MetamodelId): Promise<{ status: number; body: string }> {
-  const response = await fetch(`${url}/api/models`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model_id: id, metamodel_id: metamodelId }),
-  });
-  return { status: response.status, body: await response.text() };
 }
 
 function mentions(value: PlainJson, needle: string): boolean {
@@ -272,9 +427,13 @@ describe('add a metamodel to a running replica, from the browser', () => {
       }
       const descriptorPath = join(run, 'descriptor.json');
       writeFileSync(descriptorPath, text);
-      const nsURI = (JSON.parse(text) as { nsURI: string }).nsURI;
-      const rootClass = (JSON.parse(text) as { rootClasses: string[] }).rootClasses[0];
-      console.log(`add-metamodel: the language is ${nsURI}, root ${rootClass}`);
+      const demoDescriptor = JSON.parse(text) as Descriptor;
+      const nsURI = demoDescriptor.nsURI;
+      const { rootClass, rootAttribute, child } = editPlan(demoDescriptor);
+      console.log(
+        `add-metamodel: the language is ${nsURI}, root ${rootClass}.${rootAttribute}` +
+          (child === null ? ', with no sequence to fill' : `, sequence ${rootClass}.${child.feature} of ${child.className}.${child.attribute}`),
+      );
 
       /* 1a. Neither replica holds it. */
       const before = await Promise.all(NODES.map((url) => getMetamodels(url)));
@@ -309,16 +468,59 @@ describe('add a metamodel to a running replica, from the browser', () => {
       const modelId = await createInUi(alice, language.digest);
       console.log(`add-metamodel: alice minted ${modelId}`);
       await createRootInUi(alice, rootClass);
-      await setAttributeInUi(alice, 'name', 'Door');
+      await selectRootInUi(alice);
+      await setAttributeInUi(alice, rootAttribute, 'Door');
       await waitFor(`alice's ${modelId.slice(0, 8)}… to carry the edit`, async () =>
         mentions(await stateOf(aliceUrl, modelId), 'Door') ? true : null,
       );
 
-      /* 3. Bob, who was never given the descriptor, joins by id. */
+      /*
+       * The ordered containment, filled from the editor: two children, each
+       * given its own text, so what bob receives is a sequence and not one
+       * scalar. Each write is waited for on the node before the next control
+       * is touched, because the add control computes an index from the
+       * client's view of the document (ui/editGate.ts).
+       */
+      if (child !== null) {
+        for (const [index, title] of child.titles.entries()) {
+          await selectRootInUi(alice);
+          await addChildInUi(alice, child.feature, child.className);
+          await waitFor(`alice's ${child.feature} to carry ${index + 1} ${child.className}`, async () => {
+            const state = await stateOf(aliceUrl, modelId);
+            const list = (state as Record<string, PlainJson>)[child.feature];
+            return Array.isArray(list) && list.length === index + 1 ? true : null;
+          });
+          await selectChildInUi(alice, child.feature, index);
+          await setAttributeInUi(alice, child.attribute, title);
+          await waitFor(`alice's ${modelId.slice(0, 8)}… to carry ${title}`, async () =>
+            mentions(await stateOf(aliceUrl, modelId), title) ? true : null,
+          );
+        }
+        console.log(`add-metamodel: alice's document is ${JSON.stringify(await stateOf(aliceUrl, modelId))}`);
+      }
+
+      /* 3. Bob, who was never given the descriptor, joins by id from bob's own window. */
       const bobBefore = await getMetamodels(bobUrl);
       expect(bobBefore.map((e) => e.nsURI)).not.toContain(nsURI);
-      const joined = await joinOnNode(bobUrl, modelId, { nsURI: language.nsURI, digest: language.digest });
-      expect(joined.status, `bob refused the join: ${joined.body}`).toBe(200);
+      const bob = await openEditor(browser, preview.url, bobUrl);
+      await showExplorerTab(bob, 'models');
+      // The dropdown cannot express this join, which is why the field beside
+      // it exists: assert that before using it, or the next line proves
+      // nothing.
+      expect(
+        await offeredJoinDigests(bob),
+        "bob's Join dropdown must not offer a language bob has never held",
+      ).not.toContain(language.digest);
+      await joinByDigestInUi(bob, modelId, language.digest);
+      await waitFor(`bob's tab for ${modelId.slice(0, 8)}…`, async () =>
+        (await openTabIds(bob)).includes(modelId) ? true : null,
+      );
+      // What the session that just opened could have been given. A 404 here
+      // is why the tab is reopened further down before bob writes: the
+      // descriptor is asked for once, at open, and the language is still on
+      // its way inside the model.
+      const atJoin = await fetch(`${bobUrl}/api/model/${modelId}/metamodel`);
+      console.log(`add-metamodel: bob's descriptor for the model, when the joining tab opened: HTTP ${atJoin.status}`);
       const onBob = await waitFor(`bob to converge on ${modelId.slice(0, 8)}…`, async () => {
         const state = await stateOf(bobUrl, modelId).catch(() => null);
         return state !== null && mentions(state, 'Door') ? state : null;
@@ -330,8 +532,19 @@ describe('add a metamodel to a running replica, from the browser', () => {
         return listing.some((candidate) => candidate.digest === language.digest) ? listing : null;
       });
       expect(bobAfter.map((e) => e.digest)).toContain(language.digest);
+      console.log(`add-metamodel: bob now lists ${bobAfter.map((e) => e.package).join(', ')}`);
 
-      /* 4. A file this node will not serve: the node's own sentence, in the UI. */
+      /* 4. Bob writes the model under the language bob was never given. */
+      await reopenInUi(bob, modelId);
+      await selectRootInUi(bob);
+      await setAttributeInUi(bob, rootAttribute, 'Door, edited on bob');
+      const backOnAlice = await waitFor("bob's edit to reach alice", async () =>
+        mentions(await stateOf(aliceUrl, modelId), 'edited on bob') ? true : null,
+      );
+      expect(backOnAlice).toBe(true);
+      console.log(`add-metamodel: alice's document after bob's edit is ${JSON.stringify(await stateOf(aliceUrl, modelId))}`);
+
+      /* 5. A file this node will not serve: the node's own sentence, in the UI. */
       const badPath = join(run, 'not-a-descriptor.ecore');
       writeFileSync(badPath, '<?xml version="1.0" encoding="UTF-8"?>\n<ecore:EPackage name="nope"/>\n');
       const refused = await addInUi(alice, badPath);
