@@ -309,4 +309,93 @@ describe('mp29 a session per model', () => {
     expect(a.closed).toBe(true);
     expect(await a.sendOps('x', createRootOps('Root'))).toMatchObject({ outcome: 'error' });
   });
+
+  /*
+   * Late binding from the tab's side, which is the second replica's whole
+   * experience of it.
+   *
+   * A model joined under a digest this replica does not hold is hosted with
+   * its binding pending, so `GET /api/model/{id}/metamodel` answers 404 at
+   * the moment the tab opens and the document is served untyped. Asked once,
+   * the tab stays that way for ever and tells the person there are no
+   * features to edit, which is exactly what the second window showed until
+   * the tab was closed and opened again. The descriptor arrives with the
+   * model, seconds later, and the tab has to notice.
+   */
+  it('types a model joined under a language this replica did not hold, when the language arrives', async () => {
+    const models: Record<ModelId, FakeModel> = {
+      // Headerless, as an interpreted node serves it: the binding is
+      // `unbound` before and after, so nothing here is about the header.
+      [MODEL_ID]: { descriptor: null, wire: btDocument(null) },
+    };
+    const node = fakeNode(models);
+    vi.stubGlobal('fetch', node.fetch);
+    const one = recordSession();
+    const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 15, events: one.events });
+    await a.open();
+    try {
+      // The tab as the join leaves it: the document is there, the language is not.
+      expect(one.tab(MODEL_ID, NODE)).toMatchObject({
+        status: 'open',
+        metamodel: null,
+        metamodelSource: null,
+        doc: btDocument(null),
+      });
+      expect(a.table).toBeNull();
+      const refused = await a.sendOps('create root Root', createRootOps('Root'));
+      expect(refused.outcome).toBe('refused');
+      expect(refused.detail).toContain('no metamodel descriptor is in effect');
+
+      // The language arrives inside the model, and the node starts serving it.
+      models[MODEL_ID].descriptor = bt;
+      await until(() => one.tab(MODEL_ID, NODE).metamodel !== null);
+      expect(one.tab(MODEL_ID, NODE)).toMatchObject({
+        metamodel: bt,
+        metamodelSource: 'node',
+        doc: btDocument(null),
+      });
+      expect(a.table).not.toBeNull();
+      expect(one.rows.at(-1)).toMatchObject({ description: 'adopt metamodel', outcome: 'ok' });
+      // And the tab is editable in place: no close, no reopen, no second session.
+      expect(await a.sendOps('create root Root', createRootOps('Root'))).toMatchObject({ outcome: 'ok' });
+      expect(node.posted.map((p) => p.id)).toEqual([MODEL_ID]);
+    } finally {
+      a.close();
+    }
+  });
+
+  it('never asks again on a session that already has a descriptor, from the node or from a file', async () => {
+    // The addition is to the untyped path alone: a typed tab must not spend a
+    // request per poll re-reading a descriptor it already holds.
+    const node = fakeNode({ [MODEL_ID]: { descriptor: bt, wire: btDocument(btHeader) } });
+    vi.stubGlobal('fetch', node.fetch);
+    const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 15, events: recordSession().events });
+    const asks = () => node.urls.filter((url) => url.endsWith('/metamodel')).length;
+    const polls = () => node.urls.filter((url) => url.endsWith('/state')).length;
+    await a.open();
+    try {
+      expect(asks()).toBe(1);
+      await until(() => polls() >= 4);
+      expect(asks()).toBe(1);
+    } finally {
+      a.close();
+    }
+  });
+
+  it('goes on as it does today while the route keeps answering 404', async () => {
+    const node = fakeNode({ [MODEL_ID]: { descriptor: null, wire: btDocument(null) } });
+    vi.stubGlobal('fetch', node.fetch);
+    const one = recordSession();
+    const a = new ModelSession({ id: MODEL_ID, nodeUrl: NODE, store: null, pollMs: 15, events: one.events });
+    await a.open();
+    try {
+      await until(() => node.urls.filter((url) => url.endsWith('/state')).length >= 4);
+      expect(one.tab(MODEL_ID, NODE)).toMatchObject({ metamodel: null, metamodelSource: null, doc: btDocument(null) });
+      // A pending model is not an error: no banner, and no row per poll.
+      expect(one.banners).toEqual([]);
+      expect(one.rows).toEqual([]);
+    } finally {
+      a.close();
+    }
+  });
 });

@@ -21,7 +21,12 @@
  *
  * Then the model is edited in bob's window and the edit shows up in alice's,
  * which is the other half of the claim: bob did not merely receive a
- * language, bob can write the model under it.
+ * language, bob can write the model under it — in the tab the join opened,
+ * with nothing closed and nothing reopened. The route that types that tab
+ * answers 404 at the moment of the join and starts answering once the
+ * language has travelled, and the session asks again while it has no
+ * descriptor, so the scenario records how long after the join the tab fills
+ * in rather than asserting a number.
  *
  * A last step is the refusal: a file the node will not serve comes back 422
  * and the panel prints the node's own sentence.
@@ -307,26 +312,20 @@ async function joinByDigestInUi(page: Page, id: ModelId, digest: string): Promis
 }
 
 /**
- * Close a model's tab and open it again from the hosted list.
+ * How long after `since` the model tab becomes typed, in milliseconds.
  *
- * Both halves are clicks and nothing else, and the reason for them is
- * decision D8's own timing: a session asks `GET /api/model/{id}/metamodel`
- * once, when it opens, and a model joined under a digest this replica did not
- * hold has no descriptor to answer with at that moment — the language is
- * still travelling inside the model's history. The tab that opened on the
- * join therefore renders the document unbound, and a fresh session is what
- * reads the descriptor the node has adopted since.
+ * The tree draws a row per element and it is built from the descriptor, so a
+ * `treeitem` is the first thing in the DOM that can only exist once the
+ * language is in effect in this window. On a model joined under a digest this
+ * replica did not hold, that is the moment the session's re-ask found the
+ * descriptor the node adopted out of the model's own history.
  */
-async function reopenInUi(page: Page, id: ModelId): Promise<void> {
-  const close = await page.waitForSelector(`.me-doctabs__tab[data-model-id="${id}"] .me-doctabs__close`);
-  if (close === null) throw new Error(`no close control on the tab for ${id}`);
-  await close.click();
-  await showExplorerTab(page, 'models');
-  const open = await page.waitForSelector(`button[aria-label="Open ${id}"]`, { timeout: 30_000 });
-  if (open === null) throw new Error(`${id} is not in the hosted list`);
-  await open.click();
-  await waitFor(`${id.slice(0, 8)}… to be open again`, async () =>
-    (await openTabIds(page)).includes(id) ? true : null,
+async function msUntilTyped(page: Page, since: number): Promise<number> {
+  await showExplorerTab(page, 'model');
+  return waitFor(
+    'the joining tab to be typed by the language that arrived with the model',
+    async () => ((await page.$('[role="treeitem"]')) === null ? null : Date.now() - since),
+    { timeoutMs: 60_000, intervalMs: 50 },
   );
 }
 
@@ -511,14 +510,15 @@ describe('add a metamodel to a running replica, from the browser', () => {
         await offeredJoinDigests(bob),
         "bob's Join dropdown must not offer a language bob has never held",
       ).not.toContain(language.digest);
+      const joinedAt = Date.now();
       await joinByDigestInUi(bob, modelId, language.digest);
       await waitFor(`bob's tab for ${modelId.slice(0, 8)}…`, async () =>
         (await openTabIds(bob)).includes(modelId) ? true : null,
       );
-      // What the session that just opened could have been given. A 404 here
-      // is why the tab is reopened further down before bob writes: the
-      // descriptor is asked for once, at open, and the language is still on
-      // its way inside the model.
+      // What the session that just opened could have been given: a 404 while
+      // the binding is pending, which is what makes the re-ask the whole
+      // difference between a tab that types itself and one that has to be
+      // closed and opened again.
       const atJoin = await fetch(`${bobUrl}/api/model/${modelId}/metamodel`);
       console.log(`add-metamodel: bob's descriptor for the model, when the joining tab opened: HTTP ${atJoin.status}`);
       const onBob = await waitFor(`bob to converge on ${modelId.slice(0, 8)}…`, async () => {
@@ -532,10 +532,25 @@ describe('add a metamodel to a running replica, from the browser', () => {
         return listing.some((candidate) => candidate.digest === language.digest) ? listing : null;
       });
       expect(bobAfter.map((e) => e.digest)).toContain(language.digest);
-      console.log(`add-metamodel: bob now lists ${bobAfter.map((e) => e.package).join(', ')}`);
+      const adoptedAfterMs = Date.now() - joinedAt;
+      console.log(
+        `add-metamodel: bob now lists ${bobAfter.map((e) => e.package).join(', ')}, ${adoptedAfterMs} ms after the join`,
+      );
 
-      /* 4. Bob writes the model under the language bob was never given. */
-      await reopenInUi(bob, modelId);
+      /* 4. The joining tab types itself where it stands, and bob writes the model. */
+      const typedAfterMs = await msUntilTyped(bob, joinedAt);
+      // Two numbers rather than one: what the node took to adopt the
+      // language out of the model's history, and what the tab took on top of
+      // that, which is at most one poll of the editor's own clock.
+      console.log(
+        `add-metamodel: bob's tab filled in ${typedAfterMs} ms after the join, ${
+          typedAfterMs - adoptedAfterMs
+        } ms after the node adopted the language, with nothing closed or reopened`,
+      );
+      // The tab is the one the join opened and no other, which is the claim:
+      // a second session would have read the descriptor whatever the first
+      // one did.
+      expect(await openTabIds(bob)).toContain(modelId);
       await selectRootInUi(bob);
       await setAttributeInUi(bob, rootAttribute, 'Door, edited on bob');
       const backOnAlice = await waitFor("bob's edit to reach alice", async () =>

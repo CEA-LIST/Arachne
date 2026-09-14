@@ -201,6 +201,45 @@ export class ModelSession {
     if (this.#timer !== null) this.#arm();
   }
 
+  /**
+   * On a session that has none, ask the model's metamodel route again.
+   *
+   * The one case this exists for is late binding, and it is the second
+   * replica's whole experience of it. A model joined under a digest this
+   * replica does not hold is hosted with its binding pending: the node has no
+   * descriptor to answer `GET /api/model/{id}/metamodel` with at the moment
+   * the tab opens, and gets one only when the language arrives inside the
+   * model's own history, seconds later. Asked once at open, the tab would
+   * render that model untyped for ever and say so — "no features to edit" —
+   * until someone closed it and opened it again.
+   *
+   * Narrow on purpose. A session that already holds a descriptor never asks,
+   * whether it came from the node or from a file, so the typed path is
+   * untouched and costs nothing; a route that goes on answering 404 leaves
+   * the session exactly as it is today. Nothing here decides what a
+   * descriptor means: it is installed through the same two steps `open` uses,
+   * and the binding check below is the one that has always run.
+   */
+  async #adoptDescriptor(): Promise<void> {
+    if (this.#descriptor !== null) return;
+    // A failure is not reported here. The state fetch on the same tick speaks
+    // for the connection, and a banner per poll would bury the one thing a
+    // person watching a pending model needs to see.
+    const descriptor = await getModelMetamodel(this.nodeUrl, this.id).catch(() => null);
+    if (descriptor === null || this.#closed || this.#descriptor !== null) return;
+    this.#descriptor = descriptor;
+    this.#descriptorSource = 'node';
+    this.#retable();
+    this.#patch({ metamodel: descriptor, metamodelSource: 'node' });
+    this.#log({
+      ts: Date.now(),
+      description: 'adopt metamodel',
+      ops: [],
+      outcome: 'ok',
+      detail: `the node now serves this model's metamodel (${descriptor.nsURI}); it arrived with the model, and the document is typed from here on`,
+    });
+  }
+
   /** Render under a descriptor loaded from a file; the next poll checks the binding against it. */
   loadDescriptorFile(descriptor: Descriptor): void {
     this.#descriptor = descriptor;
@@ -280,9 +319,12 @@ export class ModelSession {
    * effect, the one the document would be rendered under, report the
    * document only when the check lets it through, then write the projection.
    * Runs on open and on every poll, since a header can arrive by transfer
-   * after open. The document always comes from the node.
+   * after open — and so, on a model joined under a language this replica did
+   * not hold, can the descriptor itself. The document always comes from the
+   * node.
    */
   async refreshOnce(): Promise<void> {
+    await this.#adoptDescriptor();
     const served = await getModelState(this.nodeUrl, this.id);
     if (this.#closed) return;
     const result = await applyModel(served, this.#descriptor, this.#recorded);
