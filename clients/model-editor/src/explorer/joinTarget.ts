@@ -18,6 +18,18 @@
  * replica that has never seen a language can join a model written in it, and
  * the dropdown was the only thing standing in the way.
  *
+ * # Why the dropdown has no default any more
+ *
+ * It used to read an empty choice as the listing's first entry, which is what
+ * the `<select>` happens to show. That turned "I did not answer this" into an
+ * answer, and the answer was a language picked by list order. Rehearsing the
+ * demo on 2026-09-14, a model written in `library` was joined as
+ * `behaviortree` that way, on a replica that held `behaviortree` and not
+ * `library`: the node took the binding without a word, because it holds the
+ * language that was named, and went on serving that language's descriptor for
+ * a document that was not written in it. An empty dropdown is a refusal here
+ * now, and the form says which control to reach for instead.
+ *
  * # What is checked here and what is not
  *
  * The shape, and nothing else. A digest that names a metamodel no replica in
@@ -33,7 +45,7 @@ import { isMetamodelDigest } from '../model/digest';
 
 /** How the Join by id form was told which metamodel the model is bound to. */
 export type BoundTo =
-  /** The dropdown: a digest this replica holds, empty for "whatever is first". */
+  /** The dropdown: a digest this replica holds; empty until one is chosen. */
   | { source: 'held'; digest: string }
   /** The text field: a digest typed or pasted, which this replica need not hold. */
   | { source: 'digest'; digest: string };
@@ -52,9 +64,10 @@ export type JoinTarget = { ok: true; metamodelId: MetamodelId } | { ok: false; e
  */
 export function joinTarget(bound: BoundTo, metamodels: readonly MetamodelListing[]): JoinTarget {
   if (bound.source === 'held') {
-    const wanted = bound.digest.length > 0 ? bound.digest : metamodels[0]?.digest;
-    const entry = metamodels.find((candidate) => candidate.digest === wanted);
-    if (entry === undefined) return { ok: false, error: 'choose the metamodel the model is bound to' };
+    const entry = metamodels.find((candidate) => candidate.digest === bound.digest);
+    if (entry === undefined) {
+      return { ok: false, error: 'choose the language this model is written in, or give its digest' };
+    }
     return { ok: true, metamodelId: { nsURI: entry.nsURI, digest: entry.digest } };
   }
   const digest = bound.digest.trim();

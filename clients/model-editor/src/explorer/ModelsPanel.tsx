@@ -20,6 +20,30 @@
  * replica that has never seen a language could not express the join that
  * would teach it one. A digest typed straight in can; `joinTarget.ts` says
  * what is checked before it is sent, and what is left to the node.
+ *
+ * # Which of the two leads, and why it changed
+ *
+ * The digest does. It used to be the other way round — the dropdown first,
+ * in force from the start, and reading an unanswered choice as the listing's
+ * first entry — and rehearsing the demo on 2026-09-14 that cost a model.
+ * Alice held `library` and hosted a Library model; bob did not hold
+ * `library`, so bob's dropdown could not offer it, and `behaviortree` was
+ * picked from the dropdown instead. Nothing objected: bob holds
+ * `behaviortree`, so the binding was taken at once, and bob went on serving
+ * the behaviortree descriptor for a Library document until the replica was
+ * restarted, because there is no un-join.
+ *
+ * So the two controls are ordered by what they can be wrong about. A digest
+ * is the model's identity and comes from whoever gave you the id, and the
+ * node checks it against the language the model turns out to carry — a wrong
+ * digest is *found* wrong. The dropdown offers this replica's own listing,
+ * which says what this replica can serve and nothing whatever about the
+ * model, so every entry in it is a plausible answer and at most one of them
+ * is true. It stays, because joining a model in a language you hold is the
+ * common case and is one choice away; what it no longer does is answer for
+ * you, or go out unremarked. `UncheckedJoin` below is the question it asks,
+ * and it carries the digest so that it can be read against the one you were
+ * given.
  */
 
 import { useState } from 'react';
@@ -44,17 +68,28 @@ interface ModelsPanelProps {
   onOpen: (id: ModelId) => void;
 }
 
-/** A descriptor choice: the package first, the nsURI after it, one option per digest. */
+/**
+ * A descriptor choice: the package first, the nsURI after it, one option per
+ * digest.
+ *
+ * `placeholder` is what makes a join's dropdown different from a create's. A
+ * create is written from a descriptor this node holds, so showing the first
+ * one and meaning it is right. A join is a claim about someone else's model,
+ * so an unanswered dropdown must stay unanswered, and the placeholder is the
+ * option that says so and carries the empty digest.
+ */
 function MetamodelSelect({
   label,
   metamodels,
   value,
   onChange,
+  placeholder,
 }: {
   label: string;
   metamodels: MetamodelListing[];
   value: string;
   onChange: (digest: string) => void;
+  placeholder?: string;
 }) {
   return (
     <select
@@ -65,12 +100,81 @@ function MetamodelSelect({
       disabled={metamodels.length === 0}
     >
       {metamodels.length === 0 && <option value="">no descriptor on this node</option>}
+      {metamodels.length > 0 && placeholder !== undefined && <option value="">{placeholder}</option>}
       {metamodels.map((entry) => (
         <option key={entry.digest} value={entry.digest}>
           {entry.package.length > 0 ? `${entry.package} — ${entry.nsURI}` : entry.nsURI}
         </option>
       ))}
     </select>
+  );
+}
+
+/** What to call a language in a sentence: its package, or its nsURI if it has none. */
+function nameOf(entry: MetamodelListing): string {
+  return entry.package.length > 0 ? entry.package : entry.nsURI;
+}
+
+/**
+ * A join named from this replica's own listing, held back until it is
+ * confirmed.
+ *
+ * The replica has received nothing it can read about the model — that is what
+ * joining means — so it cannot say whether the language chosen for it is the
+ * right one, and after the join it is too late: the node takes a binding to a
+ * language it holds without a word, and there is no un-join.
+ */
+interface UncheckedJoin {
+  /** Which block raised it, so the question is asked where the click was. */
+  from: 'seen' | 'byId';
+  id: ModelId;
+  metamodelId: MetamodelId;
+  /** The language as the question names it. */
+  name: string;
+}
+
+/**
+ * The question a dropdown-named join is asked before it goes out.
+ *
+ * It prints the digest, which is the point of it rather than a detail: the
+ * person joining was given one with the model id, and two digests side by
+ * side is the only check available to anybody here. The sentences say what
+ * cannot be taken back, because nothing else in the UI will get the chance
+ * to — a wrong binding does not fail, it succeeds quietly and serves the
+ * wrong language afterwards.
+ */
+function UncheckedJoinPrompt({
+  join,
+  onCancel,
+  onConfirm,
+}: {
+  join: UncheckedJoin;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="me-models__unchecked" role="group" aria-label="Confirm a join this replica cannot check">
+      <p className="me-models__unchecked-ask">
+        This replica has received nothing it can read about <span className="me-mono">{join.id}</span>, so it
+        cannot tell what language that model is written in. Join it as <strong>{join.name}</strong>, under this
+        digest?
+      </p>
+      <p className="me-mono me-models__unchecked-digest">{join.metamodelId.digest}</p>
+      <p className="me-connect__hint">
+        Read it against the digest you were given with the model id. A wrong one is not refused: this replica
+        holds that language, so the binding is taken, and there is no un-join — the model stays bound to the
+        wrong language here until this replica restarts. If the two do not match, cancel and paste the digest
+        you were given into the field below instead.
+      </p>
+      <div className="me-models__unchecked-actions">
+        <button type="button" className="me-btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="me-btn" onClick={onConfirm}>
+          Join as {join.name}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -90,13 +194,30 @@ export function ModelsPanel({
   const [joinDigest, setJoinDigest] = useState('');
   const [seenDigest, setSeenDigest] = useState('');
   const [joinPasted, setJoinPasted] = useState('');
-  const [joinSource, setJoinSource] = useState<'held' | 'digest'>('held');
+  // The digest leads: it is the control that can name the model's actual
+  // language, and the one the node can later find wrong.
+  const [joinSource, setJoinSource] = useState<'held' | 'digest'>('digest');
   const [joinId, setJoinId] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [seenError, setSeenError] = useState<string | null>(null);
+  const [unchecked, setUnchecked] = useState<UncheckedJoin | null>(null);
 
+  /**
+   * The listing entry behind a digest. Only a create falls back to the first
+   * one: a join must not, or an unanswered dropdown becomes an answer.
+   */
   const pick = (digest: string): MetamodelId | null => {
     const entry = metamodels.find((m) => m.digest === (digest.length > 0 ? digest : metamodels[0]?.digest));
     return entry === undefined ? null : { nsURI: entry.nsURI, digest: entry.digest };
+  };
+
+  /** Ask before a dropdown-named join goes out, and forget any older question. */
+  const ask = (join: UncheckedJoin) => setUnchecked(join);
+  const confirmed = () => {
+    if (unchecked === null) return;
+    const join = unchecked;
+    setUnchecked(null);
+    onJoin(join.id, join.metamodelId);
   };
 
   if (!connected) {
@@ -209,8 +330,13 @@ export function ModelsPanel({
               <MetamodelSelect
                 label="Metamodel of the seen model to join"
                 metamodels={metamodels}
-                value={seenDigest.length > 0 ? seenDigest : (metamodels[0]?.digest ?? '')}
-                onChange={setSeenDigest}
+                value={seenDigest}
+                placeholder="choose the language it is written in"
+                onChange={(digest) => {
+                  setSeenDigest(digest);
+                  setSeenError(null);
+                  setUnchecked(null);
+                }}
               />
             </label>
             <ul className="me-models__list me-models__seen" aria-label="Models seen since connecting">
@@ -223,8 +349,19 @@ export function ModelsPanel({
                     aria-label={`Join ${id}`}
                     disabled={metamodels.length === 0}
                     onClick={() => {
-                      const metamodelId = pick(seenDigest);
-                      if (metamodelId !== null) onJoin(id, metamodelId);
+                      const entry = metamodels.find((m) => m.digest === seenDigest);
+                      if (entry === undefined) {
+                        setUnchecked(null);
+                        setSeenError('choose the language above, or give the model’s digest in Join by id below');
+                        return;
+                      }
+                      setSeenError(null);
+                      ask({
+                        from: 'seen',
+                        id,
+                        metamodelId: { nsURI: entry.nsURI, digest: entry.digest },
+                        name: nameOf(entry),
+                      });
                     }}
                   >
                     Join
@@ -232,9 +369,27 @@ export function ModelsPanel({
                 </li>
               ))}
             </ul>
+            {seenError !== null && <p className="me-connect__error">{seenError}</p>}
+            {unchecked !== null && unchecked.from === 'seen' && (
+              <UncheckedJoinPrompt
+                join={unchecked}
+                onCancel={() => setUnchecked(null)}
+                onConfirm={confirmed}
+              />
+            )}
+            {/*
+              This used to say the node refuses the wrong one, naming the
+              digest it expected. It does not, and cannot: a seen id is a
+              model this replica has heard frames for and could not read, so
+              the node has nothing to check a language against until the
+              model's own history reaches it. Choosing the wrong one here is
+              taken, and only found out afterwards.
+            */}
             <p className="me-connect__hint">
-              The node cannot say which metamodel a model it does not host is bound to, so choose it above;
-              the wrong one is refused by the node, naming the digest it expected.
+              This replica knows the ids it has heard and not what they are written in, and this list is its
+              own — what it can serve, not what these models are. A choice here is a guess unless you were
+              told; if you were given the model’s digest, Join by id below takes it, and that is the naming
+              the node can check against the model itself.
             </p>
           </>
         )}
@@ -261,6 +416,22 @@ export function ModelsPanel({
             return;
           }
           setJoinError(null);
+          // A typed digest goes straight out. It is the model's identity,
+          // it came from whoever gave you the id, and the node holds it
+          // against the descriptor the model turns out to carry, so a wrong
+          // one is found wrong. A dropdown choice is none of those things:
+          // it is this replica's own listing, every entry of which is
+          // plausible and at most one of which is true, so it is asked.
+          if (joinSource === 'held') {
+            const entry = metamodels.find((m) => m.digest === target.metamodelId.digest);
+            ask({
+              from: 'byId',
+              id,
+              metamodelId: target.metamodelId,
+              name: entry === undefined ? target.metamodelId.digest : nameOf(entry),
+            });
+            return;
+          }
           onJoin(id, target.metamodelId);
         }}
       >
@@ -277,43 +448,24 @@ export function ModelsPanel({
             onChange={(event) => {
               setJoinId(event.target.value);
               setJoinError(null);
+              setUnchecked(null);
             }}
           />
         </label>
         {/*
-          Two ways of naming the metamodel, and the second one is not a
-          convenience. The dropdown is fed by this window's own
-          /api/metamodels, so it cannot express a digest this replica does not
-          hold — which is exactly the digest a replica needs when it joins a
-          model written in a language it has never seen. Choosing in either
-          control puts that control in force, so the dropdown path is still
-          one click and nothing about it changed.
+          Two ways of naming the metamodel, the digest first because it is the
+          one that can be right about someone else's model. The dropdown is
+          fed by this window's own /api/metamodels, so it cannot express a
+          digest this replica does not hold — which is exactly the digest a
+          replica needs when it joins a model written in a language it has
+          never seen — and what it can express is a list of languages this
+          replica happens to serve, none of which it has any reason to think
+          the model is written in. Choosing in either control puts that
+          control in force, so the dropdown is still one choice away; what
+          follows it is a question rather than a join.
         */}
         <fieldset className="me-models__bound">
           <legend className="me-connect__label">Bound to</legend>
-          <label className="me-models__choice">
-            <input
-              type="radio"
-              name="join-bound-to"
-              value="held"
-              checked={joinSource === 'held'}
-              onChange={() => {
-                setJoinSource('held');
-                setJoinError(null);
-              }}
-            />
-            <span>a metamodel this replica serves</span>
-          </label>
-          <MetamodelSelect
-            label="Metamodel of the model to join"
-            metamodels={metamodels}
-            value={joinDigest.length > 0 ? joinDigest : (metamodels[0]?.digest ?? '')}
-            onChange={(digest) => {
-              setJoinDigest(digest);
-              setJoinSource('held');
-              setJoinError(null);
-            }}
-          />
           <label className="me-models__choice">
             <input
               type="radio"
@@ -323,9 +475,10 @@ export function ModelsPanel({
               onChange={() => {
                 setJoinSource('digest');
                 setJoinError(null);
+                setUnchecked(null);
               }}
             />
-            <span>a digest, typed or pasted</span>
+            <span>the digest given to you with the model id</span>
           </label>
           <input
             className="me-input me-mono me-models__digest"
@@ -338,16 +491,52 @@ export function ModelsPanel({
               setJoinPasted(event.target.value);
               setJoinSource('digest');
               setJoinError(null);
+              setUnchecked(null);
             }}
           />
           <p className="me-connect__hint">
-            A model can be joined under a language this replica does not hold yet, which is why a digest can
-            be given here and not only chosen above: the node hosts the model with its binding pending and
-            the language arrives with the model&apos;s own history. Until it does, the node refuses every
-            write into that model, and says so in its own words.
+            A model can be joined under a language this replica does not hold yet, which is why this field
+            leads and the dropdown does not: the node hosts the model with its binding pending and the
+            language arrives with the model&apos;s own history. Until it does, the node refuses every write
+            into that model, and says so in its own words. The digest is also the model&apos;s identity, so
+            the node holds it against what the model turns out to carry — this is the naming that can be
+            found wrong instead of merely believed.
+          </p>
+          <label className="me-models__choice">
+            <input
+              type="radio"
+              name="join-bound-to"
+              value="held"
+              checked={joinSource === 'held'}
+              onChange={() => {
+                setJoinSource('held');
+                setJoinError(null);
+                setUnchecked(null);
+              }}
+            />
+            <span>or a metamodel this replica already serves</span>
+          </label>
+          <MetamodelSelect
+            label="Metamodel of the model to join"
+            metamodels={metamodels}
+            value={joinDigest}
+            placeholder="choose a language this replica serves"
+            onChange={(digest) => {
+              setJoinDigest(digest);
+              setJoinSource('held');
+              setJoinError(null);
+              setUnchecked(null);
+            }}
+          />
+          <p className="me-connect__hint">
+            This listing is what this replica can serve, not what the model is written in, so a choice here
+            is confirmed before it is sent.
           </p>
         </fieldset>
         {joinError !== null && <p className="me-connect__error">{joinError}</p>}
+        {unchecked !== null && unchecked.from === 'byId' && (
+          <UncheckedJoinPrompt join={unchecked} onCancel={() => setUnchecked(null)} onConfirm={confirmed} />
+        )}
         <p className="me-connect__hint">
           This node hosts the id with no history and asks its peers for the model; the log arrives from them.
         </p>

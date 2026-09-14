@@ -28,6 +28,15 @@
  * descriptor, so the scenario records how long after the join the tab fills
  * in rather than asserting a number.
  *
+ * Then the route that is easy and wrong. bob names a *second* model in the
+ * same language from bob's own dropdown — a language bob holds and the model
+ * is not written in, which is the mistake the demo rehearsal made on
+ * 2026-09-14. The form asks before it sends, and prints the digest it is
+ * about to bind so it can be read against the one you were given; gone
+ * through with anyway, the node hosts the model, converges on it, and then
+ * answers 404 on its metamodel route rather than the descriptor of a
+ * language the model is not written in.
+ *
  * A last step is the refusal: a file the node will not serve comes back 422
  * and the panel prints the node's own sentence.
  *
@@ -311,6 +320,47 @@ async function joinByDigestInUi(page: Page, id: ModelId, digest: string): Promis
   await page.click(`${form} button[type="submit"]`);
 }
 
+/** The question the form asks about a join it cannot check. */
+const UNCHECKED_PROMPT = '[aria-label="Confirm a join this replica cannot check"]';
+
+/**
+ * Join a model through the Join by id form's **dropdown**: the route that is
+ * available to everyone and right for nobody when the model is written in a
+ * language this replica has no way to recognise.
+ *
+ * Returns the question the form asked, or `null` if it sent the join without
+ * asking — which is the regression this exists to catch. Nothing is confirmed
+ * here; the caller decides whether to go through with it.
+ */
+async function dropdownJoinInUi(page: Page, id: ModelId, digest: string): Promise<string | null> {
+  await showExplorerTab(page, 'models');
+  const form = 'form[aria-label="Join model by id"]';
+  const idField = await page.waitForSelector(`${form} input[aria-label="Model id"]`);
+  if (idField === null) throw new Error('no Model id field');
+  await idField.click({ count: 3 });
+  await idField.type(id);
+  await page.select(`${form} select[aria-label="Metamodel of the model to join"]`, digest);
+  const inForce = await page.$eval(
+    `${form} input[name="join-bound-to"][value="held"]`,
+    (el) => (el as HTMLInputElement).checked,
+  );
+  if (!inForce) throw new Error('choosing from the dropdown did not put the dropdown in force');
+  await page.click(`${form} button[type="submit"]`);
+  const prompt = await page.waitForSelector(UNCHECKED_PROMPT, { timeout: 5_000 }).catch(() => null);
+  if (prompt === null) return null;
+  return (await prompt.evaluate((el) => el.textContent)) ?? '';
+}
+
+/** Go through with a join the form asked about. */
+async function confirmUncheckedJoinInUi(page: Page): Promise<void> {
+  await page.evaluate((selector: string) => {
+    const buttons = Array.from(document.querySelectorAll(`${selector} button`));
+    const confirm = buttons.find((button) => (button.textContent ?? '').startsWith('Join as'));
+    if (confirm === undefined) throw new Error('no confirm button on the unchecked-join prompt');
+    (confirm as HTMLButtonElement).click();
+  }, UNCHECKED_PROMPT);
+}
+
 /**
  * How long after `since` the model tab becomes typed, in milliseconds.
  *
@@ -559,7 +609,69 @@ describe('add a metamodel to a running replica, from the browser', () => {
       expect(backOnAlice).toBe(true);
       console.log(`add-metamodel: alice's document after bob's edit is ${JSON.stringify(await stateOf(aliceUrl, modelId))}`);
 
-      /* 5. A file this node will not serve: the node's own sentence, in the UI. */
+      /*
+       * 5. The route that is easy and wrong: the dropdown, on a model written
+       *    in a language it cannot name.
+       *
+       * This is what the demo rehearsal did on 2026-09-14. bob's dropdown is
+       * bob's own listing, so on a model it has never held the language for
+       * there is nothing in it that is right, and picking one anyway used to
+       * go straight through: the node holds the language that was named, so
+       * the binding was taken without a word and bob served that language's
+       * descriptor for a document not written in it. Both halves are checked
+       * here — the form asks before it sends, and the node refuses to answer
+       * for a model whose binding its own history has contradicted.
+       */
+      const secondId = await createInUi(alice, language.digest);
+      await createRootInUi(alice, rootClass);
+      await selectRootInUi(alice);
+      await setAttributeInUi(alice, rootAttribute, 'Second');
+      await waitFor(`alice's ${secondId.slice(0, 8)}… to carry its root`, async () =>
+        mentions(await stateOf(aliceUrl, secondId), 'Second') ? true : null,
+      );
+      // A language bob holds and the model is not written in. bob holds the
+      // real one too by now, having adopted it in step 3, and that changes
+      // nothing about the defect: what is wrong is the binding, not what the
+      // replica happens to serve.
+      const wrong = (await getMetamodels(bobUrl)).find((candidate) => candidate.digest !== language.digest);
+      expect(wrong, 'bob must hold some other language to bind this model wrongly to').toBeDefined();
+      const wrongLanguage = wrong as MetamodelListing;
+      const asked = await dropdownJoinInUi(bob, secondId, wrongLanguage.digest);
+      expect(asked, 'a join named from this replica’s own listing must be asked about, not sent').not.toBeNull();
+      expect(asked).toContain(wrongLanguage.digest);
+      expect(await openTabIds(bob), 'the form joined before the question was answered').not.toContain(secondId);
+      console.log(
+        `add-metamodel: the form asked, and sent nothing: ${(asked ?? '').replace(/\s+/g, ' ').trim()}`,
+      );
+
+      // Gone through with anyway, which is the path the rehearsal took and
+      // the one that had no way back.
+      await confirmUncheckedJoinInUi(bob);
+      await waitFor(`bob to host ${secondId.slice(0, 8)}…`, async () => {
+        const listed = await fetch(`${bobUrl}/api/models`).then((r) => r.json() as Promise<PlainJson>);
+        const models = (listed as { models?: { model_id: string }[] }).models ?? [];
+        return models.some((model) => model.model_id === secondId) ? true : null;
+      });
+      const bound = await waitFor(
+        'bob to stop answering for a model it cannot say the language of',
+        async () => {
+          const answer = await fetch(`${bobUrl}/api/model/${secondId}/metamodel`);
+          return answer.status === 404 ? 404 : null;
+        },
+        { timeoutMs: 60_000, intervalMs: 100 },
+      );
+      expect(bound).toBe(404);
+      const misbound = await waitFor(`bob to converge on ${secondId.slice(0, 8)}…`, async () => {
+        const state = await stateOf(bobUrl, secondId).catch(() => null);
+        return state !== null && mentions(state, 'Second') ? state : null;
+      });
+      console.log(
+        `add-metamodel: bob was made to bind ${secondId} to ${wrongLanguage.package}; its document there is ` +
+          `${JSON.stringify(misbound)} and GET /api/model/${secondId}/metamodel answers 404 rather than ` +
+          `${wrongLanguage.package}`,
+      );
+
+      /* 6. A file this node will not serve: the node's own sentence, in the UI. */
       const badPath = join(run, 'not-a-descriptor.ecore');
       writeFileSync(badPath, '<?xml version="1.0" encoding="UTF-8"?>\n<ecore:EPackage name="nope"/>\n');
       const refused = await addInUi(alice, badPath);

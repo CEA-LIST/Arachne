@@ -492,6 +492,43 @@
   font-size: var(--fs-100);
 }
 
+/*
+ * The question a join named from this replica's own listing is asked. It is
+ * drawn as a warning and not as a form step, because the thing it is about is
+ * not recoverable: a wrong binding is taken silently and stays until the
+ * replica restarts. The digest inside it is the one thing on the block a
+ * person is meant to read character by character, so it gets the full width
+ * and wraps rather than truncating.
+ */
+.me-models__unchecked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--c-warn);
+  border-radius: var(--r-2);
+  background: var(--c-warn-weak);
+}
+
+.me-models__unchecked-ask {
+  margin: 0;
+  font-size: var(--fs-200);
+}
+
+.me-models__unchecked-digest {
+  margin: 0;
+  font-size: var(--fs-100);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.me-models__unchecked-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
 /* ---------- conformance diagnostics, under the tree ---------- */
 
 .me-diagnostics {

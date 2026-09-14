@@ -95,6 +95,16 @@ describe('the seen-but-not-hosted list', () => {
     expect(html).toContain(`>${OTHER}<`);
   });
 
+  it('does not claim the node refuses a wrong language, because it cannot', () => {
+    // The hint used to read "the wrong one is refused by the node, naming the
+    // digest it expected". A seen id is a model this replica could not read,
+    // so the node has nothing to check a language against until the model's
+    // own history arrives; a wrong choice is taken, and found out afterwards.
+    const html = markup(hosted, [btListing], [OTHER]);
+    expect(html).not.toContain('refused by the node');
+    expect(html).toContain('A choice here is a guess unless you were told');
+  });
+
   it('says the list is what was heard since connecting, never that it is the session', () => {
     const html = markup(hosted, [btListing], [OTHER]);
     expect(html).toContain('Seen since connecting');
@@ -129,6 +139,15 @@ describe('the seen-but-not-hosted list', () => {
  * working beside the new field, and `joinTarget`, because what gets sent to
  * the node is decided there and a shape check that hardened into a check
  * against the local listing would refuse the one case this exists for.
+ *
+ * From 2026-09-14 the digest leads, and the reason is a defect rather than a
+ * preference. Rehearsing the demo, a Library model was joined as
+ * `behaviortree` — the dropdown could not offer `library`, the replica held
+ * `behaviortree`, and the node took the binding without a word — and the
+ * replica then served the behaviortree descriptor for a Library document
+ * until it was restarted. The two controls are ordered by what they can be
+ * wrong about: a digest names the model and is checked against it by the
+ * node, a dropdown entry names this replica and is checked against nothing.
  */
 describe('the Join by id form, and naming a metamodel this replica does not hold', () => {
   const hosted: HostedModel[] = [{ modelId: ID, metamodelId: null }];
@@ -139,17 +158,36 @@ describe('the Join by id form, and naming a metamodel this replica does not hold
     expect(html).toContain('aria-label="Metamodel digest"');
   });
 
-  it('lets the two ways be chosen, with the dropdown the one in force to begin with', () => {
+  it('lets the two ways be chosen, with the digest the one in force to begin with', () => {
     const html = markup(hosted);
     expect(html).toContain('name="join-bound-to"');
-    expect(html).toContain('checked="" value="held"');
-    expect(html).toContain('value="digest"');
+    expect(html).toContain('checked="" value="digest"');
+    expect(html).toContain('value="held"');
+  });
+
+  it('puts the digest before the dropdown, so the control that can be right is the one met first', () => {
+    const html = markup(hosted);
+    expect(html.indexOf('value="digest"')).toBeLessThan(html.indexOf('value="held"'));
+  });
+
+  it('leaves the dropdown unanswered rather than showing the first entry as a choice', () => {
+    // The bug in one line: an unanswered control that reads as an answer.
+    // The placeholder carries the empty digest, and `joinTarget` refuses it.
+    const html = markup(hosted);
+    expect(html).toContain('choose a language this replica serves');
+    expect(html).not.toContain(`selected="" value="${btListing.digest}"`);
   });
 
   it('says why a digest would ever be typed, since late binding is not guessable', () => {
     const html = markup(hosted);
     expect(html).toContain('A model can be joined under a language this replica does not hold yet');
     expect(html).toContain('the language arrives with the model');
+  });
+
+  it('says the dropdown is about this replica and is confirmed before it is sent', () => {
+    const html = markup(hosted);
+    expect(html).toContain('what this replica can serve, not what the model is written in');
+    expect(html).toContain('confirmed before it is sent');
   });
 
   it('offers the join on a replica holding no descriptor at all, which the dropdown alone cannot', () => {
@@ -173,17 +211,21 @@ describe('joinTarget', () => {
     });
   });
 
-  it('reads an empty dropdown value as the first entry, which is what the select shows', () => {
+  it('refuses an unanswered dropdown instead of reading it as the first entry', () => {
+    // It used to answer the listing's first entry here, which is how a
+    // Library model came to be joined as behaviortree on 2026-09-14: the
+    // control nobody had answered was answered by list order, and the node
+    // held that language so nothing objected.
     expect(joinTarget({ source: 'held', digest: '' }, listing)).toEqual({
-      ok: true,
-      metamodelId: { nsURI: btListing.nsURI, digest: btListing.digest },
+      ok: false,
+      error: 'choose the language this model is written in, or give its digest',
     });
   });
 
   it('has nothing to send when the replica lists nothing and the dropdown is the source', () => {
     expect(joinTarget({ source: 'held', digest: '' }, [])).toEqual({
       ok: false,
-      error: 'choose the metamodel the model is bound to',
+      error: 'choose the language this model is written in, or give its digest',
     });
   });
 

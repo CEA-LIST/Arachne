@@ -195,7 +195,17 @@ async function createInUi(editor: Editor, metamodel: MetamodelId): Promise<Model
   });
 }
 
-/** Join a model through the Join by id form, and wait for its tab. */
+/**
+ * Join a model through the Join by id form's dropdown, and wait for its tab.
+ *
+ * The dropdown path is two steps from 2026-09-14: submitting raises the
+ * question the form asks about a language chosen from this replica's own
+ * listing, which the replica has no way to check against someone else's
+ * model, and the join goes out when that is confirmed. This is the common
+ * case — bt-alice and bt-bob both hold the language the model really is
+ * written in — so the confirmation is a click here and the assertion that it
+ * appeared at all is `addMetamodel.e2e.ts`'s.
+ */
 async function joinInUi(editor: Editor, id: ModelId, metamodel: MetamodelId): Promise<void> {
   const { page } = editor;
   await showExplorerTab(page, 'models');
@@ -205,6 +215,14 @@ async function joinInUi(editor: Editor, id: ModelId, metamodel: MetamodelId): Pr
   await input.type(id);
   await page.select('select[aria-label="Metamodel of the model to join"]', metamodel.digest);
   await page.click('form[aria-label="Join model by id"] button[type="submit"]');
+  const prompt = '[aria-label="Confirm a join this replica cannot check"]';
+  await page.waitForSelector(prompt, { timeout: 20_000 });
+  await page.evaluate((selector: string) => {
+    const buttons = Array.from(document.querySelectorAll(`${selector} button`));
+    const confirm = buttons.find((button) => (button.textContent ?? '').startsWith('Join as'));
+    if (confirm === undefined) throw new Error('no confirm button on the unchecked-join prompt');
+    (confirm as HTMLButtonElement).click();
+  }, prompt);
   await page.waitForSelector(`.me-doctabs__tab[data-model-id="${id}"]`, { timeout: 20_000 });
 }
 
