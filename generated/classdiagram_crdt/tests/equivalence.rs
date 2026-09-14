@@ -90,6 +90,10 @@
 //! concurrency tie-breaks, and that is a difference in the *harness* and not
 //! in the paths.
 //!
+//! The one exception is `Relation.typ`, the only total-order register over an
+//! enumeration any checked-in metamodel has, which is driven on a second pair
+//! rooted at `Relation` and never beside `Class`: see section 15.
+//!
 //! # Every script opens with `New`, and the edits contend
 //!
 //! `record!`'s `new` builds one field per feature, so `ClassLog` renders its
@@ -2898,13 +2902,15 @@ fn ip32_an_add_concurrent_with_a_remove_and_a_clear_converges_on_both_paths() {
 // `moirai_interp::matrix` holds the whole matrix: every construction, every
 // pattern, and which generated crate drives which row. The rows it assigns to
 // this crate are the text leaf, the disable-wins flag, the four policy and
-// order registers, the enum register and the two sets. What is here is the
+// order registers, the multi-value and total-order enum registers and the two
+// sets. What is here is the
 // cell table for those rows and the two arms the runner drives, built from
 // this file's own encoders and its own canonical projection, unchanged.
 //
 // Every cell opens with `New`, for the reason section 3's note gives, and
 // acknowledges on a feature the cell does not touch: `Class.name` for every
-// row but text, and `Class.tags` for text.
+// row but text, and `Class.tags` for text. The total-order enum register is
+// `Relation.typ`, and its cells are section 15's.
 
 use moirai_interp::matrix::{self, Arm, Cell, Construction, pattern as p};
 
@@ -3167,14 +3173,27 @@ fn with_arms<T>(
 /// **The conflict matrix** over `class_diagram.ecore`: every cell the registry
 /// assigns to this crate, each under every schedule, replica against twin and
 /// replica against replica, through stabilization.
+///
+/// Two pairs of arms, because the interpreted harness is rooted at one class:
+/// the `Class` cells run rooted at `Class` and the total-order enum register's
+/// cells run rooted at `Relation` (section 15). Coverage is checked once, over
+/// both tables together, against everything the registry assigns this crate.
 #[test]
 fn conflict_matrix_over_class_diagram_ecore() {
     let sem = Meta::new().sem;
     let cells = class_diagram_cells();
-    with_arms(&sem, |meta, interp, generated| {
-        matrix::run_matrix(matrix::CLASSDIAGRAM, &meta.sem, &cells, interp, generated)
-    })
-    .unwrap_or_else(|reason| panic!("{reason}"));
+    let relation_cells = relation_cells();
+    let all: Vec<Cell<Edit>> = cells.iter().chain(&relation_cells).cloned().collect();
+    let assigned = matrix::check_coverage(matrix::CLASSDIAGRAM, &sem, &all)
+        .unwrap_or_else(|reason| panic!("{reason}"));
+    let mut run = with_arms(&sem, |_, interp, generated| {
+        matrix::run_cells(matrix::CLASSDIAGRAM, &cells, interp, generated)
+    });
+    run.merge(with_relation_arms(&sem, |interp, generated| {
+        matrix::run_cells(matrix::CLASSDIAGRAM, &relation_cells, interp, generated)
+    }));
+    run.finish(matrix::CLASSDIAGRAM, assigned)
+        .unwrap_or_else(|reason| panic!("{reason}"));
 }
 
 /// `class_diagram.ecore`'s descriptor with one feature's rule replaced, for
@@ -3264,4 +3283,216 @@ fn conflict_matrix_reports_a_tie_break_rebound_on_one_path() {
     // policies apart at any point, so that cell must stay green.
     assert!(patterns.contains(&p::TIE_EVERY_RESIDUE), "{patterns:?}");
     assert!(!patterns.contains(&p::WRITE_WRITE_SAME), "the same value cannot tell them apart: {patterns:?}");
+}
+
+// ---------------------------------------------------------------------------
+// 15. `Relation.typ`: a total-order register over `RelationType`
+// ---------------------------------------------------------------------------
+//
+// `class_diagram.rs` makes `Relation.typ` a `TORegister<RelationType>` whose
+// order is `RelationType::rank`, Associates < Aggregates < Composes <
+// Implements < Extends, and `class_diagram.ecore` declares the literals in that
+// order because both paths order a literal by its declaration position. This
+// section drives it on a second pair of arms rooted at `Relation`, reusing
+// `Edit` with `typ` and `label` as its features and `Elem::WriteLiteral` as a
+// position in `RelationType`.
+//
+// **The least literal cannot say "unwritten" on the generated path.** A
+// `TORegister` reads from `V::default()` upwards, and `RelationType`'s default
+// is its first literal, `Associates`, so an unwritten `Relation.typ` and one
+// written `Associates` both read `Associates` there, while the interpreted
+// register reads `Scalar::Null` for the first. This is the same bridge the
+// module note makes for `""` in a string register: [`without_relation_defaults`]
+// drops `typ` at `null` or at the first literal, on both sides, and so a write
+// of `Associates` alone is invisible to the comparison. A write that wins over
+// it is not.
+
+/// The root class of this section's pair.
+const RELATION: &str = "Relation";
+
+/// `Relation`'s slots, and `RelationType`'s literals in declaration order.
+struct RelationMeta {
+    sem: Arc<MetamodelSemantics>,
+    root: ClassSlot,
+    /// The slot of `RelationType` in the table's `enums`.
+    relation_type: ClassSlot,
+    literals: Vec<String>,
+}
+
+impl RelationMeta {
+    fn new(sem: &Arc<MetamodelSemantics>) -> RelationMeta {
+        let root = class_slot(sem, RELATION);
+        let (relation_type, literals) = match sem.rule(root, feature_slot(sem, root, "typ")) {
+            Some(MergeRule::Attribute {
+                shape: Shape::Single,
+                leaf:
+                    LeafRule::Enum {
+                        class,
+                        tie: TieBreak::TotalOrder,
+                    },
+            }) => (
+                *class,
+                sem.enums[class.index()]
+                    .literals
+                    .iter()
+                    .map(|literal| literal.to_string())
+                    .collect(),
+            ),
+            other => panic!("`Relation.typ` is {other:?} and not a total-order enum leaf"),
+        };
+        RelationMeta {
+            sem: Arc::clone(sem),
+            root,
+            relation_type,
+            literals,
+        }
+    }
+
+    /// The position of a literal, by name.
+    fn literal(&self, name: &str) -> usize {
+        self.literals
+            .iter()
+            .position(|literal| literal == name)
+            .unwrap_or_else(|| panic!("`{name}` is not a literal of `RelationType`"))
+    }
+}
+
+/// One edit of a `Relation` as the interpreted path spells it.
+fn relation_interp_op(meta: &RelationMeta, edit: &Edit) -> InstanceOp {
+    let inner = match (&edit.feature, &edit.action) {
+        (None, Action::New) => InstanceOp::New,
+        (Some(name), Action::Leaf(elem)) => {
+            let leaf = match elem {
+                Elem::Write(word) => LeafOp::Write(Scalar::text(*word)),
+                Elem::WriteLiteral(index) => {
+                    LeafOp::Write(Scalar::Enum(meta.relation_type.0, *index as u16))
+                }
+                Elem::Clear => LeafOp::Clear,
+                other => panic!("{other:?} is not an edit of a `Relation`"),
+            };
+            InstanceOp::field(feature_slot(&meta.sem, meta.root, name), InstanceOp::Leaf(leaf))
+        }
+        (feature, action) => panic!("{action:?} against {feature:?} is not an edit of a `Relation`"),
+    };
+    InstanceOp::variant(meta.root, inner)
+}
+
+/// One edit of a `Relation` as this crate's typed operation, built as JSON and
+/// deserialized as [`typed_op`] builds a `Class` one.
+fn relation_typed_op(meta: &RelationMeta, edit: &Edit) -> Classdiagram {
+    let inner = match (&edit.feature, &edit.action) {
+        (None, Action::New) => json!("New"),
+        (Some(name), Action::Leaf(elem)) => {
+            let op = match elem {
+                Elem::Write(word) => tagged("Write", json!(word)),
+                Elem::WriteLiteral(index) => tagged("Write", json!(meta.literals[*index])),
+                Elem::Clear => json!("Clear"),
+                other => panic!("{other:?} is not an edit of a `Relation`"),
+            };
+            tagged(variant_of(name), op)
+        }
+        (feature, action) => panic!("{action:?} against {feature:?} is not an edit of a `Relation`"),
+    };
+    let value = tagged(RELATION, inner);
+    serde_json::from_value(value.clone()).unwrap_or_else(|error| {
+        panic!(
+            "the typed encoder built an operation `Classdiagram` cannot take: {error}\n{}",
+            serde_json::to_string_pretty(&value).unwrap_or_default()
+        )
+    })
+}
+
+/// The generated `Relation` read-out in the canonical form: `label`, a
+/// multi-value register, collapsed as `many_valued` collapses it, and `typ`
+/// as its literal's name.
+fn project_relation(value: &ClassdiagramValue) -> Value {
+    let raw = serde_json::to_value(value).expect("the generated read-out serializes");
+    let relation = raw
+        .get("relation")
+        .expect("the package value carries `Relation` under its field");
+    let mut out = Map::new();
+    out.insert(ECLASS.to_string(), json!(RELATION));
+    out.insert(
+        "label".to_string(),
+        many_valued(relation.get("label").expect("`RelationValue` has `label`"), None),
+    );
+    let typ = relation.get("typ").expect("`RelationValue` has `typ`");
+    assert!(typ.is_string(), "an enum literal reads as its name: {typ}");
+    out.insert("typ".to_string(), typ.clone());
+    Value::Object(out)
+}
+
+/// A canonical `Relation` document with every default-valued key dropped, on
+/// both sides: a `null` anywhere, and `typ` at `RelationType`'s first literal,
+/// for the reason the note above gives. A root left with nothing but its class
+/// name is `null`.
+fn without_relation_defaults(meta: &RelationMeta, value: Value) -> Value {
+    let Value::Object(mut map) = value else {
+        return value;
+    };
+    map.retain(|key, held| {
+        !(held.is_null() || (key == "typ" && held.as_str() == Some(meta.literals[0].as_str())))
+    });
+    if map.len() == 1 && map.contains_key(ECLASS) {
+        return Value::Null;
+    }
+    Value::Object(map)
+}
+
+/// The runner's two arms rooted at `Relation`.
+fn with_relation_arms<T>(
+    interp_sem: &Arc<MetamodelSemantics>,
+    body: impl FnOnce(&Arm<'_, Edit, moirai_interp::testing::Harness>, &Arm<'_, Edit, ClassdiagramLog>) -> T,
+) -> T {
+    let meta = RelationMeta::new(&Meta::new().sem);
+    moirai_interp::testing::install_fixture(interp_sem, RELATION);
+    let interp_encode = |edit: &Edit, _: &Value| relation_interp_op(&meta, edit);
+    let gen_encode = |edit: &Edit, _: &Value| relation_typed_op(&meta, edit);
+    let interp_read =
+        |replica: &InterpReplica| without_relation_defaults(&meta, replica.query(Read::<Value>::new()));
+    let gen_read = |replica: &GenReplica| {
+        without_relation_defaults(&meta, project_relation(&replica.query(Read::<ClassdiagramValue>::new())))
+    };
+    let interp = Arm {
+        name: "interpreted",
+        encode: &interp_encode,
+        read: &interp_read,
+    };
+    let generated = Arm {
+        name: "generated",
+        encode: &gen_encode,
+        read: &gen_read,
+    };
+    body(&interp, &generated)
+}
+
+/// The total-order enum register's row, on `Relation.typ`, acknowledged on
+/// `Relation.label`. Literal positions: 0 Associates, 1 Aggregates, 2 Composes,
+/// 3 Implements, 4 Extends.
+fn relation_cells() -> Vec<Cell<Edit>> {
+    let row = Construction::EnumRegister(moirai_semantics::TieBreak::TotalOrder);
+    let beat = || on("label", Elem::Write("heartbeat"));
+    let lit = |index| vec![on("typ", Elem::WriteLiteral(index))];
+    let setup = |extra: Vec<Edit>| {
+        let mut out = vec![open()];
+        out.extend(extra);
+        out
+    };
+    vec![
+        // The CoPaMO scenario: Aggregates against Associates reads Aggregates.
+        Cell::new(row, p::WRITE_WRITE_DIFFERENT, setup(vec![]), vec![lit(1), lit(0)], beat())
+            .expect("/typ", json!("Aggregates")),
+        Cell::new(row, p::WRITE_WRITE_SAME, setup(vec![]), vec![lit(2), lit(2)], beat())
+            .expect("/typ", json!("Composes")),
+        Cell::new(
+            row,
+            p::WRITE_CLEAR,
+            setup(vec![on("typ", Elem::WriteLiteral(4))]),
+            vec![lit(1), vec![on("typ", Elem::Clear)]],
+            beat(),
+        )
+        .expect("/typ", json!("Aggregates")),
+        Cell::new(row, p::THREE_WRITERS, setup(vec![]), vec![lit(0), lit(2), lit(1)], beat())
+            .expect("/typ", json!("Composes")),
+    ]
 }
