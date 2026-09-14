@@ -963,3 +963,278 @@ fn a_generated_log_with_a_non_empty_ordered_containment_cannot_be_serialized() {
         empty.expect("checked above").len()
     );
 }
+
+// ---------------------------------------------------------------------------
+// The conflict matrix over `bt.ecore`
+// ---------------------------------------------------------------------------
+//
+// `moirai_interp::matrix` holds the whole matrix and assigns this crate the
+// three structural rows no other metamodel with a generated crate reaches: the
+// optional attribute (`TreeNode.name`), the single containment onto a union
+// with eight concrete subtypes (`BehaviorTree.child`) and the ordered
+// containment onto that union (`ControlNode.children`). The cells run on
+// `support`'s encoders and on exactly the comparison `Harness::compare` makes,
+// the canonical projection with I-A1's one named exception taken off both
+// sides by `except_unwritten_sequence_children`, and nothing else.
+//
+// The interpreted arm here is `moirai_interp::testing::Harness` rooted at
+// `Root` rather than a `ModelLog`: with no `Install` in front of it, the
+// opening `Create main` is event one on both paths and every later event
+// lines up by construction, which the runner asserts on every send. Every
+// cell acknowledges by writing one character into `Root.main.ID`, which no
+// cell contends.
+
+use moirai_interp::matrix::{self, Arm, Cell, Construction, pattern as p};
+
+type MatrixInterp = moirai_protocol::replica::Replica<
+    moirai_interp::testing::Harness,
+    moirai_protocol::broadcast::tcsb::Tcsb<InstanceOp>,
+>;
+type MatrixGen = moirai_protocol::replica::Replica<
+    bt_crdt::package::BehaviortreeLog,
+    moirai_protocol::broadcast::tcsb::Tcsb<bt_crdt::package::Behaviortree>,
+>;
+
+fn hop(feature: &str, at: Option<usize>, class: &str) -> Hop {
+    Hop {
+        feature: feature.to_string(),
+        at,
+        class: class.to_string(),
+    }
+}
+
+fn main_path() -> Path {
+    Path::default().child(hop("main", None, "BehaviorTree"))
+}
+
+/// `/main/child`, holding a `class`.
+fn child_path(class: &str) -> Path {
+    main_path().child(hop("child", None, class))
+}
+
+/// `/main/child:Sequence/children[at]`, holding a `class`.
+fn kid_path(at: usize, class: &str) -> Path {
+    child_path("Sequence").child(hop("children", Some(at), class))
+}
+
+fn at(path: Path, action: Action) -> Edit {
+    Edit {
+        id: 0,
+        writer: 'a',
+        path,
+        action,
+    }
+}
+
+fn create(path: Path, feature: &str, pos: Option<usize>, class: &str) -> Edit {
+    at(
+        path,
+        Action::Create {
+            feature: feature.to_string(),
+            pos,
+            class: class.to_string(),
+        },
+    )
+}
+
+fn type_char(path: Path, feature: &str, pos: usize, ch: char) -> Edit {
+    at(
+        path,
+        Action::Text {
+            feature: feature.to_string(),
+            op: TextOp::Insert {
+                pos,
+                ch,
+                after: ch.to_string(),
+            },
+        },
+    )
+}
+
+fn beat() -> Edit {
+    type_char(main_path(), "ID", 0, 'h')
+}
+
+fn bt_cells(meta: &Meta) -> Vec<Cell<Edit>> {
+    let opened = |extra: Vec<Edit>| {
+        let mut out = open_the_model(meta);
+        out.extend(extra);
+        out
+    };
+    let mut cells = Vec::new();
+
+    // The single containment onto `TreeNode`.
+    let row = Construction::SingleContainment;
+    let put = |class: &str, ch: char| {
+        vec![
+            create(main_path(), "child", None, class),
+            type_char(child_path(class), "ID", 0, ch),
+        ]
+    };
+    cells.push(
+        Cell::new(row, p::DIFFERENT_SUBTYPES, opened(vec![]), vec![put("Sequence", 's'), put("Fallback", 'f')], beat())
+            .expect(
+                "/main/child",
+                json!({CONFLICT: [{"eClass": "Fallback", "ID": "f"}, {"eClass": "Sequence", "ID": "s"}]}),
+            ),
+    );
+    cells.push(
+        Cell::new(row, p::SAME_SUBTYPE, opened(vec![]), vec![put("Sequence", 'a'), put("Sequence", 'b')], beat())
+            .expect("/main/child/eClass", json!("Sequence"))
+            .watch("/main/child"),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::UPDATE_UPDATE_CHILD,
+            opened(vec![create(main_path(), "child", None, "Sequence"), type_char(child_path("Sequence"), "ID", 0, 'x')]),
+            vec![
+                vec![type_char(child_path("Sequence"), "ID", 1, 'a')],
+                vec![type_char(child_path("Sequence"), "ID", 1, 'b')],
+            ],
+            beat(),
+        )
+        .expect("/main/child/eClass", json!("Sequence"))
+        .watch("/main/child"),
+    );
+
+    // The optional attribute `TreeNode.name`, on the `Sequence` at `/main/child`.
+    let row = Construction::OptionalAttribute;
+    let sequence = || vec![create(main_path(), "child", None, "Sequence")];
+    let named = || {
+        let mut out = sequence();
+        out.push(type_char(child_path("Sequence"), "name", 0, 'x'));
+        opened(out)
+    };
+    let unset = || vec![at(child_path("Sequence"), Action::Unset { feature: "name".to_string() })];
+    // Update-wins: the character concurrent with the unset survives it, the
+    // one causally below it does not.
+    cells.push(
+        Cell::new(
+            row,
+            p::SET_UNSET,
+            named(),
+            vec![vec![type_char(child_path("Sequence"), "name", 1, 'y')], unset()],
+            beat(),
+        )
+        .expect("/main/child/name", json!("y")),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::SET_SET,
+            opened(sequence()),
+            vec![
+                vec![type_char(child_path("Sequence"), "name", 0, 'a')],
+                vec![type_char(child_path("Sequence"), "name", 0, 'b')],
+            ],
+            beat(),
+        )
+        .watch("/main/child/name"),
+    );
+    // Present and empty on both paths, which is `an_emptied_optional_is_not_dropped`'s rule.
+    cells.push(
+        Cell::new(row, p::UNSET_UNSET, named(), vec![unset(), unset()], beat())
+            .expect("/main/child/name", json!("")),
+    );
+
+    // The ordered containment `ControlNode.children` onto `TreeNode`, on the
+    // `Sequence` at `/main/child`, seeded with two named `Fallback`s.
+    let row = Construction::SequenceContainment;
+    let seeded = || {
+        let mut out = sequence();
+        out.push(create(child_path("Sequence"), "children", Some(0), "Fallback"));
+        out.push(type_char(kid_path(0, "Fallback"), "ID", 0, 'p'));
+        out.push(create(child_path("Sequence"), "children", Some(1), "Fallback"));
+        out.push(type_char(kid_path(1, "Fallback"), "ID", 0, 'q'));
+        opened(out)
+    };
+    let insert = |pos: usize, class: &str, ch: char| {
+        vec![
+            create(child_path("Sequence"), "children", Some(pos), class),
+            type_char(kid_path(pos, class), "ID", 0, ch),
+        ]
+    };
+    let delete = |pos: usize| {
+        vec![at(child_path("Sequence"), Action::Delete { feature: "children".to_string(), pos })]
+    };
+    let rename = |pos: usize, ch: char| vec![type_char(kid_path(pos, "Fallback"), "ID", 1, ch)];
+    let ids = |doc: &[&str]| -> Value {
+        Value::Array(doc.iter().map(|id| json!({"eClass": "Fallback", "ID": id})).collect())
+    };
+    cells.push(
+        Cell::new(
+            row,
+            p::INSERT_INSERT_SAME_POS,
+            seeded(),
+            vec![insert(1, "Fallback", 'a'), insert(1, "Sequence", 'b')],
+            beat(),
+        )
+        .watch("/main/child/children"),
+    );
+    cells.push(
+        Cell::new(row, p::INSERT_DELETE, seeded(), vec![insert(1, "Fallback", 'a'), delete(0)], beat())
+            .expect("/main/child/children", ids(&["a", "q"])),
+    );
+    // Update-wins: the removed child comes back holding only what was written
+    // into it concurrently with the removal.
+    cells.push(
+        Cell::new(row, p::DELETE_UPDATE_SAME, seeded(), vec![delete(0), rename(0, 'z')], beat())
+            .expect("/main/child/children", ids(&["z", "q"])),
+    );
+    cells.push(
+        Cell::new(row, p::DELETE_DELETE_SAME, seeded(), vec![delete(0), delete(0)], beat())
+            .expect("/main/child/children", ids(&["q"])),
+    );
+    cells.push(
+        Cell::new(row, p::UPDATE_UPDATE_SAME, seeded(), vec![rename(0, 'a'), rename(0, 'b')], beat())
+            .watch("/main/child/children"),
+    );
+    cells.push(
+        Cell::new(
+            row,
+            p::THREE_INSERTS_SAME_POS,
+            seeded(),
+            vec![insert(1, "Fallback", 'a'), insert(1, "Sequence", 'b'), insert(1, "Fallback", 'c')],
+            beat(),
+        )
+        .watch("/main/child/children"),
+    );
+    cells
+}
+
+/// **The conflict matrix** over `bt.ecore`: every cell the registry assigns to
+/// this crate, each under every schedule.
+#[test]
+fn conflict_matrix_over_bt_ecore() {
+    let sem = Arc::new(from_descriptor(&bt_descriptor()).expect("the descriptor parses"));
+    let meta = Meta::new(Arc::clone(&sem));
+    moirai_interp::testing::install_fixture(&sem, "Root");
+    let interp_encode = |edit: &Edit, _: &Value| match interp_op(&meta, edit) {
+        ModelOp::Instance(op) => op,
+        other => panic!("an edit encodes as an instance operation, not {other:?}"),
+    };
+    let gen_encode = |edit: &Edit, _: &Value| typed_op(&meta, edit);
+    let interp_read = |replica: &MatrixInterp| {
+        except_unwritten_sequence_children(&meta, canon(&meta, replica.query(Read::<Value>::new())))
+    };
+    let gen_read = |replica: &MatrixGen| {
+        except_unwritten_sequence_children(
+            &meta,
+            project(&meta, &replica.query(Read::<bt_crdt::package::BehaviortreeValue>::new())),
+        )
+    };
+    let interp = Arm {
+        name: "interpreted",
+        encode: &interp_encode,
+        read: &interp_read,
+    };
+    let generated = Arm {
+        name: "generated",
+        encode: &gen_encode,
+        read: &gen_read,
+    };
+    let cells = bt_cells(&meta);
+    matrix::run_matrix(matrix::BT, &sem, &cells, &interp, &generated)
+        .unwrap_or_else(|reason| panic!("{reason}"));
+}
