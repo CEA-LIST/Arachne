@@ -46,10 +46,10 @@
  * given.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { isModelId, type HostedModel, type MetamodelId, type MetamodelListing, type ModelId } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
-import { joinTarget } from './joinTarget';
+import { joinTarget, seenJoin } from './joinTarget';
 import { DEFAULT_LOG_LABEL, packageOf } from '../ui/modelLabel';
 import { Plug, RefreshCw } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
@@ -199,8 +199,10 @@ export function ModelsPanel({
   const [joinSource, setJoinSource] = useState<'held' | 'digest'>('digest');
   const [joinId, setJoinId] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [seenError, setSeenError] = useState<string | null>(null);
   const [unchecked, setUnchecked] = useState<UncheckedJoin | null>(null);
+  // Where a seen row hands its id to, and what the person types next.
+  const joinFormRef = useRef<HTMLFormElement>(null);
+  const joinDigestRef = useRef<HTMLInputElement>(null);
 
   /**
    * The listing entry behind a digest. Only a create falls back to the first
@@ -213,6 +215,25 @@ export function ModelsPanel({
 
   /** Ask before a dropdown-named join goes out, and forget any older question. */
   const ask = (join: UncheckedJoin) => setUnchecked(join);
+
+  /**
+   * Carry a seen model's id down to the Join by id form and leave the cursor
+   * in the digest field.
+   *
+   * The scroll is not a flourish. The two blocks are far enough apart in a
+   * panel this narrow that a click whose whole effect happened below the
+   * fold reads as a click that did nothing, and the person's next move would
+   * be to click it again. The form is brought to where the eye is, and the
+   * focus is set without a second scroll fighting the first.
+   */
+  const handOff = (id: ModelId) => {
+    setJoinId(id);
+    setJoinSource('digest');
+    setJoinError(null);
+    setUnchecked(null);
+    joinFormRef.current?.scrollIntoView({ block: 'nearest' });
+    joinDigestRef.current?.focus({ preventScroll: true });
+  };
   const confirmed = () => {
     if (unchecked === null) return;
     const join = unchecked;
@@ -255,7 +276,7 @@ export function ModelsPanel({
               {/* Always a cell, empty for the default log, so the button keeps its column. */}
               <span
                 className="me-subtle me-truncate me-models__ns"
-                {...(model.metamodelId !== null ? { title: `digest ${model.metamodelId.digest}` } : {})}
+                {...(model.metamodelId !== null ? { title: model.metamodelId.nsURI } : {})}
               >
                 {model.metamodelId?.nsURI ?? ''}
               </span>
@@ -275,6 +296,20 @@ export function ModelsPanel({
                 other, so joining it means moving its id by hand.
               */}
               <span className="me-mono me-models__id">{model.modelId}</span>
+              {/*
+                The digest, beside the id, for the same reason the id is here
+                in full: these are the two things a person carries to another
+                window, and until now this one was a `title` tooltip — visible
+                to a mouse, and untypable. A join asks for both, so they are
+                shown together, and the value is its own element so that one
+                click takes the digest and nothing around it.
+              */}
+              {model.metamodelId !== null && (
+                <span className="me-models__digest-line">
+                  <span className="me-subtle">metamodel </span>
+                  <span className="me-mono me-models__digest-value">{model.metamodelId.digest}</span>
+                </span>
+              )}
             </li>
           );
         })}
@@ -334,7 +369,6 @@ export function ModelsPanel({
                 placeholder="choose the language it is written in"
                 onChange={(digest) => {
                   setSeenDigest(digest);
-                  setSeenError(null);
                   setUnchecked(null);
                 }}
               />
@@ -347,29 +381,36 @@ export function ModelsPanel({
                     type="button"
                     className="me-btn me-btn--sm"
                     aria-label={`Join ${id}`}
-                    disabled={metamodels.length === 0}
                     onClick={() => {
-                      const entry = metamodels.find((m) => m.digest === seenDigest);
-                      if (entry === undefined) {
-                        setUnchecked(null);
-                        setSeenError('choose the language above, or give the model’s digest in Join by id below');
+                      // Never disabled, and least of all on a replica that
+                      // serves nothing: that is the one whose only way in is
+                      // the digest, and the hand-off is how it gets there.
+                      const next = seenJoin(seenDigest, metamodels);
+                      if (next.kind === 'handOff') {
+                        handOff(id);
                         return;
                       }
-                      setSeenError(null);
+                      const entry = metamodels.find((m) => m.digest === next.metamodelId.digest);
                       ask({
                         from: 'seen',
                         id,
-                        metamodelId: { nsURI: entry.nsURI, digest: entry.digest },
-                        name: nameOf(entry),
+                        metamodelId: next.metamodelId,
+                        name: entry === undefined ? next.metamodelId.digest : nameOf(entry),
                       });
                     }}
                   >
                     Join
                   </button>
+                  {/*
+                    What this replica knows about the row, which is the id and
+                    nothing else. It is here rather than only in the hint
+                    below because the dropdown sits directly above the list
+                    and reads as though it held the answer.
+                  */}
+                  <span className="me-subtle me-models__unknown">language unknown here</span>
                 </li>
               ))}
             </ul>
-            {seenError !== null && <p className="me-connect__error">{seenError}</p>}
             {unchecked !== null && unchecked.from === 'seen' && (
               <UncheckedJoinPrompt
                 join={unchecked}
@@ -386,16 +427,18 @@ export function ModelsPanel({
               taken, and only found out afterwards.
             */}
             <p className="me-connect__hint">
-              This replica knows the ids it has heard and not what they are written in, and this list is its
-              own — what it can serve, not what these models are. A choice here is a guess unless you were
-              told; if you were given the model’s digest, Join by id below takes it, and that is the naming
-              the node can check against the model itself.
+              This replica knows the ids it has heard and not what they are written in, and the list above is
+              its own — what it can serve, not what these models are. So a choice there is a guess unless you
+              were told. Leave it unanswered and Join carries the id down to Join by id with the cursor in the
+              digest field: paste the digest you were given and submit, and that is the naming the node can
+              check against the model itself.
             </p>
           </>
         )}
       </section>
 
       <form
+        ref={joinFormRef}
         className="me-models__form"
         aria-label="Join model by id"
         onSubmit={(event) => {
@@ -481,6 +524,7 @@ export function ModelsPanel({
             <span>the digest given to you with the model id</span>
           </label>
           <input
+            ref={joinDigestRef}
             className="me-input me-mono me-models__digest"
             type="text"
             aria-label="Metamodel digest"

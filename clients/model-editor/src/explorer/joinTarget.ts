@@ -54,6 +54,47 @@ export type BoundTo =
 export type JoinTarget = { ok: true; metamodelId: MetamodelId } | { ok: false; error: string };
 
 /**
+ * What a Join on a **Seen since connecting** row does.
+ *
+ * `bind` names the language and goes on to the confirmation; `handOff` moves
+ * the row's id into the Join by id form and leaves the person to paste a
+ * digest.
+ */
+export type SeenJoin = { kind: 'bind'; metamodelId: MetamodelId } | { kind: 'handOff' };
+
+/**
+ * A Join clicked on a seen row: bound here, or handed to the form below.
+ *
+ * # Why an unanswered dropdown is a hand-off and not a refusal
+ *
+ * It used to be a refusal — *choose the language above, or give the model's
+ * digest in Join by id below* — which is correct and is a dead end in
+ * precisely the case the list exists for. A seen model is one this replica
+ * does not host, and the demo's is written in a language this replica does
+ * not hold, so the seen list's own dropdown cannot offer the right entry at
+ * all: it is fed by `GET /api/metamodels`, which is what this replica
+ * serves. The sentence then sent the person to a second form to retype by
+ * hand the 32 characters they had just clicked on.
+ *
+ * So an unanswered dropdown means *I cannot name it from this list*, which
+ * is the ordinary answer for a seen model rather than an error, and the row
+ * carries its id down to the control that can express it. One click, then a
+ * paste.
+ *
+ * A dropdown that *was* answered still binds from here: a replica that holds
+ * the language a model it saw go by is written in is a real case, and it is
+ * one choice and one confirmation away. `metamodels` is consulted rather
+ * than trusted, so a digest that is no longer served — the listing changed
+ * under the choice — hands off too instead of sending an entry that is not
+ * there.
+ */
+export function seenJoin(digest: string, metamodels: readonly MetamodelListing[]): SeenJoin {
+  const entry = metamodels.find((candidate) => candidate.digest === digest);
+  if (entry === undefined) return { kind: 'handOff' };
+  return { kind: 'bind', metamodelId: { nsURI: entry.nsURI, digest: entry.digest } };
+}
+
+/**
  * The `metamodel_id` for a join, or why the form cannot send one.
  *
  * The node reads only the digest out of a registration's `metamodel_id` and

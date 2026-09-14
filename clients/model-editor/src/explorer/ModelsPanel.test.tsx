@@ -14,7 +14,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { HostedModel, MetamodelListing, ModelId } from '../api/types';
-import { joinTarget } from './joinTarget';
+import { joinTarget, seenJoin } from './joinTarget';
 import { ModelsPanel } from './ModelsPanel';
 
 const ID = 'a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4';
@@ -60,6 +60,29 @@ describe('the hosted model list', () => {
     expect(html).not.toContain('a1b2c3d4…');
   });
 
+  it('prints the metamodel digest too, because a join asks for both and it was a tooltip', () => {
+    // The same defect as the truncated model id and the same fix. A digest
+    // rendered only as a `title` is visible to a mouse and untypable: the
+    // Join by id form leads with a digest field that nothing on screen could
+    // fill, so the demo path broke at the copy step.
+    const html = markup(hosted);
+    expect(html).toContain(btListing.digest);
+    expect(html).toContain('class="me-mono me-models__digest-value"');
+    expect(html).not.toContain(`title="digest ${btListing.digest}"`);
+  });
+
+  it('gives the digest a class of its own, so one click takes it and not the word beside it', () => {
+    // `user-select: all` is on the value and not on the line, or a click
+    // would carry "metamodel " into the paste.
+    const html = markup(hosted);
+    expect(html).toContain(`<span class="me-mono me-models__digest-value">${btListing.digest}</span>`);
+  });
+
+  it('says nothing about a metamodel for the default log, which has none', () => {
+    const html = markup([{ modelId: ID, metamodelId: null }]);
+    expect(html).not.toContain('me-models__digest-value');
+  });
+
   it('gives the id a class of its own, which is what selects it alone and puts it on its own line', () => {
     expect(markup(hosted)).toContain('me-mono me-models__id');
   });
@@ -102,7 +125,7 @@ describe('the seen-but-not-hosted list', () => {
     // own history arrives; a wrong choice is taken, and found out afterwards.
     const html = markup(hosted, [btListing], [OTHER]);
     expect(html).not.toContain('refused by the node');
-    expect(html).toContain('A choice here is a guess unless you were told');
+    expect(html).toContain('a choice there is a guess unless you were told');
   });
 
   it('says the list is what was heard since connecting, never that it is the session', () => {
@@ -120,6 +143,62 @@ describe('the seen-but-not-hosted list', () => {
 
   it('keeps the Join by id form, because an idle model never appears in the seen list', () => {
     expect(markup(hosted, [btListing], [OTHER])).toContain('aria-label="Join model by id"');
+  });
+
+  it('says of every row that the language is not something this replica knows', () => {
+    // The dropdown sits directly above the list and reads as though it held
+    // the answer. This is the word that says it does not.
+    expect(markup(hosted, [btListing], [OTHER])).toContain('language unknown here');
+  });
+
+  it('offers Join on a replica that serves nothing, because that is the one that must hand off', () => {
+    // It used to be disabled on an empty listing, which made the row a dead
+    // control on exactly the replica whose only way in is a digest.
+    const html = markup(hosted, [], [OTHER]);
+    expect(html).toContain(`aria-label="Join ${OTHER}"`);
+    expect(html).not.toContain(`aria-label="Join ${OTHER}" disabled`);
+  });
+});
+
+/**
+ * What a Join on a seen row does, which is the decision and not the form.
+ *
+ * Cam hit the old answer in the browser on 2026-09-14: clicking Join with no
+ * language chosen printed *choose the language above, or give the model's
+ * digest in Join by id below*. Correct, and a dead end in precisely the case
+ * the list exists for — a seen model is one this replica does not host, and
+ * in the demo it is written in a language this replica does not hold, so the
+ * seen list's own dropdown cannot offer the right entry at all. The sentence
+ * then sent him to a second form to retype the 32 characters he had just
+ * clicked on.
+ *
+ * So an unanswered dropdown is a hand-off: the row carries its id into the
+ * Join by id form, puts the digest control in force and the cursor in the
+ * digest field. One click, then a paste.
+ */
+describe('seenJoin', () => {
+  const listing = [btListing];
+
+  it('hands off when no language is chosen, which is the ordinary case for a seen model', () => {
+    expect(seenJoin('', listing)).toEqual({ kind: 'handOff' });
+  });
+
+  it('hands off on a replica that serves nothing, where there is nothing to choose', () => {
+    expect(seenJoin('', [])).toEqual({ kind: 'handOff' });
+  });
+
+  it('binds from the row when a language was chosen and is still served', () => {
+    expect(seenJoin(btListing.digest, listing)).toEqual({
+      kind: 'bind',
+      metamodelId: { nsURI: btListing.nsURI, digest: btListing.digest },
+    });
+  });
+
+  it('hands off when the choice names a digest the listing no longer has', () => {
+    // The listing is refetched while the panel is open, so a choice can
+    // outlive the entry behind it; sending an nsURI nobody serves would be
+    // worse than asking for a digest.
+    expect(seenJoin(btListing.digest, [])).toEqual({ kind: 'handOff' });
   });
 });
 

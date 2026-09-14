@@ -270,6 +270,20 @@
   min-width: 0;
 }
 
+/*
+ * The descriptor's own identity, and the one value on this tab that is
+ * carried by hand into another window's join form. 64 characters in a column
+ * that holds far fewer, so it wraps rather than truncating — a digest a
+ * person can see three quarters of is no better than none — and
+ * `user-select: all` makes one click take the whole of it across the wrap.
+ */
+.me-meta__digest {
+  font-size: var(--fs-100);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
 .me-meta__list {
   display: flex;
   flex-direction: column;
@@ -422,6 +436,37 @@
 
 .me-models__seen .me-models__id {
   grid-column: auto;
+}
+
+/*
+ * What this replica knows about a seen row, on a line of its own under the id
+ * and the button. Its own line rather than a third column because the id is
+ * already 32 monospace characters in a panel that is narrow by design, and a
+ * word squeezed between them would be the first thing to be truncated away.
+ */
+.me-models__unknown {
+  grid-column: 1 / -1;
+  font-size: var(--fs-100);
+}
+
+/*
+ * The metamodel digest under a hosted model's id, in the treatment the id
+ * itself gets and for the same reason: it is carried by hand into another
+ * window, so it is on screen, in full, and `user-select: all` so that one
+ * click takes the whole of it and none of the label beside it. 64 characters
+ * wrap rather than truncate — a truncated digest is the trap this replaces,
+ * and a selection is not broken by a line break.
+ */
+.me-models__digest-line {
+  grid-column: 1 / -1;
+  font-size: var(--fs-100);
+  overflow-wrap: anywhere;
+}
+
+.me-models__digest-value {
+  color: var(--c-fg-muted);
+  -webkit-user-select: all;
+  user-select: all;
 }
 
 .me-models__row:hover {

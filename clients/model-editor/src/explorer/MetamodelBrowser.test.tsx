@@ -71,6 +71,25 @@ describe('the Metamodel tab offers both actions, and says which is which', () =>
     expect(html).toContain('Load into this editor');
   });
 
+  it('carries the descriptor’s digest in the summary, which is what another window has to be given', () => {
+    // The digest was readable in exactly one place before this — the
+    // confirmation prompt that only appears when you are about to bind the
+    // wrong language — so the Join by id form led with a field nothing on
+    // screen could fill. The value is computed from the descriptor's own
+    // bytes (model/digest.ts, pinned against the node's in digest.test.ts),
+    // so this asserts the row and its treatment; digest.test.ts asserts the
+    // number and the browser scenario asserts the copy.
+    const html = markup(descriptor);
+    expect(html).toContain('<dt>digest</dt>');
+    expect(html).toContain('class="me-mono me-meta__digest"');
+  });
+
+  it('says the digest is being computed rather than showing an empty cell', () => {
+    // WebCrypto is a promise even for five kilobytes, so the first paint has
+    // no digest; an empty cell there reads as "this language has none".
+    expect(markup(descriptor)).toContain('computing…');
+  });
+
   it('offers no add control when there is no replica to add to', () => {
     const html = markup(null, false);
     expect(html).toContain('Not connected');

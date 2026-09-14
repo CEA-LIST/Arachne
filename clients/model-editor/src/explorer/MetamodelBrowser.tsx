@@ -15,13 +15,14 @@
  * `addMetamodel.ts`, which is where both actions' behaviour lives.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { validateDescriptor } from '../api/client';
 import type { Descriptor } from '../api/types';
 import { EmptyState } from '../common/EmptyState';
 import type { ClassDesc } from '../api/types';
 import type { MetamodelAddOutcome } from '../sync/useSync';
 import { addDescriptorFile, type AddState } from './addMetamodel';
+import { metamodelDigest } from '../model/digest';
 import { FileWarning, Plug, Search, Upload } from '../ui/icons';
 import { ICON } from '../ui/iconProps';
 
@@ -39,6 +40,44 @@ function countParts(cls: ClassDesc): string {
   if (cls.containments.length > 0) parts.push(`${cls.containments.length} cont`);
   if (cls.references.length > 0) parts.push(`${cls.references.length} ref`);
   return parts.join(' · ');
+}
+
+/**
+ * The digest of the descriptor in hand, once it has been computed.
+ *
+ * Computed here rather than looked up in the replica's listing, and the
+ * difference is not a convenience. A digest is taken over the descriptor's
+ * own bytes, and two descriptors can share an `nsURI` and a package name and
+ * still be two metamodels — that is what `ip25` is about — so matching this
+ * descriptor to a listing entry by name would sometimes show the digest of a
+ * language this is not. It also answers for a descriptor loaded from a file,
+ * which is in no listing at all and whose digest is exactly what a person
+ * needs in order to ask another replica for models written in it.
+ *
+ * `null` while it is being computed and if it cannot be: `crypto.subtle` is
+ * exposed in secure contexts only, which https, localhost and 127.0.0.1 are
+ * and a bare LAN address is not. A row that says the digest is unavailable
+ * is honest; a row showing a wrong one would not be.
+ */
+function useDescriptorDigest(descriptor: Descriptor | null): string | null {
+  // The descriptor it was computed for is kept beside it, so a stale digest
+  // is filtered out during render rather than cleared by a second one.
+  const [computed, setComputed] = useState<{ of: Descriptor; digest: string } | null>(null);
+  useEffect(() => {
+    if (descriptor === null) return;
+    let current = true;
+    metamodelDigest(descriptor)
+      .then((digest) => {
+        if (current) setComputed({ of: descriptor, digest });
+      })
+      .catch(() => {
+        // No digest is the honest answer where `crypto.subtle` is absent.
+      });
+    return () => {
+      current = false;
+    };
+  }, [descriptor]);
+  return computed !== null && computed.of === descriptor ? computed.digest : null;
 }
 
 interface MetamodelBrowserProps {
@@ -60,6 +99,7 @@ export function MetamodelBrowser({
   const [fileError, setFileError] = useState<string | null>(null);
   const [addState, setAddState] = useState<AddState>({ phase: 'idle' });
   const [query, setQuery] = useState('');
+  const digest = useDescriptorDigest(metamodel);
 
   const onFile = (file: File | undefined) => {
     if (file === undefined) return;
@@ -181,6 +221,17 @@ export function MetamodelBrowser({
         <dt>nsURI</dt>
         <dd className="me-mono me-truncate" title={metamodel.nsURI}>
           {metamodel.nsURI}
+        </dd>
+        {/*
+          The identity, and the one thing on this tab another window needs.
+          A model is joined by id *and* digest, and until now the digest was
+          nowhere a person could read it — a tooltip on a model row and the
+          invisible `value` of a dropdown option. `user-select: all` so one
+          click takes the whole 64 characters, wrapped or not.
+        */}
+        <dt>digest</dt>
+        <dd className="me-mono me-meta__digest">
+          {digest ?? <span className="me-subtle">computing…</span>}
         </dd>
         <dt>root classes</dt>
         <dd className="me-mono">

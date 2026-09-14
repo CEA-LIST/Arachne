@@ -12,12 +12,18 @@
  * reached bob inside the `Install` operation that opened the model's log and
  * by no other route, which is what the success line in the UI says out loud.
  *
- * **Bob's join is made in bob's own window, through the Join by id form**,
- * and that is the point of the scenario rather than a detail of how it is
- * driven. The form's dropdown is fed by bob's own `GET /api/metamodels`, so
- * it cannot offer a language bob has never held; the digest field beside it
- * can name one, and this asserts both — that the dropdown does not offer the
- * digest, and that the join goes through anyway.
+ * **Bob's join is made in bob's own window, and every value it needs comes
+ * off alice's screen**, which is the point of the scenario rather than a
+ * detail of how it is driven. The form's dropdown is fed by bob's own
+ * `GET /api/metamodels`, so it cannot offer a language bob has never held;
+ * the digest field beside it can name one. From 2026-09-14 the whole of that
+ * path is driven the way a person walks it: the digest is read by clicking
+ * the text on alice's hosted row and reading back what the click selected —
+ * it was a `title` tooltip before, so there was nothing to copy — and bob
+ * starts from the **Seen since connecting** row for the model, whose Join
+ * carries the id into the form and puts the cursor in the digest field
+ * rather than refusing, because the seen list's own dropdown cannot offer
+ * the right language either.
  *
  * Then the model is edited in bob's window and the edit shows up in alice's,
  * which is the other half of the claim: bob did not merely receive a
@@ -292,31 +298,90 @@ function offeredJoinDigests(page: Page): Promise<string[]> {
 }
 
 /**
- * Join a model through the Join by id form, naming its metamodel by a digest
- * typed into the form rather than chosen from the dropdown.
+ * The metamodel digest as a person gets it: by clicking the text on screen
+ * and reading what the click selected.
  *
- * This is the control the scenario exists for. Typing into the digest field
- * puts it in force, which is asserted here: a join that quietly went out
- * under whatever the dropdown happened to show would pass every later
- * assertion on a replica that holds the language and prove nothing on one
- * that does not.
+ * Deliberately not read out of the API. The claim is that the digest can be
+ * *copied*, and until 2026-09-14 it could not — it was a `title` tooltip on
+ * the hosted row and the invisible `value` of a dropdown option, so the Join
+ * by id form led with a field nothing on screen could fill. `user-select:
+ * all` is what makes one click take the whole of it, wrapped or not, and
+ * what this reads back is the selection that click produced.
  */
-async function joinByDigestInUi(page: Page, id: ModelId, digest: string): Promise<void> {
+async function copyDigestInUi(page: Page, modelId: ModelId): Promise<string> {
   await showExplorerTab(page, 'models');
+  const value = await page.waitForSelector(
+    `li[data-model-id="${modelId}"] .me-models__digest-value`,
+    { timeout: 20_000 },
+  );
+  if (value === null) throw new Error('no digest on the hosted row');
+  await value.click();
+  return page.evaluate(() => window.getSelection()?.toString() ?? '');
+}
+
+/**
+ * The digest the Metamodel tab shows for the descriptor in effect.
+ *
+ * It is computed in the window from the descriptor's own bytes rather than
+ * looked up in the replica's listing, because two descriptors can share an
+ * `nsURI` and be two metamodels, so the first paint has no digest and this
+ * waits for one rather than reading the placeholder.
+ */
+async function digestOnMetamodelTab(page: Page): Promise<string> {
+  await showExplorerTab(page, 'metamodel');
+  return waitFor(
+    'the Metamodel tab to show the digest of the descriptor in effect',
+    async () => {
+      const text = await page
+        .$eval('.me-meta__digest', (el) => (el.textContent ?? '').trim())
+        .catch(() => '');
+      return /^[0-9a-f]{64}$/.test(text) ? text : null;
+    },
+    { timeoutMs: 20_000, intervalMs: 100 },
+  );
+}
+
+/**
+ * Click Join on a **Seen since connecting** row and answer with where that
+ * click left the person.
+ *
+ * With no language chosen the row hands off: the model's id goes into the
+ * Join by id form and the cursor into the digest field, so the next thing to
+ * do is paste. It used to refuse instead — *choose the language above, or
+ * give the model's digest in Join by id below* — which is a dead end in the
+ * one case the list exists for, and sent the person to a second form to
+ * retype the 32 characters they had just clicked on.
+ */
+async function seenRowJoinInUi(page: Page, id: ModelId): Promise<{ idField: string; focused: string }> {
+  await showExplorerTab(page, 'models');
+  const row = await page.waitForSelector(`li[data-seen-id="${id}"] button`, { timeout: 60_000 });
+  if (row === null) throw new Error(`no Join control on the seen row for ${id}`);
+  await row.click();
+  return page.evaluate(() => {
+    const form = document.querySelector('form[aria-label="Join model by id"]');
+    const idField = form?.querySelector('input[aria-label="Model id"]') as HTMLInputElement | null;
+    const active = document.activeElement as HTMLElement | null;
+    return { idField: idField?.value ?? '', focused: active?.getAttribute('aria-label') ?? '' };
+  });
+}
+
+/**
+ * Type a digest wherever the hand-off left the cursor, and submit.
+ *
+ * Nothing is selected or clicked first: the point of the hand-off is that
+ * the next keystroke goes into the digest field, so anything this did to get
+ * there would be testing its own setup. The control in force is checked
+ * before submitting, because a join that quietly went out under whatever the
+ * dropdown happened to show would pass every later assertion.
+ */
+async function submitHandedOffJoin(page: Page, digest: string): Promise<void> {
+  await page.keyboard.type(digest);
   const form = 'form[aria-label="Join model by id"]';
-  const idField = await page.waitForSelector(`${form} input[aria-label="Model id"]`);
-  if (idField === null) throw new Error('no Model id field');
-  await idField.click({ count: 3 });
-  await idField.type(id);
-  const digestField = await page.waitForSelector(`${form} input[aria-label="Metamodel digest"]`);
-  if (digestField === null) throw new Error('no Metamodel digest field');
-  await digestField.click({ count: 3 });
-  await digestField.type(digest);
   const inForce = await page.$eval(
     `${form} input[name="join-bound-to"][value="digest"]`,
     (el) => (el as HTMLInputElement).checked,
   );
-  if (!inForce) throw new Error('typing a digest did not put the digest field in force');
+  if (!inForce) throw new Error('the handed-off form did not leave the digest in force');
   await page.click(`${form} button[type="submit"]`);
 }
 
@@ -548,7 +613,21 @@ describe('add a metamodel to a running replica, from the browser', () => {
         console.log(`add-metamodel: alice's document is ${JSON.stringify(await stateOf(aliceUrl, modelId))}`);
       }
 
-      /* 3. Bob, who was never given the descriptor, joins by id from bob's own window. */
+      /*
+       * 3. Bob, who was never given the descriptor, joins by id from bob's
+       *    own window — and gets the digest off alice's screen rather than
+       *    out of the API, because that is the step the demo path was broken
+       *    at. The Metamodel tab is asserted to carry it too, since that is
+       *    the tab whose subject is the language itself.
+       */
+      const onTab = await digestOnMetamodelTab(alice);
+      expect(onTab, 'the Metamodel tab must show the digest of the descriptor in effect').toBe(language.digest);
+      const copied = await copyDigestInUi(alice, modelId);
+      expect(copied.trim(), 'one click on the digest must select the whole of it and nothing else').toBe(
+        language.digest,
+      );
+      console.log(`add-metamodel: one click on alice's hosted row yielded ${copied.trim()}`);
+
       const bobBefore = await getMetamodels(bobUrl);
       expect(bobBefore.map((e) => e.nsURI)).not.toContain(nsURI);
       const bob = await openEditor(browser, preview.url, bobUrl);
@@ -560,8 +639,22 @@ describe('add a metamodel to a running replica, from the browser', () => {
         await offeredJoinDigests(bob),
         "bob's Join dropdown must not offer a language bob has never held",
       ).not.toContain(language.digest);
+
+      /*
+       * The model is in bob's Seen since connecting list — bob has had
+       * alice's frames for it and hosts nothing — and that is where the
+       * click starts. The seen list's own dropdown cannot offer the right
+       * language either, so the row hands off instead of refusing.
+       */
+      const handed = await seenRowJoinInUi(bob, modelId);
+      expect(handed.idField, 'the seen row must carry its id into the form').toBe(modelId);
+      expect(handed.focused, 'the cursor must be left in the digest field').toBe('Metamodel digest');
+      expect(await openTabIds(bob), 'the hand-off must join nothing on its own').not.toContain(modelId);
+      console.log(
+        `add-metamodel: one click on bob's seen row filled the form with ${handed.idField} and focused ${handed.focused}`,
+      );
       const joinedAt = Date.now();
-      await joinByDigestInUi(bob, modelId, language.digest);
+      await submitHandedOffJoin(bob, copied.trim());
       await waitFor(`bob's tab for ${modelId.slice(0, 8)}…`, async () =>
         (await openTabIds(bob)).includes(modelId) ? true : null,
       );
