@@ -1299,6 +1299,10 @@ fn json_cells() -> Vec<Cell<Edit>> {
         )
         .expect("/1/k", json!(1.0))
         .expect("/1/j", json!("s")),
+        // Three writers on one key: both increments are concurrent with the
+        // removal, so both survive it and the seeded 1 does not.
+        Cell::new(row, p::THREE_WAY_KEY, holding_k(), vec![inc_k(2), remove_k(), inc_k(3)], json_beat())
+            .expect("/1/k", json!(5.0)),
     ]
 }
 
