@@ -1180,7 +1180,6 @@ mod tests {
     /// attribute value puts the slice end inside the character and the parse
     /// panics with "is not a char boundary".
     #[test]
-    #[ignore = "reproduces parser panic on a non-ASCII attribute value; fix pending"]
     fn parses_a_non_ascii_attribute_value_ending_in_a_multibyte_char() {
         for value in ["»", "«»x", "ℕx", "the «Focus»."] {
             let ecore = ecore_with_annotation_value(value);
@@ -1200,11 +1199,33 @@ mod tests {
     /// boundary: the value slice stops short of the closing quote and the file
     /// is refused as malformed although it is well-formed XML.
     #[test]
-    #[ignore = "reproduces parser refusing a non-ASCII attribute value; fix pending"]
     fn parses_a_non_ascii_attribute_value_followed_by_ascii() {
         let ecore = ecore_with_annotation_value("a guillemet » inside an attribute value");
         if let Err(e) = Ctx::parse(&ecore) {
             panic!("refused: {e:?}");
+        }
+    }
+
+    /// Three-byte (`ℕ`) and four-byte (`𝔸`) characters, at the end of the value,
+    /// in the middle of it, and on their own: the value is read back whole.
+    #[test]
+    fn parses_attribute_values_with_three_and_four_byte_chars() {
+        for value in ["ℕ", "𝔸", "x ℕ", "x 𝔸", "ℕ𝔸 in the middle of a value", "𝔸ℕ𝔸"]
+        {
+            let ecore = ecore_with_annotation_value(value);
+            let ctx =
+                Ctx::parse(&ecore).unwrap_or_else(|e| panic!("value {value:?} refused: {e:?}"));
+            let root = ctx
+                .classes()
+                .iter()
+                .find(|class| class.name() == "Root")
+                .expect("Root classifier should exist");
+            let read = root
+                .annotations()
+                .iter()
+                .find_map(|annot| annot.details().get("documentation"))
+                .expect("documentation detail should exist");
+            assert_eq!(read, value);
         }
     }
 }

@@ -130,7 +130,7 @@ impl<'input> Parser<'input> {
                 } else {
                     self.column += 1;
                 }
-                self.cursor += 1;
+                self.cursor += c.len_utf8();
             } else {
                 break;
             }
@@ -292,7 +292,7 @@ impl<'input> Parser<'input> {
                     } else {
                         self.column += 1;
                     }
-                    self.cursor += 1;
+                    self.cursor += char.len_utf8();
                 }
                 break;
             } else {
@@ -302,7 +302,7 @@ impl<'input> Parser<'input> {
                 } else {
                     self.column += 1;
                 }
-                self.cursor += 1;
+                self.cursor += char.len_utf8();
             }
         }
         &self.txt[start..self.cursor]
@@ -1171,5 +1171,26 @@ impl<'input> Parser<'input> {
         }
 
         Ok(structural)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Parser;
+
+    #[test]
+    fn ws_skips_multibyte_whitespace() {
+        let mut parser = Parser::new("\u{a0}\u{3000} x");
+        parser.ws();
+        assert_eq!(parser.tail(), "x");
+    }
+
+    #[test]
+    fn until_char_advances_past_multibyte_chars() {
+        let mut parser = Parser::new("«ℕ𝔸»\"rest");
+        assert_eq!(parser.until_char('"', false), "«ℕ𝔸»");
+        assert_eq!(parser.tail(), "\"rest");
+        assert_eq!(parser.until_char('"', true), "\"");
+        assert_eq!(parser.tail(), "rest");
     }
 }
