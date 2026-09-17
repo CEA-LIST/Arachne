@@ -668,13 +668,13 @@ impl Harness {
     /// The interpreted read-out, pruned by the same function.
     fn interp_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ia } else { &self.ib };
-        without_defaults(replica.query(Read::<Value>::new()))
+        without_defaults(replica.query(&Read::<Value>::new()))
     }
 
     /// The generated read-out, canonicalised and then pruned.
     fn gen_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ga } else { &self.gb };
-        without_defaults(project(&replica.query(Read::<TestValue>::new())))
+        without_defaults(project(&replica.query(&Read::<TestValue>::new())))
     }
 
     /// The four read-outs, compared, each pruned by [`without_defaults`].
@@ -707,7 +707,7 @@ impl Harness {
             (self.ib.send(interp), self.gb.send(generated))
         };
         match (interp_event, gen_event) {
-            (Some(interp_event), Some(gen_event)) => {
+            (Ok(interp_event), Ok(gen_event)) => {
                 let pending = if edit.writer == 'a' {
                     &mut self.pending_a
                 } else {
@@ -716,7 +716,7 @@ impl Harness {
                 pending.push((interp_event, gen_event));
                 Ok(true)
             }
-            (None, None) => {
+            (Err(_), Err(_)) => {
                 // Both intakes refused it, which is itself an equality worth
                 // having.
                 self.refused += 1;
@@ -725,12 +725,12 @@ impl Harness {
             (interp_event, _) => Err(format!(
                 "the two intakes disagree on {}: interpreted {}, generated {}",
                 edit.show(),
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "accepted"
                 } else {
                     "refused"
                 },
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "refused"
                 } else {
                     "accepted"
@@ -1733,9 +1733,9 @@ fn conflict_matrix_over_kitchen_sink_ecore() {
     moirai_interp::testing::install_fixture(&meta.sem, ROOT);
     let interp_encode = |edit: &Edit, _: &Value| interp_op(&meta, edit);
     let gen_encode = |edit: &Edit, _: &Value| typed_op(edit);
-    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(Read::<Value>::new()));
+    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(&Read::<Value>::new()));
     let gen_read =
-        |replica: &GenReplica| without_defaults(project(&replica.query(Read::<TestValue>::new())));
+        |replica: &GenReplica| without_defaults(project(&replica.query(&Read::<TestValue>::new())));
     let interp = Arm {
         name: "interpreted",
         encode: &interp_encode,

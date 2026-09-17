@@ -531,7 +531,7 @@ fn the_only_exclusion_is_the_non_containment_reference() {
         }
     }
 
-    let raw: Value = harness.ia.query(Read::<Value>::new());
+    let raw: Value = harness.ia.query(&Read::<Value>::new());
     let port = &raw["main"]["child"]["outflowports"][0];
     assert_eq!(port[ECLASS], json!("OutFlowPort"));
     assert!(
@@ -1216,12 +1216,12 @@ fn conflict_matrix_over_bt_ecore() {
     };
     let gen_encode = |edit: &Edit, _: &Value| typed_op(&meta, edit);
     let interp_read = |replica: &MatrixInterp| {
-        except_unwritten_sequence_children(&meta, canon(&meta, replica.query(Read::<Value>::new())))
+        except_unwritten_sequence_children(&meta, canon(&meta, replica.query(&Read::<Value>::new())))
     };
     let gen_read = |replica: &MatrixGen| {
         except_unwritten_sequence_children(
             &meta,
-            project(&meta, &replica.query(Read::<bt_crdt::package::BehaviortreeValue>::new())),
+            project(&meta, &replica.query(&Read::<bt_crdt::package::BehaviortreeValue>::new())),
         )
     };
     let interp = Arm {

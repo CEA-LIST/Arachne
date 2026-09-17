@@ -723,7 +723,7 @@ impl Harness {
     /// The interpreted read-out, pruned by the same function.
     fn interp_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ia } else { &self.ib };
-        without_defaults(replica.query(Read::<Value>::new()))
+        without_defaults(replica.query(&Read::<Value>::new()))
     }
 
     /// The generated read-out, canonicalised and then pruned.
@@ -731,7 +731,7 @@ impl Harness {
         let replica = if writer == 'a' { &self.ga } else { &self.gb };
         without_defaults(project(
             &self.meta,
-            &replica.query(Read::<ClassdiagramValue>::new()),
+            &replica.query(&Read::<ClassdiagramValue>::new()),
         ))
     }
 
@@ -765,7 +765,7 @@ impl Harness {
             (self.ib.send(interp), self.gb.send(generated))
         };
         match (interp_event, gen_event) {
-            (Some(interp_event), Some(gen_event)) => {
+            (Ok(interp_event), Ok(gen_event)) => {
                 let pending = if edit.writer == 'a' {
                     &mut self.pending_a
                 } else {
@@ -774,7 +774,7 @@ impl Harness {
                 pending.push((interp_event, gen_event));
                 Ok(true)
             }
-            (None, None) => {
+            (Err(_), Err(_)) => {
                 // Both intakes refused it, which is itself an equality worth
                 // having.
                 self.refused += 1;
@@ -783,12 +783,12 @@ impl Harness {
             (interp_event, _) => Err(format!(
                 "the two intakes disagree on {}: interpreted {}, generated {}",
                 edit.show(),
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "accepted"
                 } else {
                     "refused"
                 },
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "refused"
                 } else {
                     "accepted"
@@ -1594,13 +1594,13 @@ impl Trio {
     }
 
     fn interp_doc(&self, writer: char) -> Value {
-        without_defaults(self.interp[seat(writer)].query(Read::<Value>::new()))
+        without_defaults(self.interp[seat(writer)].query(&Read::<Value>::new()))
     }
 
     fn gen_doc(&self, writer: char) -> Value {
         without_defaults(project(
             &self.meta,
-            &self.generated[seat(writer)].query(Read::<ClassdiagramValue>::new()),
+            &self.generated[seat(writer)].query(&Read::<ClassdiagramValue>::new()),
         ))
     }
 
@@ -1633,23 +1633,23 @@ impl Trio {
         let interp_event = self.interp[at].send(interp);
         let gen_event = self.generated[at].send(generated);
         match (interp_event, gen_event) {
-            (Some(interp_event), Some(gen_event)) => {
+            (Ok(interp_event), Ok(gen_event)) => {
                 self.pending[at].push((interp_event, gen_event));
                 Ok(true)
             }
-            (None, None) => {
+            (Err(_), Err(_)) => {
                 self.refused += 1;
                 Ok(false)
             }
             (interp_event, _) => Err(format!(
                 "the two intakes disagree on {}: interpreted {}, generated {}",
                 edit.show(),
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "accepted"
                 } else {
                     "refused"
                 },
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "refused"
                 } else {
                     "accepted"
@@ -2284,13 +2284,13 @@ impl Transfer {
     }
 
     fn joiner_interp_doc(&self) -> Value {
-        without_defaults(self.interp_joiner.query(Read::<Value>::new()))
+        without_defaults(self.interp_joiner.query(&Read::<Value>::new()))
     }
 
     fn joiner_gen_doc(&self) -> Value {
         without_defaults(project(
             &self.donors.meta,
-            &self.gen_joiner.query(Read::<ClassdiagramValue>::new()),
+            &self.gen_joiner.query(&Read::<ClassdiagramValue>::new()),
         ))
     }
 
@@ -2326,11 +2326,11 @@ impl Transfer {
             self.interp_joiner.send(interp),
             self.gen_joiner.send(generated),
         ) {
-            (Some(interp_event), Some(gen_event)) => {
+            (Ok(interp_event), Ok(gen_event)) => {
                 self.pending.push((interp_event, gen_event));
                 Ok(())
             }
-            (None, None) => Err(format!(
+            (Err(_), Err(_)) => Err(format!(
                 "both intakes refused the joiner's {}, so the adopted replica \
                  can read but not write",
                 edit.show()
@@ -2338,7 +2338,7 @@ impl Transfer {
             (interp_event, _) => Err(format!(
                 "the two intakes disagree on the joiner's {}: interpreted {}",
                 edit.show(),
-                if interp_event.is_some() {
+                if interp_event.is_ok() {
                     "accepted, generated refused"
                 } else {
                     "refused, generated accepted"
@@ -2428,7 +2428,7 @@ fn ip32_both_paths_serialize_this_metamodels_log_and_get_it_back() {
     assert_eq!(
         without_defaults(project(
             &harness.meta,
-            &EvalNested::execute_query(&gen_back, Read::<ClassdiagramValue>::new())
+            &EvalNested::execute_query(&gen_back, &Read::<ClassdiagramValue>::new())
         )),
         expected,
         "the generated log came back rendering a different document"
@@ -2444,7 +2444,7 @@ fn ip32_both_paths_serialize_this_metamodels_log_and_get_it_back() {
         root: interp_back,
     };
     assert_eq!(
-        without_defaults(EvalNested::execute_query(&rebuilt, Read::<Value>::new())),
+        without_defaults(EvalNested::execute_query(&rebuilt, &Read::<Value>::new())),
         expected,
         "the interpreted node tree came back rendering a different document"
     );
@@ -3154,9 +3154,9 @@ fn with_arms<T>(
     moirai_interp::testing::install_fixture(interp_sem, ROOT);
     let interp_encode = |edit: &Edit, _: &Value| interp_op(&meta, edit);
     let gen_encode = |edit: &Edit, _: &Value| typed_op(&meta, edit);
-    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(Read::<Value>::new()));
+    let interp_read = |replica: &InterpReplica| without_defaults(replica.query(&Read::<Value>::new()));
     let gen_read = |replica: &GenReplica| {
-        without_defaults(project(&meta, &replica.query(Read::<ClassdiagramValue>::new())))
+        without_defaults(project(&meta, &replica.query(&Read::<ClassdiagramValue>::new())))
     };
     let interp = Arm {
         name: "interpreted",
@@ -3482,9 +3482,9 @@ fn with_relation_arms<T>(
     let interp_encode = |edit: &Edit, _: &Value| relation_interp_op(&meta, edit);
     let gen_encode = |edit: &Edit, _: &Value| relation_typed_op(&meta, edit);
     let interp_read =
-        |replica: &InterpReplica| without_relation_defaults(&meta, replica.query(Read::<Value>::new()));
+        |replica: &InterpReplica| without_relation_defaults(&meta, replica.query(&Read::<Value>::new()));
     let gen_read = |replica: &GenReplica| {
-        without_relation_defaults(&meta, project_relation(&replica.query(Read::<ClassdiagramValue>::new())))
+        without_relation_defaults(&meta, project_relation(&replica.query(&Read::<ClassdiagramValue>::new())))
     };
     let interp = Arm {
         name: "interpreted",
@@ -3561,7 +3561,7 @@ impl RelationPair {
             (self.ib.send(interp), self.gb.send(generated))
         };
         match events {
-            (Some(i), Some(g)) => (i, g),
+            (Ok(i), Ok(g)) => (i, g),
             other => panic!("both intakes take {}: {other:?}", edit.show()),
         }
     }
@@ -3579,7 +3579,7 @@ impl RelationPair {
     /// The four read-outs, interpreted then generated at `a`, then at `b`.
     fn docs(&self) -> [Value; 4] {
         let interp = |replica: &InterpReplica| {
-            without_relation_defaults(&self.meta, replica.query(Read::<Value>::new()))
+            without_relation_defaults(&self.meta, replica.query(&Read::<Value>::new()))
         };
         let project = if self.meta.class == FEATURE {
             project_feature_visibility
@@ -3589,7 +3589,7 @@ impl RelationPair {
         let generated = |replica: &GenReplica| {
             without_relation_defaults(
                 &self.meta,
-                project(&replica.query(Read::<ClassdiagramValue>::new())),
+                project(&replica.query(&Read::<ClassdiagramValue>::new())),
             )
         };
         [interp(&self.ia), generated(&self.ga), interp(&self.ib), generated(&self.gb)]
@@ -3659,7 +3659,7 @@ fn concurrent_total_order_literals(
             // The interpreted read-out before any pruning, so the bridge in
             // `without_relation_defaults` is not what makes it pass.
             for replica in [&pair.ia, &pair.ib] {
-                let raw = replica.query(Read::<Value>::new());
+                let raw = replica.query(&Read::<Value>::new());
                 assert_eq!(raw[feature], json!(expected), "{when}: {raw}");
             }
         }

@@ -1201,7 +1201,7 @@ impl Harness {
 
     pub fn interp_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ia } else { &self.ib };
-        canon(&self.interp_meta, replica.query(Read::<Value>::new()))
+        canon(&self.interp_meta, replica.query(&Read::<Value>::new()))
     }
 
     /// What a writer sitting at one replica actually sees: the interpreted
@@ -1211,14 +1211,14 @@ impl Harness {
     /// defaults and no object at all.
     pub fn interp_view(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ia } else { &self.ib };
-        strip_references(&self.interp_meta, replica.query(Read::<Value>::new()))
+        strip_references(&self.interp_meta, replica.query(&Read::<Value>::new()))
     }
 
     pub fn gen_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ga } else { &self.gb };
         project(
             &self.gen_meta,
-            &replica.query(Read::<BehaviortreeValue>::new()),
+            &replica.query(&Read::<BehaviortreeValue>::new()),
         )
     }
 
@@ -1276,7 +1276,7 @@ impl Harness {
             (self.ib.send(interp), self.gb.send(generated))
         };
         match (interp_event, gen_event) {
-            (Some(interp_event), Some(gen_event)) => {
+            (Ok(interp_event), Ok(gen_event)) => {
                 let pending = if edit.writer == 'a' {
                     &mut self.pending_a
                 } else {
@@ -1285,7 +1285,7 @@ impl Harness {
                 pending.push((interp_event, gen_event));
                 taken = true;
             }
-            (None, None) => {
+            (Err(_), Err(_)) => {
                 // Both intakes refused it, which is itself an equality worth
                 // having: `ModelLog::is_enabled` and the generated
                 // `is_enabled` agree.
@@ -1295,12 +1295,12 @@ impl Harness {
                 return Err(format!(
                     "the two intakes disagree on {}: interpreted {}, generated {}",
                     edit.show(),
-                    if interp_event.is_some() {
+                    if interp_event.is_ok() {
                         "accepted"
                     } else {
                         "refused"
                     },
-                    if interp_event.is_some() {
+                    if interp_event.is_ok() {
                         "refused"
                     } else {
                         "accepted"
