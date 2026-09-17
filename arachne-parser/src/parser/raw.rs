@@ -1199,8 +1199,20 @@ impl<'input> Parser<'input> {
         }
         structural.try_set_default_value(default_value);
         structural.try_set_default_value_literal(default_value_literal);
-        if opposite.is_some() {
-            warn!("`eOpposite` attributes are currently not supported, ignoring")
+        if unsettable.is_some_and(|unsettable| helpers::bool(unsettable).unwrap_or(false)) {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `unsettable=\"true\"`, which is currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+            )
+        }
+        if let Some(opposite) = opposite {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` attributes are currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+                opposite,
+            )
         }
 
         // If early_done, parse nested content like eAnnotations

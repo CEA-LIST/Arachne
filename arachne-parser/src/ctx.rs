@@ -1090,7 +1090,6 @@ mod tests {
     /// `class_structural` reads `unsettable` and then neither stores it nor warns about it, so the
     /// flag is dropped without a trace.
     #[test]
-    #[ignore = "reproduces parser dropping unsettable without a warning; fix pending"]
     fn warns_when_dropping_unsettable() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
@@ -1135,7 +1134,6 @@ mod tests {
     /// The warning for a dropped `eOpposite` names neither the feature nor its opposite, so a
     /// metamodel with many of them gives no way to tell which were lost.
     #[test]
-    #[ignore = "reproduces parser warning about eOpposite without naming the feature; fix pending"]
     fn names_the_feature_when_dropping_eopposite() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
