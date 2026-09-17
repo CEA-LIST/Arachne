@@ -33,6 +33,9 @@ pub struct Ctx {
     classes: idx::ClassMap<Class>,
     name_to_class: PathMap<String, idx::Class>,
     builtin_map: HashMap<builtin::Typ, idx::Class>,
+    /// Package of Ecore's own classes, added when the metamodel first refers to one of them.
+    ecore_pack: Option<idx::Pack>,
+    ecore_map: HashMap<ecore::Typ, idx::Class>,
     forward_ref_classes: BTreeSet<idx::Class>,
     forward_ref_packs: BTreeSet<idx::Pack>,
 }
@@ -109,6 +112,8 @@ impl Ctx {
             classes: idx::ClassMap::with_capacity(class_capa),
             name_to_class: PathMap::new(),
             builtin_map: HashMap::with_capacity(13),
+            ecore_pack: None,
+            ecore_map: HashMap::new(),
             forward_ref_classes: BTreeSet::new(),
             forward_ref_packs: BTreeSet::new(),
         };
@@ -228,6 +233,12 @@ impl Ctx {
     pub fn builtin_pack(&self) -> idx::Pack {
         self.builtin_pack
     }
+    /// Package of Ecore's own classes, see [`ecore`].
+    ///
+    /// `None` unless the metamodel refers to one of them.
+    pub fn ecore_pack(&self) -> Option<idx::Pack> {
+        self.ecore_pack
+    }
 
     pub fn pack_idx<K>(&self, path: &Path, name: &K) -> Res<idx::Pack>
     where
@@ -270,6 +281,43 @@ impl Ctx {
             error!(
                 "[fatal] builtin type `{}` has not been properly registered",
                 typ,
+            )
+        })
+    }
+
+    /// Map from [`ecore::Typ`] to [`idx::Class`], empty unless the metamodel refers to one of
+    /// Ecore's own classes.
+    pub fn ecore_classes(&self) -> &HashMap<ecore::Typ, idx::Class> {
+        &self.ecore_map
+    }
+    /// True if `idx` is one of Ecore's own classes, see [`ecore`].
+    pub fn is_ecore_class(&self, idx: idx::Class) -> bool {
+        self.ecore_pack == Some(self[idx].path.last())
+    }
+    /// Retrieves the [`idx::Class`] of one of Ecore's own classes, adding the Ecore package to the
+    /// context the first time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # ecore_rs::prelude! {}
+    /// let mut ctx = Ctx::with_capacity(0, 0);
+    /// assert_eq!(ctx.ecore_pack(), None);
+    /// let idx = ctx.ecore_class_idx(ecore::Typ::EModelElement).expect("adding Ecore failed");
+    /// assert_eq!(ctx[idx].name(), "EModelElement");
+    /// assert_eq!(Some(ctx[idx].path.last()), ctx.ecore_pack());
+    /// assert_eq!(ctx.ecore_class_idx(ecore::Typ::EModelElement).unwrap(), idx);
+    /// ```
+    pub fn ecore_class_idx(&mut self, typ: ecore::Typ) -> Res<idx::Class> {
+        if self.ecore_pack.is_none() {
+            let (pack, classes) = ecore::populate(self)?;
+            self.ecore_pack = Some(pack);
+            self.ecore_map = ecore::Typ::ALL.into_iter().zip(classes).collect();
+        }
+        self.ecore_map.get(&typ).cloned().ok_or_else(|| {
+            error!(
+                "[fatal] Ecore class `{}` has not been properly registered",
+                typ
             )
         })
     }
@@ -427,7 +475,19 @@ impl Ctx {
         Ok(real_p_idx)
     }
 
-    fn raw_add_class(&mut self, build_class: impl FnOnce(idx::Class) -> Class) -> Res<idx::Class> {
+    /// Adds a package under `sup` without registering its name, so that it cannot clash with the
+    /// metamodel's packages.
+    pub(crate) fn raw_add_pack(&mut self, name: impl Into<String>, sup: idx::Pack) -> idx::Pack {
+        let name = name.into();
+        let p_idx = self.packs.push_idx(|idx| Pack::new(idx, name, Some(sup)));
+        self[sup].add_sub(p_idx);
+        p_idx
+    }
+
+    pub(crate) fn raw_add_class(
+        &mut self,
+        build_class: impl FnOnce(idx::Class) -> Class,
+    ) -> Res<idx::Class> {
         // register class
         let c_idx = self.classes.push_idx(build_class);
         let parent = self[c_idx].path.last();
@@ -686,7 +746,10 @@ impl<'a> PathCtx<'a> {
         let etype = repr::Path::resolve_etype(self, s.as_ref())?;
         let class = &self.ctx[etype];
 
-        if class.path.last() != self.ctx.builtin_pack() && class.path != self.path {
+        if class.path.last() != self.ctx.builtin_pack()
+            && !self.ctx.is_ecore_class(etype)
+            && class.path != self.path
+        {
             bail!(
                 "inter-package links are not supported: current package `{}` cannot reference type `{}` from package `{}`",
                 self.path.display(self.ctx.packs()),
@@ -1751,7 +1814,6 @@ mod tests {
     /// `resolve_etype` knows Ecore's datatypes and nothing else of Ecore, so a class extending
     /// `EModelElement` or a feature typed by `EObject` is refused.
     #[test]
-    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
     fn injects_ecore_classes_once_when_referenced() {
         let ctx = Ctx::parse(EXTENDS_ECORE).unwrap_or_else(|e| panic!("refused: {e}"));
 
@@ -1809,7 +1871,6 @@ mod tests {
     /// The classes built in for Ecore hold what the parser would hold for them if it read their
     /// declarations in `Ecore.ecore`.
     #[test]
-    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
     fn built_in_ecore_classes_match_their_declarations() {
         let injected = Ctx::parse(EXTENDS_ECORE).unwrap_or_else(|e| panic!("refused: {e}"));
         let declared = Ctx::parse(ECORE_SUBSET).unwrap_or_else(|e| panic!("refused: {e}"));
@@ -1833,7 +1894,6 @@ mod tests {
     /// A metamodel that is Ecore itself names its own classes by Ecore's URI; they must resolve
     /// to the file's classes and no second Ecore package may appear.
     #[test]
-    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
     fn ecore_itself_resolves_ecore_uris_to_its_own_classes() {
         let probe = r##"<eClassifiers xsi:type="ecore:EClass" name="Probe" eSuperTypes="http://www.eclipse.org/emf/2002/Ecore#//EModelElement">
     <eStructuralFeatures xsi:type="ecore:EReference" name="payload" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"/>

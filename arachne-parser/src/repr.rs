@@ -2,6 +2,7 @@ prelude! {}
 
 pub mod bounds;
 pub mod builtin;
+pub mod ecore;
 pub mod idx;
 pub mod structural;
 
@@ -192,11 +193,42 @@ impl Path {
             return Ok(idx);
         }
 
+        if let Some(classifier) = ecore::classifier_path(s) {
+            if let Some(idx) = Self::resolve_ecore_classifier(ctx, classifier)? {
+                return Ok(idx);
+            }
+        }
+
         let rel_pref = "#//";
         if let Some(s) = s.strip_prefix(rel_pref) {
             Self::resolve_relative_etype(ctx.path().clone(), ctx.ctx_mut(), s)
         } else {
             bail!("unsupported `eType` path `{}`", s);
+        }
+    }
+
+    /// Resolves the path of a classifier inside Ecore, as named by Ecore's namespace URI.
+    ///
+    /// If a package on the current path is Ecore itself, the classifier is one of that package's,
+    /// with forward referencing, and nothing is added to the context. Otherwise it is one of the
+    /// classes of [`ecore`], added to the context the first time; `None` if it is not one of them.
+    fn resolve_ecore_classifier(
+        ctx: &mut ctx::PathCtx,
+        classifier: &str,
+    ) -> Res<Option<idx::Class>> {
+        let ecore_itself = ctx
+            .path()
+            .iter()
+            .filter(|p_idx| ctx.ctx()[*p_idx].ns_uri() == Some(ecore::NS_URI))
+            .last();
+        if let Some(p_idx) = ecore_itself {
+            let path = Path::of_idx(ctx.ctx(), p_idx);
+            return Self::resolve_relative_etype(path, ctx.ctx_mut(), classifier).map(Some);
+        }
+
+        match ecore::Typ::from_name(classifier) {
+            Some(typ) => ctx.ctx_mut().ecore_class_idx(typ).map(Some),
+            None => Ok(None),
         }
     }
 
