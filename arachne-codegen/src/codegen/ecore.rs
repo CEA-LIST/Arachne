@@ -22,7 +22,8 @@ pub fn eobject(ctx: &Ctx) -> Option<idx::Class> {
 /// True if `class` is Ecore's `EObject`, the class of every object.
 ///
 /// `EObject` has no structural feature and is never generated: a supertype `EObject` adds
-/// nothing, and a non-containment reference typed by it refers to an object of any class.
+/// nothing, and a feature typed by it holds or refers to an object of any class, which is not
+/// generated either.
 pub fn is_eobject(ctx: &Ctx, class: idx::Class) -> bool {
     eobject(ctx) == Some(class)
 }

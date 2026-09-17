@@ -27,16 +27,6 @@ pub struct ReferenceAnalysis {
     /// Classes that need vertex ID types (sources ∪ targets of non-containment refs).
     /// Ordered deterministically for stable code generation.
     pub referenceable_classes: Vec<idx::Class>,
-    /// Ecore's `EObject`, if a reference is typed by it.
-    ///
-    /// Such a reference refers to an object of any class. Its arcs are not expanded over the
-    /// concrete classes of the slice: each concrete owner gets one arc whose target is the vertex
-    /// kind of `EObject`, and every object of [`Self::object_classes`] is a vertex of that kind as
-    /// well as of its own class.
-    pub any_object_class: Option<idx::Class>,
-    /// The instantiable classes of the slice, whose objects are vertices of
-    /// [`Self::any_object_class`]; empty if it is `None`.
-    pub object_classes: Vec<idx::Class>,
     /// References left out, and why.
     pub warnings: Vec<Warning>,
 }
@@ -62,7 +52,6 @@ impl ReferenceAnalysis {
         let mut refs = Vec::new();
         let mut seen_refs = HashSet::default();
         let mut referenceable_set = HashSet::default();
-        let mut any_object_class = None;
         let mut warnings = Vec::new();
 
         for &class_idx in package_classes {
@@ -89,33 +78,12 @@ impl ReferenceAnalysis {
                     continue;
                 }
 
+                // `EAnnotation.references`, and any reference typed by `EObject`: it refers to an
+                // object of any class, which the typed graph has no arc for.
                 if is_eobject(ctx, target_idx) {
-                    // One arc per concrete owner, to the vertex of an object of any class.
-                    let concrete_sources =
-                        Self::concrete_classes_in_package(ctx, class_idx, &package_set);
-                    for source_class in &concrete_sources {
-                        let key = (
-                            *source_class,
-                            target_idx,
-                            feature.name.clone(),
-                            feature.bounds.lbound,
-                            feature.bounds.ubound,
-                        );
-                        if !seen_refs.insert(key) {
-                            continue;
-                        }
-
-                        refs.push(NonContainmentRef {
-                            source_class: *source_class,
-                            target_class: target_idx,
-                            reference_name: feature.name.clone(),
-                            lower_bound: feature.bounds.lbound,
-                            upper_bound: feature.bounds.ubound,
-                        });
-                        referenceable_set.insert(*source_class);
-                        referenceable_set.insert(target_idx);
-                        any_object_class = Some(target_idx);
-                    }
+                    warnings.push(Warning::AnyObjectReferenceNotSupported {
+                        feature: format!("{}.{}", class.name(), feature.name),
+                    });
                     continue;
                 }
 
@@ -176,24 +144,9 @@ impl ReferenceAnalysis {
         let mut referenceable_classes: Vec<idx::Class> = referenceable_set.into_iter().collect();
         referenceable_classes.sort_by_key(|c| *c);
 
-        let mut object_classes: Vec<idx::Class> = match any_object_class {
-            Some(any_object) => package_classes
-                .iter()
-                .copied()
-                .filter(|class_idx| {
-                    *class_idx != any_object && is_instantiable_class(ctx.class(*class_idx))
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-        object_classes.sort_by_key(|c| *c);
-        object_classes.dedup();
-
         Self {
             refs,
             referenceable_classes,
-            any_object_class,
-            object_classes,
             warnings,
         }
     }

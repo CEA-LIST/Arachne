@@ -1,10 +1,11 @@
 //! The crate generated from `examples/pet_metamodels/ecore_builtins.ecore`, driven on two replicas.
 //!
 //! `Part` extends `Element`, which extends Ecore's `EModelElement`, so a part carries annotations:
-//! a `source`, `details` as a map from a key to an optional text, and `references` to objects of
-//! any class. `Part.subject` is a reference to an object of any class as well. Every test builds a
-//! model with one part, holding one port and one annotation, and checks that both replicas read the
-//! same thing.
+//! a `source` and `details` as a map from a key to an optional text. The two features that refer to
+//! an object of any class, `EAnnotation.references` and `Part.subject`, are both typed by `EObject`
+//! and are not generated; `Port.annotated`, typed by `EModelElement`, is. Every test builds a model
+//! with one part, holding one port and one annotation, and checks that both replicas read the same
+//! thing.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -12,8 +13,7 @@ use annotated::{
     classifiers::{EcoreEAnnotation, EcoreEModelElement, Element, Model, Part, Port},
     package::{Annotated, AnnotatedLog, AnnotatedValue},
     references::{
-        EcoreEAnnotationId, EcoreEAnnotationReferencesEdge, EcoreEObjectId, Instance, PartId,
-        PartSubjectEdge, PortId, Ref, Refs, instance_path,
+        EcoreEAnnotationId, Instance, PartId, PortAnnotatedEdge, PortId, Ref, Refs, instance_path,
     },
 };
 use moirai_crdt::{
@@ -275,8 +275,27 @@ fn a_key_without_a_value_round_trips() {
     assert_eq!(read(&a).model, read(&b).model);
 }
 
+/// Nothing is generated for `Part.subject` or `EAnnotation.references`, the two features typed by
+/// `EObject`: the generated sources hold no vertex kind, edge or arc for them, no object is given a
+/// second vertex to stand for an object of any class, and `Port.annotated`, typed by
+/// `EModelElement`, is generated and stored as any reference is.
 #[test]
-fn references_to_objects_of_any_class_are_stored_and_read_back() {
+fn a_reference_to_an_object_of_any_class_is_not_generated() {
+    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let references = std::fs::read_to_string(crate_dir.join("src/references.rs"))
+        .expect("reading the generated references module");
+    let package = std::fs::read_to_string(crate_dir.join("src/package.rs"))
+        .expect("reading the generated package module");
+
+    for absent in ["EcoreEObject", "Subject", "References", "object_from_sink_kind"] {
+        assert!(
+            !references.contains(absent),
+            "`references.rs` should not mention `{absent}`"
+        );
+    }
+    assert!(!package.contains("object_from_sink_kind"));
+    assert!(references.contains("PortAnnotatedEdge"));
+
     let (mut a, mut b) = twins_log::<AnnotatedLog>();
     replicas(&mut a, &mut b);
 
@@ -293,39 +312,33 @@ fn references_to_objects_of_any_class_are_stored_and_read_back() {
         Instance::EcoreEAnnotationId(EcoreEAnnotationId(path)) => Some(path),
         _ => None,
     });
+    assert_eq!(
+        value.refs.node_weights().map(vertex).collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            vertex(&Instance::PartId(PartId(part.clone()))),
+            vertex(&Instance::PortId(PortId(port.clone()))),
+            vertex(&Instance::EcoreEAnnotationId(EcoreEAnnotationId(
+                annotation.clone()
+            ))),
+        ])
+    );
 
-    // `Part.subject` refers to the port, and the annotation's `references` to the part.
+    // `Port.annotated` refers to the part.
     deliver(
         &mut a,
         &mut b,
-        Annotated::AddReference(Refs::PartToEcoreEObject(Arc {
-            source: PartId(part.clone()),
-            target: EcoreEObjectId(port.clone()),
-            kind: PartSubjectEdge,
-        })),
-    );
-    deliver(
-        &mut b,
-        &mut a,
-        Annotated::AddReference(Refs::EcoreEAnnotationToEcoreEObject(Arc {
-            source: EcoreEAnnotationId(annotation.clone()),
-            target: EcoreEObjectId(part.clone()),
-            kind: EcoreEAnnotationReferencesEdge,
+        Annotated::AddReference(Refs::PortToPart(Arc {
+            source: PortId(port.clone()),
+            target: PartId(part.clone()),
+            kind: PortAnnotatedEdge,
         })),
     );
 
-    let expected = BTreeSet::from([
-        arc(
-            Ref::PartToEcoreEObject(PartSubjectEdge),
-            &Instance::PartId(PartId(part.clone())),
-            &Instance::EcoreEObjectId(EcoreEObjectId(port.clone())),
-        ),
-        arc(
-            Ref::EcoreEAnnotationToEcoreEObject(EcoreEAnnotationReferencesEdge),
-            &Instance::EcoreEAnnotationId(EcoreEAnnotationId(annotation.clone())),
-            &Instance::EcoreEObjectId(EcoreEObjectId(part.clone())),
-        ),
-    ]);
+    let expected = BTreeSet::from([arc(
+        Ref::PortToPart(PortAnnotatedEdge),
+        &Instance::PortId(PortId(port.clone())),
+        &Instance::PartId(PartId(part.clone())),
+    )]);
     assert_eq!(arcs(&read(&a)), expected);
     assert_eq!(arcs(&read(&b)), expected);
 }

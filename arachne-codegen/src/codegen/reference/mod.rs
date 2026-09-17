@@ -52,7 +52,6 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 
         debug!("Generating instance_from_sink_kind...");
         let instance_from_sink_kind = self.generate_instance_from_sink_kind(&analysis);
-        let object_from_sink_kind = self.generate_object_from_sink_kind(&analysis);
         debug!("Generating edge structs...");
         let edge_structs = self.generate_edge_structs(&analysis);
         debug!("Generating typed graph...");
@@ -79,7 +78,6 @@ impl<'a> Generate for ReferenceGenerator<'a> {
 
         let tokens = quote! {
             #instance_from_sink_kind
-            #object_from_sink_kind
             #instance_path
 
             #edge_structs
@@ -105,10 +103,6 @@ impl<'a> ReferenceGenerator<'a> {
         let mut arms = Vec::new();
 
         for &vertex_class in &analysis.referenceable_classes {
-            if analysis.any_object_class == Some(vertex_class) {
-                // No object is of that kind only: see `generate_object_from_sink_kind`.
-                continue;
-            }
             let vertex_class = &self.ctx.classes()[*vertex_class];
             let kind = classifier_type_ident(self.ctx, vertex_class).to_string();
             let id_ty = classifier_type_ident_with_suffix(self.ctx, vertex_class, "Id");
@@ -126,45 +120,6 @@ impl<'a> ReferenceGenerator<'a> {
             ) -> Option<Instance> {
                 match kind {
                     #(#arms,)*
-                    _ => None,
-                }
-            }
-        }
-    }
-
-    /// Generates `object_from_sink_kind`, which gives the vertex of an object of any class for the
-    /// objects of every instantiable class, if a reference is typed by Ecore's `EObject`.
-    fn generate_object_from_sink_kind(&self, analysis: &ReferenceAnalysis) -> TokenStream {
-        let Some(any_object_class) = analysis.any_object_class else {
-            return TokenStream::new();
-        };
-        let path =
-            syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
-                .unwrap();
-        let any_object_class = &self.ctx.classes()[*any_object_class];
-        let id_ty = classifier_type_ident_with_suffix(self.ctx, any_object_class, "Id");
-        let kinds = analysis
-            .object_classes
-            .iter()
-            .map(|class_idx| {
-                classifier_type_ident(self.ctx, &self.ctx.classes()[**class_idx]).to_string()
-            })
-            .collect::<Vec<_>>();
-        let arm = if kinds.is_empty() {
-            quote! {}
-        } else {
-            quote! { #(#kinds)|* => Some(Instance::#id_ty(#id_ty(path.clone()))), }
-        };
-
-        quote! {
-            /// The vertex that stands for the object at `path` as the target of a reference to an
-            /// object of any class.
-            pub fn object_from_sink_kind(
-                kind: &str,
-                path: &#path::ObjectPath,
-            ) -> Option<Instance> {
-                match kind {
-                    #arm
                     _ => None,
                 }
             }

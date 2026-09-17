@@ -138,8 +138,8 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 /// Ecore's own classes that the package's classes extend or use (see `ecore_rs::repr::ecore`)
 /// are generated with them, and take part in the analyses below as the package's classes do,
 /// except `EObject`, which has no feature and is never generated: a supertype `EObject` adds no
-/// field, a containment of `EObject` is not generated, and a reference typed by `EObject` refers
-/// to an object of any class.
+/// field, and neither a containment nor a reference typed by `EObject` is generated, each with a
+/// warning naming the feature.
 pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
@@ -892,11 +892,11 @@ mod tests {
         assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
     }
 
-    /// A reference typed by Ecore's `EObject` refers to an object of any class: one arc per
-    /// concrete owner, to one vertex kind that every object also has, instead of one arc per
-    /// concrete class of the package.
+    /// A reference typed by Ecore's `EObject` refers to an object of any class, which would need
+    /// an arc to a vertex of any kind: it is refused, with a warning naming the feature, and
+    /// nothing is emitted for it.
     #[test]
-    fn reference_to_any_object_is_one_arc_to_the_object_vertex() {
+    fn reference_to_any_object_is_refused_with_a_warning() {
         use crate::codegen::{
             cycles::analyze_cycles,
             generate::Generate,
@@ -918,6 +918,7 @@ mod tests {
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EClass" name="Part">
         <eStructuralFeatures xsi:type="ecore:EReference" name="subject" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="port" eType="#//Port"/>
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EClass" name="Port"/>
 </ecore:EPackage>
@@ -944,15 +945,17 @@ mod tests {
                 .expect("references should generate")
                 .tokens(),
         );
-        assert!(references.contains("PartSubjectEdge[0,1]"));
-        assert!(references.contains("PartToEcoreEObject:PartId->EcoreEObjectId(PartSubjectEdge)"));
-        assert!(!references.contains("PartToPort"));
-        assert!(!references.contains("PartToModel"));
-        assert!(references.contains("vertices{PartId,EcoreEObjectId}"));
-        assert!(!references.contains("\"EcoreEObject\"=>"));
-        assert!(references.contains(
-            "pubfnobject_from_sink_kind(kind:&str,path:&__references::ObjectPath,)->Option<Instance>{matchkind{\"Model\"|\"Part\"|\"Port\"=>Some(Instance::EcoreEObjectId(EcoreEObjectId(path.clone()))),_=>None,}}"
-        ));
+        // `Part.port` is generated as any reference is; nothing at all is emitted for
+        // `Part.subject`: no edge type, no arc, no vertex kind, and no `EcoreEObject` anywhere.
+        assert!(references.contains("PartPortEdge[0,1]"));
+        assert!(references.contains("PartToPort:PartId->PortId(PartPortEdge)"));
+        assert!(references.contains("vertices{PartId,PortId}"));
+        assert!(!references.contains("Subject"), "{references}");
+        assert!(!references.contains("EcoreEObject"), "{references}");
+        assert!(
+            !references.contains("object_from_sink_kind"),
+            "{references}"
+        );
 
         let package = normalize(
             PackageGenerator::new(ctx, pack.idx, vec![model], &analysis)
@@ -960,7 +963,19 @@ mod tests {
                 .expect("package should generate")
                 .tokens(),
         );
-        assert!(package.contains("__package::object_from_sink_kind(kind,sink.path())"));
+        // No object is given a second vertex: the package adds one vertex per sink, and no more.
+        assert!(package.contains("__package::instance_from_sink_kind(kind,sink.path())"));
+        assert!(!package.contains("object_from_sink_kind"), "{package}");
+        assert_eq!(package.matches("ReferenceManager::AddVertex").count(), 1);
+
+        let warnings: Vec<String> = analysis.warnings.iter().map(|w| w.message()).collect();
+        assert_eq!(
+            warnings,
+            vec![
+                "Reference `Part.subject` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer."
+                    .to_string()
+            ]
+        );
     }
 
     /// Generates `ecore` and returns its classifiers, references and package, normalized, and the
@@ -1025,11 +1040,11 @@ mod tests {
         ));
         assert!(!classifiers.contains("EcoreEStringToStringMapEntry"));
 
-        // `EObject` is not expanded; `EModelElement` is, over the generated classes.
-        assert!(references.contains("PartToEcoreEObject:PartId->EcoreEObjectId(PartSubjectEdge)"));
-        assert!(references.contains(
-            "EcoreEAnnotationToEcoreEObject:EcoreEAnnotationId->EcoreEObjectId(EcoreEAnnotationReferencesEdge)"
-        ));
+        // A reference typed by `EObject` is not generated at all; `EModelElement` is expanded over
+        // the generated classes, as any class is.
+        assert!(!references.contains("EcoreEObject"), "{references}");
+        assert!(!references.contains("Subject"), "{references}");
+        assert!(!references.contains("References"), "{references}");
         assert!(
             references
                 .contains("PortToEcoreEAnnotation:PortId->EcoreEAnnotationId(PortAnnotatedEdge)")
@@ -1045,6 +1060,15 @@ mod tests {
                     .starts_with("Containment `EAnnotation.contents` holds objects of any class")),
             "{warnings:#?}"
         );
+        for feature in ["Part.subject", "EAnnotation.references"] {
+            assert!(
+                warnings.iter().any(|w| *w
+                    == format!(
+                        "Reference `{feature}` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer."
+                    )),
+                "{warnings:#?}"
+            );
+        }
         assert!(
             warnings.iter().any(|w| w.starts_with(
                 "Reference `EAnnotation.eModelElement` of Ecore's own classes is transient"
@@ -1085,8 +1109,11 @@ mod tests {
         assert!(classifiers.contains(
             "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog)|Part(Part,PartLog));"
         ));
-        // `Part` is contained through `Model.elements`, so `Model` is the only root.
-        assert!(package.contains("pubenumTest{Model(crate::classifiers::Model),AddReference("));
+        // `Part` is contained through `Model.elements`, so `Model` is the only root. The only
+        // non-containment reference the built-ins bring in is `EAnnotation.references`, typed by
+        // `EObject` and refused, so the package has no reference manager at all.
+        assert!(package.contains("pubenumTest{Model(crate::classifiers::Model)}"));
         assert!(!package.contains("Part(crate::classifiers::Part)"));
+        assert!(!package.contains("AddReference"), "{package}");
     }
 }
