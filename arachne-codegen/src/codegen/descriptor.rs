@@ -392,7 +392,7 @@ mod tests {
     }
 
     fn bt_descriptor() -> Value {
-        descriptor_of("bt.ecore")
+        descriptor_of("behavior_tree.ecore")
     }
 
     fn read_json(path: &Path) -> Value {
@@ -531,7 +531,7 @@ mod tests {
     fn the_digest_fixture_names_the_checked_in_descriptors() {
         let fixture = read_json(&example("fixtures/metamodel-digests.json"));
         for (file, ecore) in [
-            ("bt.metamodel.json", "bt.ecore"),
+            ("bt.metamodel.json", "behavior_tree.ecore"),
             ("uml.metamodel.json", "SimpleUML.ecore"),
             ("json.metamodel.json", "json.ecore"),
         ] {

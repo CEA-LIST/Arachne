@@ -686,7 +686,7 @@ mod tests {
     /// multi-value one, the disable-wins flag, both sets and an enum-typed
     /// attribute.
     const METAMODELS: [&str; 5] = [
-        "bt.ecore",
+        "behavior_tree.ecore",
         "SimpleUML.ecore",
         "json.ecore",
         "pet_metamodels/kitchen_sink.ecore",
@@ -986,7 +986,7 @@ mod tests {
     /// record is empty.
     #[test]
     fn no_field_is_emitted_for_a_non_containment_reference() {
-        let parser = EcoreParser::from_file(example("bt.ecore")).expect("bt.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
         let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         let (classifiers, _references, _package, _count) =
             crate::generate_from_parser(&parser, pack).expect("generation should succeed");
@@ -1006,7 +1006,7 @@ mod tests {
     /// for a policy nobody wrote down.
     #[test]
     fn ip3_bt_reports_five_house_defaults_all_on_ordered() {
-        let parser = EcoreParser::from_file(example("bt.ecore")).expect("bt.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
         let ctx = &parser.ctx;
         let pack = crate::find_user_package(ctx).expect("a user package");
 
@@ -1286,7 +1286,7 @@ mod tests {
     /// memory, this checks that the rule survives the descriptor.
     #[test]
     fn ip4_from_descriptor_reproduces_spec_11_section_7() {
-        let parser = EcoreParser::from_file(example("bt.ecore")).expect("bt.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
         let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         let descriptor =
             crate::codegen::descriptor::descriptor_json(&parser.ctx, pack).expect("a descriptor");

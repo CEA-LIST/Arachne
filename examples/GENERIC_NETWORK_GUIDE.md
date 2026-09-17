@@ -32,7 +32,7 @@ CRDT that implements `IsLog`).
 
 ```bash
 cd atraktos
-cargo run -p arachne-cli -- generate examples/bt.ecore \
+cargo run -p arachne-cli -- generate examples/behavior_tree.ecore \
     -o ./generated/my_project \
     -p my_project \
     -m /path/to/Moirai
