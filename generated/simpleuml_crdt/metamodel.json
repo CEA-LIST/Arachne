@@ -74,7 +74,7 @@
               "wins": "enable"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "abstract",
@@ -84,7 +84,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [
@@ -216,7 +216,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "name",
@@ -226,7 +226,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [],
@@ -252,7 +252,7 @@
               "wins": "enable"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "isSubstitutable",
@@ -262,7 +262,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [],
@@ -319,7 +319,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "name",
@@ -329,7 +329,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": null,
@@ -356,7 +356,7 @@
             "presence": "declared",
             "unique": "houseDefault"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [
@@ -546,7 +546,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "name",
@@ -556,7 +556,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": null,
@@ -573,7 +573,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "value",
@@ -583,7 +583,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [],

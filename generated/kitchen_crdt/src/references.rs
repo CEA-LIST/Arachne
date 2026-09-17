@@ -2,16 +2,15 @@
 mod __references {
     pub use moirai_macros::typed_graph;
     pub use moirai_protocol::state::object_path::ObjectPath;
-    pub use moirai_protocol::state::object_path::PathSegment::{
-        Field, ListElement, MapEntry, Variant,
-    };
 }
-pub fn instance_from_path(path: &__references::ObjectPath) -> Option<Instance> {
-    let segs = path.segments();
-    match segs {
-        [.., __references::Field("foo")] => Some(Instance::FooId(FooId(path.clone()))),
-        [.., __references::Field("bar")] => Some(Instance::BarId(BarId(path.clone()))),
-        [.., __references::Field("baz")] => Some(Instance::BazId(BazId(path.clone()))),
+pub fn instance_from_sink_kind(
+    kind: &str,
+    path: &__references::ObjectPath,
+) -> Option<Instance> {
+    match kind {
+        "Foo" => Some(Instance::FooId(FooId(path.clone()))),
+        "Bar" => Some(Instance::BarId(BarId(path.clone()))),
+        "Baz" => Some(Instance::BazId(BazId(path.clone()))),
         _ => None,
     }
 }

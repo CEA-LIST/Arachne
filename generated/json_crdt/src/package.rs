@@ -4,61 +4,71 @@ mod __package {
     pub use moirai_protocol::crdt::eval::EvalNested;
     pub use moirai_protocol::state::log::IsLog;
     pub use moirai_protocol::clock::version_vector::Version;
-    pub use moirai_protocol::event::Event;
+    pub use moirai_protocol::event::Event as ProtocolEvent;
     pub use moirai_protocol::crdt::query::QueryOperation;
-    pub use moirai_protocol::state::object_path::ObjectPath;
     pub use moirai_protocol::state::sink::SinkEffect;
-    pub use moirai_protocol::state::sink::SinkOwnership;
-    pub use moirai_protocol::utils::intern_str::Interner;
-    pub use moirai_protocol::utils::intern_str::InternalizeOp;
+    pub use moirai_protocol::state::effect_context::EffectContext;
+    pub use moirai_protocol::broadcast::internalizer::Interner;
+    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_protocol::state::po_log::POLog;
-    pub use crate::classifiers::*;
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Json {
-    JsonKind(__package::JsonKind),
+    JsonKind(crate::classifiers::JsonKind),
+}
+#[derive(Debug)]
+pub enum JsonRejection {
+    JsonKind(<crate::classifiers::JsonKindLog as __package::IsLog>::Rejection),
+}
+impl std::fmt::Display for JsonRejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::JsonKind(error) => write!(f, "{}: {}", "JsonKind", error),
+        }
+    }
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JsonValue {
-    pub json: __package::JsonKindValue,
+    pub json: crate::classifiers::JsonKindValue,
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JsonLog {
-    json_log: __package::JsonKindLog,
+    json_log: crate::classifiers::JsonKindLog,
 }
 impl JsonLog {
-    pub fn json_log(&self) -> &__package::JsonKindLog {
+    pub fn json_log(&self) -> &crate::classifiers::JsonKindLog {
         &self.json_log
     }
 }
 impl __package::IsLog for JsonLog {
     type Value = JsonValue;
     type Op = Json;
-    fn is_enabled(&self, op: &Self::Op) -> bool {
+    type Rejection = JsonRejection;
+    fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
-            Json::JsonKind(o) => self.json_log.is_enabled(o),
+            Json::JsonKind(o) => {
+                self.json_log.is_enabled(o).map_err(JsonRejection::JsonKind)
+            }
         }
     }
     fn effect(
         &mut self,
-        event: __package::Event<Self::Op>,
-        _path: __package::ObjectPath,
-        _sink: &mut __package::SinkCollector,
-        _ownership: __package::SinkOwnership,
+        event: __package::ProtocolEvent<Self::Op>,
+        _ctx: &mut __package::EffectContext<'_>,
     ) {
+        let mut ctx = __package::EffectContext::root("json", None);
         match event.op().clone() {
             Json::JsonKind(o) => {
-                self.json_log
-                    .effect(
-                        __package::Event::unfold(event.clone(), o),
-                        __package::ObjectPath::new("json"),
-                        &mut __package::SinkCollector::new(),
-                        __package::SinkOwnership::Owned,
-                    )
+                let child_event = __package::ProtocolEvent::unfold(event.clone(), o);
+                ctx.with_field(
+                    "json",
+                    |ctx| {
+                        self.json_log.effect(child_event, ctx);
+                    },
+                );
             }
         }
     }
@@ -109,5 +119,121 @@ impl __package::InternalizeOp for Json {
         match self {
             Json::JsonKind(op) => Json::JsonKind(op.clone()),
         }
+    }
+}
+/// Serializes the current model state as XMI conforming to the source Ecore metamodel.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ReadAsEcore;
+impl __package::QueryOperation for ReadAsEcore {
+    type Response = Vec<u8>;
+}
+impl ReadAsEcore {
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl __package::EvalNested<ReadAsEcore> for JsonLog {
+    fn execute_query(
+        &self,
+        _q: ReadAsEcore,
+    ) -> <ReadAsEcore as __package::QueryOperation>::Response {
+        let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
+        document_root.add_attribute("xmi:version", "2.0");
+        document_root.add_attribute("xmlns:xmi", "http://www.omg.org/XMI");
+        document_root
+            .add_attribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+        document_root.add_attribute("xmlns:json", "http://www.example.org/json");
+        match &self.json_log.child {
+            crate::classifiers::JsonKindContainer::Unset => {}
+            crate::classifiers::JsonKindContainer::Value(__child) => {
+                match __child.as_ref() {
+                    crate::classifiers::JsonKindChild::Array(_) => {
+                        document_root
+                            .add_child(xml_builder::XMLElement::new("json:Array"))
+                            .expect(
+                                "adding a root object to the XMI document should not fail",
+                            );
+                    }
+                    crate::classifiers::JsonKindChild::Object(_) => {
+                        document_root
+                            .add_child(xml_builder::XMLElement::new("json:Object"))
+                            .expect(
+                                "adding a root object to the XMI document should not fail",
+                            );
+                    }
+                    crate::classifiers::JsonKindChild::String(_) => {
+                        document_root
+                            .add_child(xml_builder::XMLElement::new("json:String"))
+                            .expect(
+                                "adding a root object to the XMI document should not fail",
+                            );
+                    }
+                    crate::classifiers::JsonKindChild::Number(_) => {
+                        document_root
+                            .add_child(xml_builder::XMLElement::new("json:Number"))
+                            .expect(
+                                "adding a root object to the XMI document should not fail",
+                            );
+                    }
+                    crate::classifiers::JsonKindChild::Boolean(_) => {
+                        document_root
+                            .add_child(xml_builder::XMLElement::new("json:Boolean"))
+                            .expect(
+                                "adding a root object to the XMI document should not fail",
+                            );
+                    }
+                }
+            }
+            crate::classifiers::JsonKindContainer::Conflicts(__children) => {
+                for __child in __children {
+                    match __child {
+                        crate::classifiers::JsonKindChild::Array(_) => {
+                            document_root
+                                .add_child(xml_builder::XMLElement::new("json:Array"))
+                                .expect(
+                                    "adding a root object to the XMI document should not fail",
+                                );
+                        }
+                        crate::classifiers::JsonKindChild::Object(_) => {
+                            document_root
+                                .add_child(xml_builder::XMLElement::new("json:Object"))
+                                .expect(
+                                    "adding a root object to the XMI document should not fail",
+                                );
+                        }
+                        crate::classifiers::JsonKindChild::String(_) => {
+                            document_root
+                                .add_child(xml_builder::XMLElement::new("json:String"))
+                                .expect(
+                                    "adding a root object to the XMI document should not fail",
+                                );
+                        }
+                        crate::classifiers::JsonKindChild::Number(_) => {
+                            document_root
+                                .add_child(xml_builder::XMLElement::new("json:Number"))
+                                .expect(
+                                    "adding a root object to the XMI document should not fail",
+                                );
+                        }
+                        crate::classifiers::JsonKindChild::Boolean(_) => {
+                            document_root
+                                .add_child(xml_builder::XMLElement::new("json:Boolean"))
+                                .expect(
+                                    "adding a root object to the XMI document should not fail",
+                                );
+                        }
+                    }
+                }
+            }
+        }
+        let mut xml = xml_builder::XMLBuilder::new()
+            .version(xml_builder::XMLVersion::XML1_0)
+            .encoding("UTF-8".into())
+            .build();
+        xml.set_root_element(document_root);
+        let mut writer = Vec::new();
+        xml.generate(&mut writer)
+            .expect("writing model XMI to an in-memory buffer should not fail");
+        writer
     }
 }

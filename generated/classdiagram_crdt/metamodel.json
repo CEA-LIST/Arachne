@@ -18,7 +18,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "name",
@@ -28,7 +28,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "lww-register",
@@ -46,7 +46,7 @@
               "tie": "lww"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "qualifiedName",
@@ -56,7 +56,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "fair-register",
@@ -74,7 +74,7 @@
               "tie": "fair"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "author",
@@ -84,7 +84,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "po-register",
@@ -102,7 +102,7 @@
               "tie": "po"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "stereotype",
@@ -112,7 +112,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "to-register",
@@ -130,7 +130,7 @@
               "tie": "to"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "layer",
@@ -140,7 +140,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "dw-flag",
@@ -158,7 +158,7 @@
               "wins": "disable"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "isAbstract",
@@ -168,7 +168,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": null,
@@ -188,7 +188,7 @@
               "tie": "mv"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "visibility",
@@ -198,7 +198,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "aw-set",
@@ -279,7 +279,7 @@
               "kind": "text"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "name",
@@ -289,7 +289,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": null,
@@ -309,7 +309,7 @@
               "tie": "mv"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "typ",
@@ -319,7 +319,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "to-register",
@@ -339,7 +339,7 @@
               "tie": "to"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "visibility",
@@ -349,7 +349,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [],
@@ -375,7 +375,7 @@
               "tie": "mv"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "label",
@@ -385,7 +385,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         },
         {
           "annotation": "to-register",
@@ -405,7 +405,7 @@
               "tie": "to"
             },
             "shape": {
-              "kind": "single"
+              "kind": "optional"
             }
           },
           "name": "typ",
@@ -415,7 +415,7 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": false
         }
       ],
       "containments": [],

@@ -2,25 +2,23 @@
 mod __classifiers {
     pub use moirai_macros::record;
     pub use moirai_macros::union;
-    pub use moirai_protocol::state::event_graph::EventGraph;
+    pub use moirai_protocol::state::graph_log::GraphLog;
+    pub use moirai_crdt::option::OptionLog;
     pub use moirai_crdt::list::eg_walker::List;
-    pub use moirai_crdt::bag::aw_bag::AWBagLog;
-    pub use moirai_crdt::list::nested_list::NestedListLog;
     pub use moirai_protocol::state::po_log::VecLog;
+    pub use moirai_crdt::set::aw_set::AWSet;
+    pub use moirai_crdt::list::nested_list::NestedListLog;
+    pub use moirai_protocol::state::log::BoxedLog;
     pub use moirai_crdt::flag::ew_flag::EWFlag;
 }
-__classifiers::union!(
-    PackageableKind = Package(PackageKind, PackageKindLog) | TType(TTypeKind,
-    TTypeKindLog) | Association(Association, AssociationLog)
-);
-__classifiers::record!(Packageable {});
 __classifiers::union!(
     ModelElementKind = Classifier(ClassifierKind, ClassifierKindLog) | Property(Property,
     PropertyLog) | Association(Association, AssociationLog)
 );
 __classifiers::record!(
-    ModelElement { name : __classifiers::EventGraph < __classifiers::List < char > >,
-    stereotype : __classifiers::AWBagLog < std::string::String >, tagged_value :
+    ModelElement { name : __classifiers::OptionLog < __classifiers::GraphLog <
+    __classifiers::List < char > >>, stereotype : __classifiers::VecLog <
+    __classifiers::AWSet < std::string::String >>, tagged_value :
     __classifiers::NestedListLog < TaggedValueLog >, }
 );
 __classifiers::union!(
@@ -28,9 +26,15 @@ __classifiers::union!(
     TTypeKindLog)
 );
 __classifiers::record!(Classifier { model_element_super : ModelElementLog, });
+__classifiers::union!(
+    PackageableKind = Package(PackageKind, PackageKindLog) | TType(TTypeKind,
+    TTypeKindLog) | Association(Association, AssociationLog)
+);
+__classifiers::record!(Packageable {});
 __classifiers::record!(
-    Package { packageable_super : PackageableLog, classifier_super : ClassifierLog,
-    owned_elements : __classifiers::NestedListLog < Box < PackageableKindLog > >, }
+    Package { classifier_super : ClassifierLog, packageable_super : PackageableLog,
+    owned_elements : __classifiers::NestedListLog < __classifiers::BoxedLog <
+    PackageableKindLog > >, }
 );
 __classifiers::union!(
     PackageKind = Package(Package, PackageLog) | Model(Model, ModelLog)
@@ -41,7 +45,7 @@ __classifiers::union!(
     PrimitiveTypeLog) | Enumeration(Enumeration, EnumerationLog)
 );
 __classifiers::record!(
-    TType { packageable_super : PackageableLog, classifier_super : ClassifierLog, }
+    TType { classifier_super : ClassifierLog, packageable_super : PackageableLog, }
 );
 __classifiers::record!(
     DataType { t_type_super : TTypeLog, attributes : __classifiers::NestedListLog <
@@ -51,18 +55,18 @@ __classifiers::union!(
     DataTypeKind = DataType(DataType, DataTypeLog) | Class(Class, ClassLog)
 );
 __classifiers::record!(
-    Class { data_type_super : DataTypeLog, r#abstract : __classifiers::VecLog <
-    __classifiers::EWFlag >, generalizations : __classifiers::NestedListLog <
-    GeneralizationLog >, }
+    Class { data_type_super : DataTypeLog, abstract_field : __classifiers::OptionLog <
+    __classifiers::VecLog < __classifiers::EWFlag >>, generalizations :
+    __classifiers::NestedListLog < GeneralizationLog >, }
 );
 __classifiers::record!(
-    Generalization { is_substitutable : __classifiers::VecLog < __classifiers::EWFlag >,
-    }
+    Generalization { is_substitutable : __classifiers::OptionLog < __classifiers::VecLog
+    < __classifiers::EWFlag >>, }
 );
 __classifiers::record!(Property { model_element_super : ModelElementLog, });
 __classifiers::record!(
-    Association { packageable_super : PackageableLog, model_element_super :
-    ModelElementLog, }
+    Association { model_element_super : ModelElementLog, packageable_super :
+    PackageableLog, }
 );
 __classifiers::record!(PrimitiveType { t_type_super : TTypeLog, });
 __classifiers::record!(
@@ -70,10 +74,11 @@ __classifiers::record!(
     EnumerationLiteralLog >, }
 );
 __classifiers::record!(
-    EnumerationLiteral { name : __classifiers::EventGraph < __classifiers::List < char >
-    >, }
+    EnumerationLiteral { name : __classifiers::OptionLog < __classifiers::GraphLog <
+    __classifiers::List < char > >>, }
 );
 __classifiers::record!(
-    TaggedValue { name : __classifiers::EventGraph < __classifiers::List < char > >,
-    value : __classifiers::EventGraph < __classifiers::List < char > >, }
+    TaggedValue { name : __classifiers::OptionLog < __classifiers::GraphLog <
+    __classifiers::List < char > >>, value : __classifiers::OptionLog <
+    __classifiers::GraphLog < __classifiers::List < char > >>, }
 );

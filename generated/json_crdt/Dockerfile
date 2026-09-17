@@ -3,8 +3,8 @@
 # The context must reproduce the layout the Cargo.toml path dependencies
 # encode, i.e. it must contain both of:
 #
-#   <context>/arachne/generated/json_crdt  <- this project
-#   <context>/moirai                       <- the moirai workspace
+#   <context>/arachne-model-plane/generated/json_crdt  <- this project
+#   <context>/moirai-model-plane                       <- the moirai workspace
 #
 # Quick start:
 #
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY . .
 
 # Build the network_node example in release mode
-WORKDIR /app/arachne/generated/json_crdt
+WORKDIR /app/arachne-model-plane/generated/json_crdt
 RUN cargo build --release --example network_node
 
 # --- Runtime stage ---
@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=builder /app/arachne/generated/json_crdt/target/release/examples/network_node /app/network_node
+COPY --from=builder /app/arachne-model-plane/generated/json_crdt/target/release/examples/network_node /app/network_node
 
 ENV REPLICA_ID=default
 ENV LISTEN_PORT=9001

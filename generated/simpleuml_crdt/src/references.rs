@@ -2,49 +2,23 @@
 mod __references {
     pub use moirai_macros::typed_graph;
     pub use moirai_protocol::state::object_path::ObjectPath;
-    pub use moirai_protocol::state::object_path::PathSegment::{
-        Field, ListElement, MapEntry, Variant,
-    };
 }
-pub fn instance_from_path(path: &__references::ObjectPath) -> Option<Instance> {
-    let segs = path.segments();
-    match segs {
-        [.., __references::Variant("package")] => {
-            Some(Instance::PackageId(PackageId(path.clone())))
-        }
-        [.., __references::Variant("model")] => {
-            Some(Instance::ModelId(ModelId(path.clone())))
-        }
-        [.., __references::Field("packagesuper")] => {
-            Some(Instance::PackageId(PackageId(path.clone())))
-        }
-        [.., __references::Variant("datatype")] => {
-            Some(Instance::DataTypeId(DataTypeId(path.clone())))
-        }
-        [.., __references::Field("attributes"), __references::ListElement(_)] => {
-            Some(Instance::PropertyId(PropertyId(path.clone())))
-        }
-        [.., __references::Variant("class")] => {
-            Some(Instance::ClassId(ClassId(path.clone())))
-        }
-        [.., __references::Field("generalizations"), __references::ListElement(_)] => {
+pub fn instance_from_sink_kind(
+    kind: &str,
+    path: &__references::ObjectPath,
+) -> Option<Instance> {
+    match kind {
+        "Model" => Some(Instance::ModelId(ModelId(path.clone()))),
+        "Package" => Some(Instance::PackageId(PackageId(path.clone()))),
+        "Class" => Some(Instance::ClassId(ClassId(path.clone()))),
+        "Generalization" => {
             Some(Instance::GeneralizationId(GeneralizationId(path.clone())))
         }
-        [.., __references::Field("datatypesuper")] => {
-            Some(Instance::DataTypeId(DataTypeId(path.clone())))
-        }
-        [.., __references::Variant("primitivetype")] => {
-            Some(Instance::PrimitiveTypeId(PrimitiveTypeId(path.clone())))
-        }
-        [.., __references::Variant("enumeration")] => {
-            Some(Instance::EnumerationId(EnumerationId(path.clone())))
-        }
-        [.., __references::Variant("association")] => {
-            Some(Instance::AssociationId(AssociationId(path.clone())))
-        }
-        [.., __references::Variant("property")] => {
-            Some(Instance::PropertyId(PropertyId(path.clone())))
-        }
+        "DataType" => Some(Instance::DataTypeId(DataTypeId(path.clone()))),
+        "Property" => Some(Instance::PropertyId(PropertyId(path.clone()))),
+        "Association" => Some(Instance::AssociationId(AssociationId(path.clone()))),
+        "PrimitiveType" => Some(Instance::PrimitiveTypeId(PrimitiveTypeId(path.clone()))),
+        "Enumeration" => Some(Instance::EnumerationId(EnumerationId(path.clone()))),
         _ => None,
     }
 }

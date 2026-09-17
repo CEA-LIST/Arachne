@@ -4,40 +4,60 @@ mod __package {
     pub use moirai_protocol::crdt::eval::EvalNested;
     pub use moirai_protocol::state::log::IsLog;
     pub use moirai_protocol::clock::version_vector::Version;
-    pub use moirai_protocol::event::Event;
+    pub use moirai_protocol::event::Event as ProtocolEvent;
     pub use moirai_protocol::crdt::query::QueryOperation;
-    pub use moirai_protocol::state::object_path::ObjectPath;
     pub use moirai_protocol::state::sink::SinkEffect;
-    pub use moirai_protocol::state::sink::SinkOwnership;
-    pub use moirai_protocol::utils::intern_str::Interner;
-    pub use moirai_protocol::utils::intern_str::InternalizeOp;
+    pub use moirai_protocol::state::effect_context::EffectContext;
+    pub use moirai_protocol::broadcast::internalizer::Interner;
+    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_protocol::state::po_log::POLog;
-    pub use crate::classifiers::*;
     pub use moirai_crdt::policy::FairPolicy;
     pub use moirai_protocol::state::po_log::VecLog;
     pub use moirai_protocol::crdt::pure_crdt::PureCRDT;
     pub use crate::references::*;
 }
-pub type ReferenceManagerLog = __package::POLog<
-    __package::ReferenceManager<__package::FairPolicy>,
-    __package::ReferenceManagerState<__package::FairPolicy>,
->;
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Classdiagram {
-    Class(__package::Class),
-    Feature(__package::Feature),
-    Relation(__package::Relation),
+    Class(crate::classifiers::Class),
+    Feature(crate::classifiers::Feature),
+    Relation(crate::classifiers::Relation),
     AddReference(__package::Refs),
     RemoveReference(__package::Refs),
+}
+#[derive(Debug)]
+pub enum ClassdiagramRejection {
+    Class(<crate::classifiers::ClassLog as __package::IsLog>::Rejection),
+    Feature(<crate::classifiers::FeatureLog as __package::IsLog>::Rejection),
+    Relation(<crate::classifiers::RelationLog as __package::IsLog>::Rejection),
+    AddReference(
+        <__package::VecLog<
+            __package::ReferenceManager<__package::FairPolicy>,
+        > as __package::IsLog>::Rejection,
+    ),
+    RemoveReference(
+        <__package::VecLog<
+            __package::ReferenceManager<__package::FairPolicy>,
+        > as __package::IsLog>::Rejection,
+    ),
+}
+impl std::fmt::Display for ClassdiagramRejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Class(error) => write!(f, "{}: {}", "Class", error),
+            Self::Feature(error) => write!(f, "{}: {}", "Feature", error),
+            Self::Relation(error) => write!(f, "{}: {}", "Relation", error),
+            Self::AddReference(error) => write!(f, "AddReference: {}", error),
+            Self::RemoveReference(error) => write!(f, "RemoveReference: {}", error),
+        }
+    }
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClassdiagramValue {
-    pub class: __package::ClassValue,
-    pub feature: __package::FeatureValue,
-    pub relation: __package::RelationValue,
+    pub class: crate::classifiers::ClassValue,
+    pub feature: crate::classifiers::FeatureValue,
+    pub relation: crate::classifiers::RelationValue,
     #[cfg_attr(feature = "serde", serde(skip))]
     pub refs: <__package::ReferenceManager<
         __package::FairPolicy,
@@ -46,21 +66,21 @@ pub struct ClassdiagramValue {
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClassdiagramLog {
-    class_log: __package::ClassLog,
-    feature_log: __package::FeatureLog,
-    relation_log: __package::RelationLog,
+    class_log: crate::classifiers::ClassLog,
+    feature_log: crate::classifiers::FeatureLog,
+    relation_log: crate::classifiers::RelationLog,
     reference_manager_log: __package::VecLog<
         __package::ReferenceManager<__package::FairPolicy>,
     >,
 }
 impl ClassdiagramLog {
-    pub fn class_log(&self) -> &__package::ClassLog {
+    pub fn class_log(&self) -> &crate::classifiers::ClassLog {
         &self.class_log
     }
-    pub fn feature_log(&self) -> &__package::FeatureLog {
+    pub fn feature_log(&self) -> &crate::classifiers::FeatureLog {
         &self.feature_log
     }
-    pub fn relation_log(&self) -> &__package::RelationLog {
+    pub fn relation_log(&self) -> &crate::classifiers::RelationLog {
         &self.relation_log
     }
     pub fn reference_manager_log(
@@ -72,111 +92,133 @@ impl ClassdiagramLog {
 impl __package::IsLog for ClassdiagramLog {
     type Value = ClassdiagramValue;
     type Op = Classdiagram;
-    fn is_enabled(&self, op: &Self::Op) -> bool {
+    type Rejection = ClassdiagramRejection;
+    fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
-            Classdiagram::Class(o) => self.class_log.is_enabled(o),
-            Classdiagram::Feature(o) => self.feature_log.is_enabled(o),
-            Classdiagram::Relation(o) => self.relation_log.is_enabled(o),
+            Classdiagram::Class(o) => {
+                self.class_log.is_enabled(o).map_err(ClassdiagramRejection::Class)
+            }
+            Classdiagram::Feature(o) => {
+                self.feature_log.is_enabled(o).map_err(ClassdiagramRejection::Feature)
+            }
+            Classdiagram::Relation(o) => {
+                self.relation_log.is_enabled(o).map_err(ClassdiagramRejection::Relation)
+            }
             Classdiagram::AddReference(o) => {
                 self.reference_manager_log
                     .is_enabled(&__package::ReferenceManager::AddArc(o.clone()))
+                    .map_err(ClassdiagramRejection::AddReference)
             }
             Classdiagram::RemoveReference(o) => {
                 self.reference_manager_log
                     .is_enabled(&__package::ReferenceManager::RemoveArc(o.clone()))
+                    .map_err(ClassdiagramRejection::RemoveReference)
             }
         }
     }
     fn effect(
         &mut self,
-        event: __package::Event<Self::Op>,
-        _path: __package::ObjectPath,
-        _sink: &mut __package::SinkCollector,
-        _ownership: __package::SinkOwnership,
+        event: __package::ProtocolEvent<Self::Op>,
+        _ctx: &mut __package::EffectContext<'_>,
     ) {
         let mut sink = __package::SinkCollector::new();
-        match event.op().clone() {
-            Classdiagram::Class(o) => {
-                __package::IsLog::effect(
-                    &mut self.class_log,
-                    __package::Event::unfold(event.clone(), o),
-                    __package::ObjectPath::new("classdiagram").field("class"),
-                    &mut sink,
-                    __package::SinkOwnership::Owned,
-                )
-            }
-            Classdiagram::Feature(o) => {
-                __package::IsLog::effect(
-                    &mut self.feature_log,
-                    __package::Event::unfold(event.clone(), o),
-                    __package::ObjectPath::new("classdiagram").field("feature"),
-                    &mut sink,
-                    __package::SinkOwnership::Owned,
-                )
-            }
-            Classdiagram::Relation(o) => {
-                __package::IsLog::effect(
-                    &mut self.relation_log,
-                    __package::Event::unfold(event.clone(), o),
-                    __package::ObjectPath::new("classdiagram").field("relation"),
-                    &mut sink,
-                    __package::SinkOwnership::Owned,
-                )
-            }
-            Classdiagram::AddReference(o) => {
-                self.reference_manager_log
-                    .effect(
-                        __package::Event::unfold(
-                            event.clone(),
-                            __package::ReferenceManager::AddArc(o),
-                        ),
-                        __package::ObjectPath::new("classdiagram"),
-                        &mut __package::SinkCollector::new(),
-                        __package::SinkOwnership::Owned,
-                    )
-            }
-            Classdiagram::RemoveReference(o) => {
-                self.reference_manager_log
-                    .effect(
-                        __package::Event::unfold(
-                            event.clone(),
-                            __package::ReferenceManager::RemoveArc(o),
-                        ),
-                        __package::ObjectPath::new("classdiagram"),
-                        &mut __package::SinkCollector::new(),
-                        __package::SinkOwnership::Owned,
-                    )
+        {
+            let mut ctx = __package::EffectContext::root(
+                "classdiagram",
+                Some(&mut sink),
+            );
+            match event.op().clone() {
+                Classdiagram::Class(o) => {
+                    let child_event = __package::ProtocolEvent::unfold(event.clone(), o);
+                    ctx.with_field(
+                        "class",
+                        |ctx| {
+                            self.class_log.effect(child_event, ctx);
+                        },
+                    );
+                }
+                Classdiagram::Feature(o) => {
+                    let child_event = __package::ProtocolEvent::unfold(event.clone(), o);
+                    ctx.with_field(
+                        "feature",
+                        |ctx| {
+                            self.feature_log.effect(child_event, ctx);
+                        },
+                    );
+                }
+                Classdiagram::Relation(o) => {
+                    let child_event = __package::ProtocolEvent::unfold(event.clone(), o);
+                    ctx.with_field(
+                        "relation",
+                        |ctx| {
+                            self.relation_log.effect(child_event, ctx);
+                        },
+                    );
+                }
+                Classdiagram::AddReference(o) => {
+                    let mut ctx = __package::EffectContext::silent();
+                    self.reference_manager_log
+                        .effect(
+                            __package::ProtocolEvent::unfold(
+                                event.clone(),
+                                __package::ReferenceManager::AddArc(o),
+                            ),
+                            &mut ctx,
+                        );
+                }
+                Classdiagram::RemoveReference(o) => {
+                    let mut ctx = __package::EffectContext::silent();
+                    self.reference_manager_log
+                        .effect(
+                            __package::ProtocolEvent::unfold(
+                                event.clone(),
+                                __package::ReferenceManager::RemoveArc(o),
+                            ),
+                            &mut ctx,
+                        );
+                }
             }
         }
+        let mut reference_effect_disambiguator = 0u32;
         for sink in sink.into_sinks() {
             match sink.effect() {
                 __package::SinkEffect::Create | __package::SinkEffect::Update => {
-                    let vertex_ops = __package::instance_from_path(sink.path())
+                    let vertex_ops = sink
+                        .kind()
+                        .and_then(|kind| __package::instance_from_sink_kind(
+                            kind,
+                            sink.path(),
+                        ))
                         .map(|instance| __package::ReferenceManager::AddVertex {
                             id: instance,
                         });
                     if let Some(o) = vertex_ops {
+                        reference_effect_disambiguator += 1;
+                        let mut ctx = __package::EffectContext::silent();
                         self.reference_manager_log
                             .effect(
-                                __package::Event::unfold(event.clone(), o),
-                                __package::ObjectPath::new("classdiagram"),
-                                &mut __package::SinkCollector::new(),
-                                __package::SinkOwnership::Owned,
+                                __package::ProtocolEvent::unfold_with_disambiguator(
+                                    event.clone(),
+                                    reference_effect_disambiguator,
+                                    o,
+                                ),
+                                &mut ctx,
                             );
                     }
                 }
                 __package::SinkEffect::Delete => {
+                    reference_effect_disambiguator += 1;
+                    let mut ctx = __package::EffectContext::silent();
                     self.reference_manager_log
                         .effect(
-                            __package::Event::unfold(
+                            __package::ProtocolEvent::unfold_with_disambiguator(
                                 event.clone(),
+                                reference_effect_disambiguator,
                                 __package::ReferenceManager::DeleteSubtree {
                                     prefix: sink.path().clone(),
                                 },
                             ),
-                            __package::ObjectPath::new("classdiagram"),
-                            &mut __package::SinkCollector::new(),
-                            __package::SinkOwnership::Owned,
+                            &mut ctx,
                         );
                 }
             }
@@ -195,8 +237,8 @@ impl __package::IsLog for ClassdiagramLog {
         self.reference_manager_log.redundant_by_parent(version, conservative);
     }
     fn is_default(&self) -> bool {
-        true && self.class_log.is_default() && self.feature_log.is_default()
-            && self.relation_log.is_default()
+        self.reference_manager_log.is_default() && self.class_log.is_default()
+            && self.feature_log.is_default() && self.relation_log.is_default()
     }
 }
 impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
@@ -247,5 +289,48 @@ impl __package::InternalizeOp for Classdiagram {
                 Classdiagram::RemoveReference(op.internalize(interner))
             }
         }
+    }
+}
+/// Serializes the current model state as XMI conforming to the source Ecore metamodel.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ReadAsEcore;
+impl __package::QueryOperation for ReadAsEcore {
+    type Response = Vec<u8>;
+}
+impl ReadAsEcore {
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl __package::EvalNested<ReadAsEcore> for ClassdiagramLog {
+    fn execute_query(
+        &self,
+        _q: ReadAsEcore,
+    ) -> <ReadAsEcore as __package::QueryOperation>::Response {
+        let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
+        document_root.add_attribute("xmi:version", "2.0");
+        document_root.add_attribute("xmlns:xmi", "http://www.omg.org/XMI");
+        document_root
+            .add_attribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+        document_root
+            .add_attribute("xmlns:classdiagram", "http://www.example.org/classdiagram");
+        document_root
+            .add_child(xml_builder::XMLElement::new("classdiagram:Class"))
+            .expect("adding a root object to the XMI document should not fail");
+        document_root
+            .add_child(xml_builder::XMLElement::new("classdiagram:Feature"))
+            .expect("adding a root object to the XMI document should not fail");
+        document_root
+            .add_child(xml_builder::XMLElement::new("classdiagram:Relation"))
+            .expect("adding a root object to the XMI document should not fail");
+        let mut xml = xml_builder::XMLBuilder::new()
+            .version(xml_builder::XMLVersion::XML1_0)
+            .encoding("UTF-8".into())
+            .build();
+        xml.set_root_element(document_root);
+        let mut writer = Vec::new();
+        xml.generate(&mut writer)
+            .expect("writing model XMI to an in-memory buffer should not fail");
+        writer
     }
 }

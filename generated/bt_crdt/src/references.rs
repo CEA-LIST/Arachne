@@ -2,20 +2,15 @@
 mod __references {
     pub use moirai_macros::typed_graph;
     pub use moirai_protocol::state::object_path::ObjectPath;
-    pub use moirai_protocol::state::object_path::PathSegment::{
-        Field, ListElement, MapEntry, Variant,
-    };
 }
-pub fn instance_from_path(path: &__references::ObjectPath) -> Option<Instance> {
-    let segs = path.segments();
-    match segs {
-        [.., __references::Field("outflowports"), __references::ListElement(_)] => {
-            Some(Instance::OutFlowPortId(OutFlowPortId(path.clone())))
-        }
-        [.., __references::Field("inflowports"), __references::ListElement(_)] => {
-            Some(Instance::InFlowPortId(InFlowPortId(path.clone())))
-        }
-        [.., __references::Field("entries"), __references::ListElement(_)] => {
+pub fn instance_from_sink_kind(
+    kind: &str,
+    path: &__references::ObjectPath,
+) -> Option<Instance> {
+    match kind {
+        "OutFlowPort" => Some(Instance::OutFlowPortId(OutFlowPortId(path.clone()))),
+        "InFlowPort" => Some(Instance::InFlowPortId(InFlowPortId(path.clone()))),
+        "BlackboardEntry" => {
             Some(Instance::BlackboardEntryId(BlackboardEntryId(path.clone())))
         }
         _ => None,
