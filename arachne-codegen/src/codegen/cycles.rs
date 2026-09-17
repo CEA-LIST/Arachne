@@ -7,8 +7,11 @@ use std::collections::{HashMap, HashSet};
 
 use ecore_rs::{ctx::Ctx, prelude::idx::Class};
 
-use crate::codegen::classifier::{
-    has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+use crate::codegen::{
+    classifier::{
+        has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+    },
+    ecore::is_eobject,
 };
 
 type ClassIdx = Class;
@@ -101,7 +104,8 @@ impl<'a> CycleAnalyzer<'a> {
             let source = class.idx;
 
             for structural in class.structural() {
-                if !structural.containment {
+                // A containment of any object is not generated.
+                if !structural.containment || is_eobject(self.ctx, structural.typ.unwrap()) {
                     continue;
                 }
 
@@ -135,7 +139,12 @@ impl<'a> CycleAnalyzer<'a> {
                 }
             }
 
-            for superclass_idx in class.sup() {
+            // A supertype `EObject` has no field.
+            for superclass_idx in class
+                .sup()
+                .iter()
+                .filter(|idx| !is_eobject(self.ctx, **idx))
+            {
                 let superclass = &self.ctx.classes()[**superclass_idx];
                 edges.push(ContainmentEdge {
                     source,
@@ -282,6 +291,9 @@ impl<'a> CycleAnalyzer<'a> {
                 let Some(target_idx) = structural.typ else {
                     continue;
                 };
+                if is_eobject(self.ctx, target_idx) {
+                    continue;
+                }
                 let target_class = &self.ctx.classes()[*target_idx];
 
                 if !has_codegen_polymorphic_family(self.ctx, target_class) {

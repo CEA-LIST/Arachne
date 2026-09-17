@@ -1,7 +1,7 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
 use log::warn;
 
-use crate::codegen::{classifier::is_instantiable_class, ecore::is_eobject};
+use crate::codegen::{classifier::is_instantiable_class, ecore::is_eobject, warnings::Warning};
 use crate::utils::hash::HashSet;
 
 /// A non-containment reference in the Ecore model.
@@ -37,6 +37,8 @@ pub struct ReferenceAnalysis {
     /// The instantiable classes of the slice, whose objects are vertices of
     /// [`Self::any_object_class`]; empty if it is `None`.
     pub object_classes: Vec<idx::Class>,
+    /// References left out, and why.
+    pub warnings: Vec<Warning>,
 }
 
 impl ReferenceAnalysis {
@@ -61,6 +63,7 @@ impl ReferenceAnalysis {
         let mut seen_refs = HashSet::default();
         let mut referenceable_set = HashSet::default();
         let mut any_object_class = None;
+        let mut warnings = Vec::new();
 
         for &class_idx in package_classes {
             let class = &ctx.classes()[*class_idx];
@@ -77,6 +80,14 @@ impl ReferenceAnalysis {
                     Some(t) => t,
                     None => continue,
                 };
+
+                // `EAnnotation.eModelElement`, the container of an annotation.
+                if ctx.is_ecore_class(class_idx) && feature.transient == Some(true) {
+                    warnings.push(Warning::TransientEcoreReferenceNotGenerated {
+                        feature: format!("{}.{}", class.name(), feature.name),
+                    });
+                    continue;
+                }
 
                 if is_eobject(ctx, target_idx) {
                     // One arc per concrete owner, to the vertex of an object of any class.
@@ -183,6 +194,7 @@ impl ReferenceAnalysis {
             referenceable_classes,
             any_object_class,
             object_classes,
+            warnings,
         }
     }
 

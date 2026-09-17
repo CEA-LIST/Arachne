@@ -13,7 +13,7 @@ use annotated::{
     package::{Annotated, AnnotatedLog, AnnotatedValue},
     references::{
         EcoreEAnnotationId, EcoreEAnnotationReferencesEdge, EcoreEObjectId, Instance, PartId,
-        PartSubjectEdge, PortId, Ref, Refs,
+        PartSubjectEdge, PortId, Ref, Refs, instance_path,
     },
 };
 use moirai_crdt::{
@@ -131,17 +131,29 @@ fn values(values: &[Option<&str>]) -> BTreeSet<Option<String>> {
         .collect()
 }
 
+/// A vertex as its kind and path. The path is displayed, not debugged: the debug form of an event
+/// id holds the index of its replica in the local replica's own table, which differs between
+/// replicas.
+fn vertex(instance: &Instance) -> String {
+    let debug = format!("{instance:?}");
+    let kind = debug.split('(').next().unwrap_or_default();
+    format!("{kind} {}", instance_path(instance))
+}
+
+fn arc(kind: Ref, source: &Instance, target: &Instance) -> String {
+    format!("{kind:?} {} -> {}", vertex(source), vertex(target))
+}
+
 /// Every arc of the reference manager, as its kind, source and target.
 fn arcs(value: &AnnotatedValue) -> BTreeSet<String> {
     value
         .refs
         .edge_references()
         .map(|edge| {
-            format!(
-                "{:?} {:?} -> {:?}",
-                edge.weight(),
-                value.refs[edge.source()],
-                value.refs[edge.target()]
+            arc(
+                edge.weight().clone(),
+                &value.refs[edge.source()],
+                &value.refs[edge.target()],
             )
         })
         .collect()
@@ -303,17 +315,15 @@ fn references_to_objects_of_any_class_are_stored_and_read_back() {
     );
 
     let expected = BTreeSet::from([
-        format!(
-            "{:?} {:?} -> {:?}",
+        arc(
             Ref::PartToEcoreEObject(PartSubjectEdge),
-            Instance::PartId(PartId(part.clone())),
-            Instance::EcoreEObjectId(EcoreEObjectId(port.clone())),
+            &Instance::PartId(PartId(part.clone())),
+            &Instance::EcoreEObjectId(EcoreEObjectId(port.clone())),
         ),
-        format!(
-            "{:?} {:?} -> {:?}",
+        arc(
             Ref::EcoreEAnnotationToEcoreEObject(EcoreEAnnotationReferencesEdge),
-            Instance::EcoreEAnnotationId(EcoreEAnnotationId(annotation.clone())),
-            Instance::EcoreEObjectId(EcoreEObjectId(part.clone())),
+            &Instance::EcoreEAnnotationId(EcoreEAnnotationId(annotation.clone())),
+            &Instance::EcoreEObjectId(EcoreEObjectId(part.clone())),
         ),
     ]);
     assert_eq!(arcs(&read(&a)), expected);

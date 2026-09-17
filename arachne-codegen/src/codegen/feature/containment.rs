@@ -8,7 +8,7 @@ use quote::quote;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{DatatypeOverride, datatype_override, uw_map_spec},
+        annotation::{DatatypeOverride, datatype_override, map_spec},
         classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
@@ -75,7 +75,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             .boxing_strategy(self.source_class, &self.reference.name);
         let boxed_target_type = quote! { #path::BoxedLog<#target_type> };
 
-        if let Some(spec) = uw_map_spec(self.reference) {
+        if let Some(spec) = map_spec(self.ctx, self.reference) {
             anyhow::ensure!(
                 matches!(bound_kind, BoundKind::Many),
                 "uw-map reference `{}` must be multi-valued",

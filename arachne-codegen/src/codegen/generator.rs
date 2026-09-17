@@ -53,6 +53,12 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// The messages of the warnings collected so far.
+    #[cfg(test)]
+    pub(crate) fn warning_messages(&self) -> Vec<String> {
+        self.warnings.iter().map(Warning::message).collect()
+    }
+
     /// Emit all warnings to stderr
     pub fn emit_warnings(&self) {
         for warning in &self.warnings {

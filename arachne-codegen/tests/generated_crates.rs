@@ -72,7 +72,9 @@ fn generate_build_and_test(metamodel: &str, project: &str) {
 /// features are typed by `EObject` and `EModelElement`, generates a crate that builds and passes
 /// the tests of `tests/generated/annotated/`.
 #[test]
-#[ignore = "reproduces the generator refusing a metamodel that uses ecore's built-in classes; fix pending"]
 fn ecore_builtins() {
-    generate_build_and_test("../examples/pet_metamodels/ecore_builtins.ecore", "annotated");
+    generate_build_and_test(
+        "../examples/pet_metamodels/ecore_builtins.ecore",
+        "annotated",
+    );
 }
