@@ -511,9 +511,9 @@ impl<'a> PackageGenerator<'a> {
     /// to call `node.enable_state_query()` before `node.run()`.
     fn generate_queryable_log_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
+        let package_ident = type_ident(package_name);
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 

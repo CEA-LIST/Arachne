@@ -119,10 +119,24 @@ const FORMAT_VERSION: u64 = 2;
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
 /// root class — the same condition under which code generation fails.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
+    // The generator writes Ecore's own classes into the crate when a metamodel extends or is
+    // typed by one (`codegen/ecore.rs`), but nothing below describes them: `EAnnotation`'s
+    // `details` is a keyed map the descriptor has no shape for, and a reference typed by
+    // `EObject` has no single target class to name. A descriptor that quietly left them out
+    // would claim a metamodel the generated crate does not encode, so the whole descriptor is
+    // refused instead. Implementing it is the next step; until then this is the one place that
+    // has to change.
+    if ctx.ecore_pack().is_some() {
+        return Err(ArachneError::EcoreBuiltinsNotDescribed(
+            pack.name().to_string(),
+        ));
+    }
+
     let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
     let package_class_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
 
-    let roots = crate::compute_top_level_roots(ctx, &package_classes, &package_class_set);
+    let roots =
+        crate::compute_top_level_roots(ctx, &package_classes, &package_classes, &package_class_set);
     if roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
     }
