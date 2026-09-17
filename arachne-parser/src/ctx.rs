@@ -1052,6 +1052,142 @@ mod tests {
         assert_eq!(target.resolve_proxies, Some(false));
     }
 
+    /// Runs `parse` and returns the warnings it logged on the current thread.
+    ///
+    /// The parser reports what it drops only through `log::warn!`, so this installs, once for the
+    /// test binary, a logger that keeps each thread's warnings apart.
+    fn with_warnings<T>(parse: impl FnOnce() -> T) -> (T, Vec<String>) {
+        use std::{cell::RefCell, sync::Once};
+
+        thread_local! {
+            static WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        }
+
+        struct Capture;
+        impl log::Log for Capture {
+            fn enabled(&self, metadata: &log::Metadata) -> bool {
+                metadata.level() == log::Level::Warn
+            }
+            fn log(&self, record: &log::Record) {
+                if self.enabled(record.metadata()) {
+                    WARNINGS.with(|warnings| warnings.borrow_mut().push(record.args().to_string()));
+                }
+            }
+            fn flush(&self) {}
+        }
+
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            log::set_logger(&Capture).expect("no other logger should be installed in unit tests");
+            log::set_max_level(log::LevelFilter::Warn);
+        });
+
+        WARNINGS.with(|warnings| warnings.borrow_mut().clear());
+        let res = parse();
+        (res, WARNINGS.with(RefCell::take))
+    }
+
+    /// `class_structural` reads `unsettable` and then neither stores it nor warns about it, so the
+    /// flag is dropped without a trace.
+    #[test]
+    #[ignore = "reproduces parser dropping unsettable without a warning; fix pending"]
+    fn warns_when_dropping_unsettable() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Feature">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="direction"
+            unsettable="true"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            unsettable="false"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (parsed, warnings) = with_warnings(|| Ctx::parse(ecore));
+        parsed.expect("ecore should parse");
+
+        let unsettable: Vec<_> = warnings
+            .iter()
+            .filter(|warning| warning.contains("unsettable"))
+            .collect();
+        assert_eq!(
+            unsettable.len(),
+            1,
+            "expected one warning about `unsettable`, got {warnings:?}"
+        );
+        assert!(
+            unsettable[0].contains("`Feature`") && unsettable[0].contains("`direction`"),
+            "the warning does not name `Feature.direction`: {}",
+            unsettable[0]
+        );
+    }
+
+    /// The warning for a dropped `eOpposite` names neither the feature nor its opposite, so a
+    /// metamodel with many of them gives no way to tell which were lost.
+    #[test]
+    #[ignore = "reproduces parser warning about eOpposite without naming the feature; fix pending"]
+    fn names_the_feature_when_dropping_eopposite() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Teacher">
+        <eStructuralFeatures xsi:type="ecore:EReference"
+            name="advises"
+            upperBound="-1"
+            eType="#//Student"
+            eOpposite="#//Student/advisor"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Student">
+        <eStructuralFeatures xsi:type="ecore:EReference"
+            name="advisor"
+            eType="#//Teacher"
+            eOpposite="#//Teacher/advises"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (parsed, warnings) = with_warnings(|| Ctx::parse(ecore));
+        parsed.expect("ecore should parse");
+
+        let opposite: Vec<_> = warnings
+            .iter()
+            .filter(|warning| warning.contains("eOpposite"))
+            .collect();
+        assert_eq!(
+            opposite.len(),
+            2,
+            "expected one warning about `eOpposite` per reference, got {warnings:?}"
+        );
+        for (class, feature, path) in [
+            ("Teacher", "advises", "#//Student/advisor"),
+            ("Student", "advisor", "#//Teacher/advises"),
+        ] {
+            assert!(
+                opposite.iter().any(|warning| {
+                    warning.contains(&format!("`{class}`"))
+                        && warning.contains(&format!("`{feature}`"))
+                        && warning.contains(path)
+                }),
+                "no warning names `{class}.{feature}` and `{path}`: {opposite:?}"
+            );
+        }
+    }
+
     #[test]
     fn parses_operation_annotations() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
