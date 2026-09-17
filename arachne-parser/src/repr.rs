@@ -436,7 +436,8 @@ pub struct Class {
     instance_class_name: Option<String>,
     literals: Vec<ELit>,
     annotations: Annots,
-    sup: BTreeSet<idx::Class>,
+    /// Supertypes in the order `eSuperTypes` declares them, without duplicates.
+    sup: Vec<idx::Class>,
     sub: BTreeSet<idx::Class>,
     structural: Vec<Structural>,
     operations: Operations,
@@ -480,7 +481,7 @@ impl Class {
             is_interface: is_interface.unwrap_or(false),
             literals: ELits::with_capacity(7),
             annotations: Annots::with_capacity(3),
-            sup: BTreeSet::new(),
+            sup: Vec::new(),
             sub: BTreeSet::new(),
             structural: Vec::with_capacity(5),
             operations: Operations::with_capacity(7),
@@ -500,11 +501,12 @@ impl Class {
             is_interface: _,
             literals,
             annotations,
-            sup: _,
+            sup,
             sub: _,
             structural,
             operations,
         } = self;
+        sup.shrink_to_fit();
         literals.shrink_to_fit();
         annotations.shrink_to_fit();
         structural.shrink_to_fit();
@@ -568,11 +570,20 @@ impl Class {
         &self.typ
     }
 
-    pub fn sup(&self) -> &BTreeSet<idx::Class> {
+    /// Supertypes in the order `eSuperTypes` declares them.
+    ///
+    /// EMF lists inherited features in this order, and generates an implementation class that
+    /// extends the implementation of the first one.
+    pub fn sup(&self) -> &[idx::Class] {
         &self.sup
     }
+    /// Appends `sup` to the supertypes, unless it is one already; returns true if it was not.
     pub fn add_sup(&mut self, sup: idx::Class) -> bool {
-        self.sup.insert(sup)
+        let is_new = !self.sup.contains(&sup);
+        if is_new {
+            self.sup.push(sup)
+        }
+        is_new
     }
 
     pub fn sub(&self) -> &BTreeSet<idx::Class> {

@@ -20,4 +20,4 @@
       structural features:
       - `b`: EAttribute of [1, 1] `EBoolean`
     class C [ecore:EClass] #12
-      supers: A, B
+      supers: B, A

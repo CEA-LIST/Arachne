@@ -1754,7 +1754,8 @@ mod tests {
     }
 
     /// The pretty print of each example as the parser printed it before Ecore's own classes were
-    /// built in (`aas.ecore` is left out: it refers to UML and is refused).
+    /// built in, except that `multiple_inheritance.ecore` lists the supertypes of `C` in declared
+    /// order (`aas.ecore` is left out: it refers to UML and is refused).
     const EXAMPLES: [(&str, &str, &str); 12] = [
         example!("examples/behavior_tree.ecore", "behavior_tree.pretty"),
         example!("examples/class_hierarchy.ecore", "class_hierarchy.pretty"),
@@ -2167,7 +2168,6 @@ mod tests {
     /// that is by first mention in the file, and not in the order `eSuperTypes` declares them,
     /// which EMF uses to order inherited features and to pick the implementation's base class.
     #[test]
-    #[ignore = "reproduces parser losing the declared order of supertypes; fix pending"]
     fn keeps_supertypes_in_declaration_order() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
