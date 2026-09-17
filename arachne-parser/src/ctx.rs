@@ -1923,4 +1923,247 @@ mod tests {
             Some(class_named(&ctx, own, "EObject").idx)
         );
     }
+
+    /// A user metamodel naming Ecore's classes in the given `eSuperTypes` and `eType` spellings.
+    fn naming_ecore(super_types: &str, etype: &str) -> String {
+        format!(
+            r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Element" eSuperTypes="{super_types}">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="payload" eType="{etype}"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##
+        )
+    }
+
+    /// `resolve_etype` recognises Ecore's classes by Ecore's namespace URI only, so the
+    /// `platform:/plugin` location of `Ecore.ecore`, which the Ecore editor inserts by default and
+    /// SysON's metamodel uses, is refused.
+    #[test]
+    #[ignore = "reproduces parser refusing the platform:/plugin spelling of ecore's classes; fix pending"]
+    fn resolves_the_platform_spelling_of_ecore_classes() {
+        const NS_URI: &str = "http://www.eclipse.org/emf/2002/Ecore#//";
+        const PLATFORM: &str = "platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//";
+
+        for (super_types, etype) in [
+            (format!("{NS_URI}EModelElement"), format!("{NS_URI}EObject")),
+            (
+                format!("{PLATFORM}EModelElement"),
+                format!("ecore:EClass {PLATFORM}EObject"),
+            ),
+            (
+                format!("{PLATFORM}EModelElement"),
+                format!("{PLATFORM}EObject"),
+            ),
+            (
+                format!("{PLATFORM}EModelElement {NS_URI}ENamedElement"),
+                format!("ecore:EClass {NS_URI}EObject"),
+            ),
+        ] {
+            let ecore = naming_ecore(&super_types, &etype);
+            let ctx = Ctx::parse(&ecore)
+                .unwrap_or_else(|e| panic!("`{super_types}` and `{etype}` refused: {e}"));
+            let ecore_packs: Vec<_> = ctx
+                .packs()
+                .iter()
+                .filter(|pack| pack.ns_uri() == Some(ECORE_NS_URI))
+                .map(|pack| pack.idx)
+                .collect();
+            assert_eq!(ecore_packs.len(), 1, "`{super_types}`: one Ecore package");
+            let ecore = ecore_packs[0];
+
+            let element = class_named(&ctx, pack_named(&ctx, "test"), "Element");
+            let sups: Vec<_> = element.sup().iter().map(|idx| ctx[*idx].name()).collect();
+            let expected: Vec<_> = super_types
+                .split_whitespace()
+                .map(|token| token.rsplit('/').next().unwrap())
+                .collect();
+            assert_eq!(sups, expected, "`{super_types}`");
+            assert!(element
+                .sup()
+                .iter()
+                .all(|idx| ctx[*idx].path.last() == ecore));
+            assert_eq!(
+                element.structural()[0].typ,
+                Some(class_named(&ctx, ecore, "EObject").idx),
+                "`{etype}`"
+            );
+        }
+    }
+
+    /// Ecore itself may name its classes by the `platform:/plugin` location of `Ecore.ecore`,
+    /// which is the file itself.
+    #[test]
+    #[ignore = "reproduces parser refusing the platform:/plugin spelling of ecore's classes; fix pending"]
+    fn ecore_itself_resolves_platform_uris_to_its_own_classes() {
+        let probe = r##"<eClassifiers xsi:type="ecore:EClass" name="Probe" eSuperTypes="platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EModelElement">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="payload" eType="ecore:EClass platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EObject"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="EAnnotation""##;
+        let ecore = ECORE_SUBSET.replacen(
+            r#"<eClassifiers xsi:type="ecore:EClass" name="EAnnotation""#,
+            probe,
+            1,
+        );
+        let ctx = Ctx::parse(&ecore).unwrap_or_else(|e| panic!("refused: {e}"));
+
+        assert_eq!(ctx.packs().len(), 3, "a package was added to Ecore itself");
+        let own = pack_named(&ctx, "ecore");
+        let probe = class_named(&ctx, own, "Probe");
+        let sups: Vec<_> = probe.sup().iter().copied().collect();
+        assert_eq!(sups, [class_named(&ctx, own, "EModelElement").idx]);
+        assert_eq!(
+            probe.structural()[0].typ,
+            Some(class_named(&ctx, own, "EObject").idx)
+        );
+    }
+
+    /// A name of Ecore outside the classes built in falls through to the generic refusal, which
+    /// says `eType` for a supertype and does not say which of Ecore's classes are supported.
+    #[test]
+    #[ignore = "reproduces parser refusing unsupported ecore classes without naming the supported ones; fix pending"]
+    fn refuses_other_ecore_classes_naming_the_supported_ones() {
+        for (super_types, etype, class) in [
+            (
+                "http://www.eclipse.org/emf/2002/Ecore#//EClass",
+                "ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject",
+                "EClass",
+            ),
+            (
+                "http://www.eclipse.org/emf/2002/Ecore#//EModelElement",
+                "ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EReference",
+                "EReference",
+            ),
+            (
+                "platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EPackage",
+                "ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject",
+                "EPackage",
+            ),
+        ] {
+            let error = match Ctx::parse(naming_ecore(super_types, etype)) {
+                Ok(_) => panic!("`{class}` accepted"),
+                Err(e) => e.to_string(),
+            };
+            assert!(
+                error.contains(&format!("`{class}`")),
+                "the error does not name `{class}`: {error}"
+            );
+            for supported in [
+                "EAnnotation",
+                "EModelElement",
+                "ENamedElement",
+                "EObject",
+                "EStringToStringMapEntry",
+            ] {
+                assert!(
+                    error.contains(&format!("`{supported}`")),
+                    "the error does not list `{supported}`: {error}"
+                );
+            }
+        }
+    }
+
+    /// EMF resolves `Ecore.ecore#//X` against the metamodel's own location and `#//X` in the
+    /// metamodel itself, so neither means the built-in Ecore; both keep their behaviour, and so do
+    /// Ecore's datatypes.
+    #[test]
+    fn relative_ecore_spellings_and_datatypes_resolve_as_before() {
+        for (super_types, etype) in [
+            (
+                "Ecore.ecore#//EModelElement",
+                "ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString",
+            ),
+            ("", "ecore:EClass Ecore.ecore#//EObject"),
+        ] {
+            let error = match Ctx::parse(naming_ecore(super_types, etype)) {
+                Ok(_) => panic!("`{super_types}` and `{etype}` accepted"),
+                Err(e) => e.to_string(),
+            };
+            assert!(
+                error.contains("unsupported `eType` path `") && error.contains("Ecore.ecore#//"),
+                "unexpected refusal: {error}"
+            );
+        }
+
+        // no class of the metamodel is named `EObject`: an undefined forward reference
+        let error = match Ctx::parse(naming_ecore("#//EObject", "#//EObject")) {
+            Ok(_) => panic!("`#//EObject` accepted with no local `EObject`"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            error.contains("failed to finalize parsing context"),
+            "unexpected refusal: {error}"
+        );
+
+        let ecore = naming_ecore(
+            "#//EObject",
+            "ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString",
+        )
+        .replace(
+            "</ecore:EPackage>",
+            r#"<eClassifiers xsi:type="ecore:EClass" name="EObject"/></ecore:EPackage>"#,
+        );
+        let ctx = Ctx::parse(&ecore).unwrap_or_else(|e| panic!("refused: {e}"));
+        assert!(ctx
+            .packs()
+            .iter()
+            .all(|pack| pack.ns_uri() != Some(ECORE_NS_URI)));
+        let test = pack_named(&ctx, "test");
+        let element = class_named(&ctx, test, "Element");
+        let sups: Vec<_> = element.sup().iter().copied().collect();
+        assert_eq!(sups, [class_named(&ctx, test, "EObject").idx]);
+        assert_eq!(
+            element.structural()[0].typ,
+            Some(ctx.builtins()[&crate::repr::builtin::Typ::EString])
+        );
+    }
+
+    /// `class` parses the whole body of a class before it resolves the supertypes, so a supertype
+    /// that fails to resolve is reported at the end of the class, where the parser stands.
+    #[test]
+    #[ignore = "reproduces parser reporting a failed supertype at the end of its class; fix pending"]
+    fn reports_a_failed_supertype_at_its_class() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Base"/>
+    <eClassifiers xsi:type="ecore:EClass" name="Derived" eSuperTypes="#//Base other.ecore#//Base">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="label"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="count"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Next"/>
+</ecore:EPackage>
+"##;
+        let line = 1 + ecore
+            .lines()
+            .position(|line| line.contains(r#"name="Derived""#))
+            .unwrap();
+
+        let error = match Ctx::parse(ecore) {
+            Ok(_) => panic!("`other.ecore#//Base` accepted"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            error.contains(&format!("line {line}, ")),
+            "the error is not reported at line {line}: {error}"
+        );
+        assert!(
+            error.contains("`Derived`") && error.contains("other.ecore#//Base"),
+            "the error names neither `Derived` nor its supertype: {error}"
+        );
+    }
 }
