@@ -1,0 +1,50 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - confOrga #2
+    class Conference [ecore:EClass] #10
+      structural features:
+      - `name`: EAttribute of [1, 1] `EString`
+      - `acronym`: EAttribute of [0, 1] `EString`
+      - `description`: EAttribute of [0, 1] `EString`
+      - `editions`: EReference of [1, ∞[ `Edition`
+    class Edition [ecore:EClass] #11
+      structural features:
+      - `year`: EAttribute of [1, 1] `EInt`
+      - `city`: EAttribute of [1, 1] `EString`
+      - `country`: EAttribute of [1, 1] `EString`
+      - `tracks`: EReference of [1, ∞[ `Track`
+      - `isCurrent`: EAttribute of [1, 1] `EBoolean`
+    class Track [ecore:EClass] #12
+      subers: Workshop, Main
+      structural features:
+      - `name`: EAttribute of [1, 1] `EString`
+      - `sessions`: EReference of [1, ∞[ `Session`
+    class Session [ecore:EClass] #13
+      structural features:
+      - `title`: EAttribute of [1, 1] `EString`
+      - `startTime`: EAttribute of [1, 1] `EInt`
+      - `endTime`: EAttribute of [1, 1] `EInt`
+      - `attendees`: EReference of [0, ∞[ `Person`
+      - `author`: EReference of [1, 1] `Person`
+    class Workshop [ecore:EClass] #14
+      supers: Track
+      structural features:
+      - `topic`: EAttribute of [1, 1] `EString`
+    class Person [ecore:EClass] #15
+      structural features:
+      - `name`: EAttribute of [1, 1] `EString`
+      - `email`: EAttribute of [1, 1] `EString`
+      - `role`: EAttribute of [1, 1] `Role`
+    class Role [ecore:EEnum] #16
+    class Main [ecore:EClass] #17
+      supers: Track

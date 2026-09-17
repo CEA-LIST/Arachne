@@ -902,7 +902,7 @@ impl<'a, 'b> ClassCtx<'a, 'b> {
 
 #[cfg(test)]
 mod tests {
-    use super::Ctx;
+    use super::{Class, Ctx};
 
     /// A package with one class and one attribute, with no XML declaration before it and no
     /// newline after it.
@@ -1503,5 +1503,364 @@ mod tests {
         assert_eq!(identifier.inst_name(), Some("java.lang.CharSequence"));
         assert_eq!(node.instance_class_name(), Some("org.example.Node"));
         assert_eq!(node.inst_name(), None);
+    }
+
+    const ECORE_NS_URI: &str = "http://www.eclipse.org/emf/2002/Ecore";
+
+    /// The five classes of Ecore that metamodels use, written as `Ecore.ecore` declares them,
+    /// except that `EString` is the builtin datatype, `EObject` is abstract and has none of its
+    /// operations, whose types are Ecore classes outside these five.
+    const ECORE_SUBSET: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="ecore" nsURI="http://www.eclipse.org/emf/2002/Ecore" nsPrefix="ecore">
+  <eClassifiers xsi:type="ecore:EClass" name="EAnnotation" eSuperTypes="#//EModelElement">
+    <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore">
+      <details key="constraints" value="WellFormed WellFormedSourceURI"/>
+    </eAnnotations>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="source" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="details" upperBound="-1"
+        eType="#//EStringToStringMapEntry" containment="true" resolveProxies="false"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="eModelElement" eType="#//EModelElement"
+        transient="true" resolveProxies="false" eOpposite="#//EModelElement/eAnnotations"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="contents" upperBound="-1"
+        eType="#//EObject" containment="true" resolveProxies="false"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="references" upperBound="-1"
+        eType="#//EObject"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="EModelElement" abstract="true">
+    <eOperations name="getEAnnotation" eType="#//EAnnotation">
+      <eParameters name="source" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eOperations>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="eAnnotations" upperBound="-1"
+        eType="#//EAnnotation" containment="true" resolveProxies="false" eOpposite="#//EAnnotation/eModelElement"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="ENamedElement" abstract="true" eSuperTypes="#//EModelElement">
+    <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore">
+      <details key="constraints" value="WellFormedName"/>
+    </eAnnotations>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="EObject" abstract="true"/>
+  <eClassifiers xsi:type="ecore:EClass" name="EStringToStringMapEntry" instanceClassName="java.util.Map$Entry">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+</ecore:EPackage>
+"##;
+
+    /// A user metamodel whose `Element` extends Ecore's `EModelElement`, as SysON's does, and
+    /// whose `Part` has features typed by Ecore classes.
+    const EXTENDS_ECORE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Element" abstract="true"
+        eSuperTypes="http://www.eclipse.org/emf/2002/Ecore#//EModelElement">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="elementId"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Part" eSuperTypes="#//Element">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="payload" upperBound="-1"
+            eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="notes" upperBound="-1"
+            eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EAnnotation"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+    fn class_named<'ctx>(ctx: &'ctx Ctx, pack: crate::repr::idx::Pack, name: &str) -> &'ctx Class {
+        ctx.classes()
+            .iter()
+            .find(|class| class.path.last() == pack && class.name() == name)
+            .unwrap_or_else(|| panic!("no class `{name}` in package `{}`", ctx[pack].name()))
+    }
+
+    fn pack_named(ctx: &Ctx, name: &str) -> crate::repr::idx::Pack {
+        ctx.packs()
+            .iter()
+            .find(|pack| pack.name() == name)
+            .unwrap_or_else(|| panic!("no package `{name}`"))
+            .idx
+    }
+
+    /// Everything the context holds about a class, with classes named by package and name
+    /// instead of by index.
+    fn describe_class(ctx: &Ctx, class: &Class) -> String {
+        use std::fmt::Write;
+
+        let name = |idx: Option<crate::repr::idx::Class>| {
+            idx.map(|idx| format!("{}/{}", ctx[ctx[idx].path.last()].name(), ctx[idx].name()))
+        };
+        let annots = |out: &mut String, annots: &[crate::repr::Annot]| {
+            for annot in annots {
+                let mut details: Vec<_> = annot.details().iter().collect();
+                details.sort();
+                writeln!(
+                    out,
+                    "  annotation {:?} {details:?} {:?}",
+                    annot.source(),
+                    annot.references()
+                )
+                .unwrap();
+            }
+        };
+
+        let mut out = String::new();
+        writeln!(
+            out,
+            "{} {} abstract={} interface={} inst_name={:?} instance_class_name={:?} literals={}",
+            class.name(),
+            class.typ(),
+            class.is_abstract(),
+            class.is_interface(),
+            class.inst_name(),
+            class.instance_class_name(),
+            class.literals().len(),
+        )
+        .unwrap();
+        let sups: Vec<_> = class.sup().iter().map(|idx| name(Some(*idx))).collect();
+        writeln!(out, "  supertypes {sups:?}").unwrap();
+        annots(&mut out, class.annotations());
+        for s in class.structural() {
+            writeln!(
+                out,
+                "  feature {} {} {:?} {:?} {} containment={} iD={} ordered={:?} changeable={:?} \
+                volatile={:?} transient={:?} derived={:?} unsettable={:?} unique={:?} \
+                default={:?}/{:?} resolve_proxies={:?}",
+                s.name,
+                s.kind,
+                name(s.typ),
+                s.typ_path,
+                s.bounds,
+                s.containment,
+                s.is_id,
+                s.ordered,
+                s.changeable,
+                s.volatile,
+                s.transient,
+                s.derived,
+                s.unsettable,
+                s.unique,
+                s.default_value,
+                s.default_value_literal,
+                s.resolve_proxies,
+            )
+            .unwrap();
+            annots(&mut out, s.annotations());
+        }
+        for op in class.operations() {
+            writeln!(
+                out,
+                "  operation {} {:?} {} ordered={:?} unique={:?}",
+                op.name(),
+                name(op.typ()),
+                op.bounds(),
+                op.ordered(),
+                op.unique(),
+            )
+            .unwrap();
+            for param in op.parameters() {
+                writeln!(
+                    out,
+                    "    parameter {} {:?} {} ordered={:?} unique={:?}",
+                    param.name(),
+                    name(param.typ()),
+                    param.bounds(),
+                    param.ordered(),
+                    param.unique(),
+                )
+                .unwrap();
+            }
+            annots(&mut out, op.annotations());
+        }
+        out
+    }
+
+    macro_rules! example {
+        ($ecore:literal, $pretty:literal) => {
+            (
+                $ecore,
+                include_str!(concat!("../../", $ecore)),
+                include_str!(concat!("../rsc/pretty/", $pretty)),
+            )
+        };
+    }
+
+    /// The pretty print of each example as the parser printed it before Ecore's own classes were
+    /// built in (`aas.ecore` is left out: it refers to UML and is refused).
+    const EXAMPLES: [(&str, &str, &str); 12] = [
+        example!("examples/behavior_tree.ecore", "behavior_tree.pretty"),
+        example!("examples/class_hierarchy.ecore", "class_hierarchy.pretty"),
+        example!("examples/conference.ecore", "conference.pretty"),
+        example!("examples/json.ecore", "json.pretty"),
+        example!(
+            "examples/pet_metamodels/abstract_inherits_concrete.ecore",
+            "abstract_inherits_concrete.pretty"
+        ),
+        example!(
+            "examples/pet_metamodels/concrete_inherits_concrete.ecore",
+            "concrete_inherits_concrete.pretty"
+        ),
+        example!(
+            "examples/pet_metamodels/concrete_polymorphic_targets.ecore",
+            "concrete_polymorphic_targets.pretty"
+        ),
+        example!(
+            "examples/pet_metamodels/kitchen_sink.ecore",
+            "kitchen_sink.pretty"
+        ),
+        example!(
+            "examples/pet_metamodels/multiple_inheritance.ecore",
+            "multiple_inheritance.pretty"
+        ),
+        example!(
+            "arachne-parser/rsc/AbstractEcore.ecore",
+            "AbstractEcore.pretty"
+        ),
+        example!("arachne-parser/rsc/bt.ecore", "bt.pretty"),
+        example!(
+            "arachne-parser/rsc/ExampleEcore.ecore",
+            "ExampleEcore.pretty"
+        ),
+    ];
+
+    /// A metamodel that never refers to an Ecore class must not see any of them: same packages,
+    /// same class indices, same pretty print.
+    #[test]
+    fn examples_without_ecore_classes_parse_as_before() {
+        for (path, ecore, pretty) in EXAMPLES {
+            let ctx = Ctx::parse(ecore).unwrap_or_else(|e| panic!("{path} refused: {e}"));
+            assert!(
+                ctx.packs()
+                    .iter()
+                    .all(|pack| pack.ns_uri() != Some(ECORE_NS_URI)),
+                "{path} has a package for Ecore"
+            );
+            assert_eq!(
+                format!("{}\n", ctx.to_pretty_string()),
+                pretty,
+                "{path} does not parse as before"
+            );
+        }
+    }
+
+    /// `resolve_etype` knows Ecore's datatypes and nothing else of Ecore, so a class extending
+    /// `EModelElement` or a feature typed by `EObject` is refused.
+    #[test]
+    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
+    fn injects_ecore_classes_once_when_referenced() {
+        let ctx = Ctx::parse(EXTENDS_ECORE).unwrap_or_else(|e| panic!("refused: {e}"));
+
+        let ecore_packs: Vec<_> = ctx
+            .packs()
+            .iter()
+            .filter(|pack| pack.ns_uri() == Some(ECORE_NS_URI))
+            .collect();
+        assert_eq!(ecore_packs.len(), 1, "expected one Ecore package");
+        let ecore = ecore_packs[0];
+        assert_eq!(ecore.name(), "ecore");
+        assert_eq!(ecore.ns_prefix(), Some("ecore"));
+        assert_eq!(ecore.sup(), Some(ctx.top_pack()));
+        assert!(ctx[ctx.top_pack()].has_sub(ecore.idx));
+        let mut names: Vec<_> = ecore.classes().iter().map(|idx| ctx[*idx].name()).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "EAnnotation",
+                "EModelElement",
+                "ENamedElement",
+                "EObject",
+                "EStringToStringMapEntry"
+            ]
+        );
+        assert_eq!(ctx[ctx.builtin_pack()].classes().len(), 10);
+
+        let test = pack_named(&ctx, "test");
+        let element = class_named(&ctx, test, "Element");
+        let sups: Vec<_> = element.sup().iter().copied().collect();
+        assert_eq!(sups, [class_named(&ctx, ecore.idx, "EModelElement").idx]);
+        assert_eq!(
+            element.structural()[0].typ,
+            Some(ctx.builtins()[&crate::repr::builtin::Typ::EString])
+        );
+
+        let part = class_named(&ctx, test, "Part");
+        let typ = |feature: &str| {
+            part.structural()
+                .iter()
+                .find(|candidate| candidate.name == feature)
+                .and_then(|feature| feature.typ)
+        };
+        assert_eq!(
+            typ("payload"),
+            Some(class_named(&ctx, ecore.idx, "EObject").idx)
+        );
+        assert_eq!(
+            typ("notes"),
+            Some(class_named(&ctx, ecore.idx, "EAnnotation").idx)
+        );
+    }
+
+    /// The classes built in for Ecore hold what the parser would hold for them if it read their
+    /// declarations in `Ecore.ecore`.
+    #[test]
+    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
+    fn built_in_ecore_classes_match_their_declarations() {
+        let injected = Ctx::parse(EXTENDS_ECORE).unwrap_or_else(|e| panic!("refused: {e}"));
+        let declared = Ctx::parse(ECORE_SUBSET).unwrap_or_else(|e| panic!("refused: {e}"));
+        let injected_pack = pack_named(&injected, "ecore");
+        let declared_pack = pack_named(&declared, "ecore");
+
+        for name in [
+            "EAnnotation",
+            "EModelElement",
+            "ENamedElement",
+            "EObject",
+            "EStringToStringMapEntry",
+        ] {
+            assert_eq!(
+                describe_class(&injected, class_named(&injected, injected_pack, name)),
+                describe_class(&declared, class_named(&declared, declared_pack, name)),
+            );
+        }
+    }
+
+    /// A metamodel that is Ecore itself names its own classes by Ecore's URI; they must resolve
+    /// to the file's classes and no second Ecore package may appear.
+    #[test]
+    #[ignore = "reproduces parser refusing Ecore's own classes; fix pending"]
+    fn ecore_itself_resolves_ecore_uris_to_its_own_classes() {
+        let probe = r##"<eClassifiers xsi:type="ecore:EClass" name="Probe" eSuperTypes="http://www.eclipse.org/emf/2002/Ecore#//EModelElement">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="payload" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="EAnnotation""##;
+        let ecore = ECORE_SUBSET.replacen(
+            r#"<eClassifiers xsi:type="ecore:EClass" name="EAnnotation""#,
+            probe,
+            1,
+        );
+        let ctx = Ctx::parse(&ecore).unwrap_or_else(|e| panic!("refused: {e}"));
+
+        assert_eq!(
+            ctx.packs()
+                .iter()
+                .filter(|pack| pack.ns_uri() == Some(ECORE_NS_URI))
+                .count(),
+            1,
+            "a second Ecore package was added"
+        );
+        let own = pack_named(&ctx, "ecore");
+        let probe = class_named(&ctx, own, "Probe");
+        let sups: Vec<_> = probe.sup().iter().copied().collect();
+        assert_eq!(sups, [class_named(&ctx, own, "EModelElement").idx]);
+        assert_eq!(
+            probe.structural()[0].typ,
+            Some(class_named(&ctx, own, "EObject").idx)
+        );
     }
 }
