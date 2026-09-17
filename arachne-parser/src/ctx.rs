@@ -942,7 +942,6 @@ mod tests {
     /// end of input, and nothing asks for a package, so input with no `EPackage` in it parses as
     /// an empty model.
     #[test]
-    #[ignore = "reproduces parser accepting input with no EPackage; fix pending"]
     fn refuses_input_with_no_epackage_root() {
         for input in [
             "",
@@ -964,7 +963,6 @@ mod tests {
     /// `top` takes the first tag to be the XML declaration and throws it away, so a file that
     /// starts with its `EPackage` loses that tag and is refused at its first classifier.
     #[test]
-    #[ignore = "reproduces parser refusing a file with no XML declaration; fix pending"]
     fn parses_a_file_with_no_xml_declaration() {
         assert_parses_bare_package(&format!("{BARE_PACKAGE}\n"));
     }
@@ -972,7 +970,6 @@ mod tests {
     /// `try_raw_tag` only matches a tag strictly shorter than the rest of the input, so a file
     /// whose last bytes are `</ecore:EPackage>` is refused.
     #[test]
-    #[ignore = "reproduces parser refusing a file with no trailing newline; fix pending"]
     fn parses_a_file_with_no_trailing_newline() {
         assert_parses_bare_package(&format!("{XML_DECLARATION}{BARE_PACKAGE}"));
     }
@@ -980,7 +977,6 @@ mod tests {
     /// `top` skips to the first `<` one byte per character, so the three bytes of a byte order
     /// mark leave the cursor inside it.
     #[test]
-    #[ignore = "reproduces parser panic on a leading byte order mark; fix pending"]
     fn parses_a_file_starting_with_a_byte_order_mark() {
         assert_parses_bare_package(&format!("\u{feff}{XML_DECLARATION}{BARE_PACKAGE}\n"));
     }

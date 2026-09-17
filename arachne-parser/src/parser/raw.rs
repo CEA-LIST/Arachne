@@ -49,12 +49,34 @@ impl<'input> Parser<'input> {
     }
 
     fn top(&mut self, ctx: &mut Ctx) -> Res<()> {
-        // ignore xml header
-        let _ = self.until_char('<', true);
-        let _ = self.until_char('>', true);
+        self.prolog()?;
+        if !self.tail().starts_with("<ecore:EPackage") {
+            bail!("expected an `ecore:EPackage` root element")
+        }
 
         let mut path = ctx.enter_root_pack()?;
         self.at_path(&mut path)
+    }
+
+    /// Skips what may come before the root element: a byte order mark, then whitespace, comments,
+    /// the XML declaration and processing instructions, each only if present.
+    fn prolog(&mut self) -> Res<()> {
+        const BYTE_ORDER_MARK: char = '\u{feff}';
+        if self.tail().starts_with(BYTE_ORDER_MARK) {
+            self.cursor += BYTE_ORDER_MARK.len_utf8();
+        }
+
+        loop {
+            self.ws_and_comments();
+            if !self.tail().starts_with("<?") {
+                return Ok(());
+            }
+            let Some(end) = self.tail().find("?>") else {
+                bail!("unterminated XML declaration or processing instruction")
+            };
+            let instruction = &self.tail()[..end + "?>".len()];
+            self.raw_tag(instruction)?;
+        }
     }
 }
 
@@ -192,7 +214,7 @@ impl<'input> Parser<'input> {
     pub fn try_raw_tag(&mut self, tag: impl AsRef<str>) -> bool {
         let tag = tag.as_ref();
         let tail = self.tail();
-        if tag.len() < self.tail().len() && tail.starts_with(tag) {
+        if tail.starts_with(tag) {
             for c in tag.chars() {
                 if c == '\n' {
                     self.line += 1;
