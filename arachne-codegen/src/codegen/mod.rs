@@ -14,4 +14,5 @@ pub mod package;
 pub mod read_as_ecore;
 pub mod reference;
 pub mod semantics;
+mod value;
 mod warnings;

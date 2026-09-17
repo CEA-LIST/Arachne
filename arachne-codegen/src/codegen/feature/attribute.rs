@@ -22,6 +22,7 @@ use crate::{
         generator::PRIVATE_MOD_PREFIX,
         ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
+        value,
     },
 };
 
@@ -113,7 +114,11 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
         };
 
-        let (field_type, imports) = match (
+        // The leaf's read-out, computed once: every shape below either reads
+        // as the leaf does or wraps it.
+        let leaf_value = value::leaf(&crdt, rust_typ.as_ref(), &path);
+
+        let (field_type, field_value, imports) = match (
             bound_kind,
             // Default to true if not specified, as per Ecore spec
             self.attribute.unique.unwrap_or(true),
@@ -121,6 +126,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
         ) {
             (BoundKind::Single, _, _) => (
                 quote! { #log_type<#crdt_inner> },
+                leaf_value,
                 vec![
                     log_import,
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
@@ -128,6 +134,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             ),
             (BoundKind::Optional, _, _) => (
                 quote! { #path::OptionLog<#log_type<#crdt_inner>> },
+                leaf_value.optional(),
                 vec![
                     log_import,
                     Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
@@ -136,6 +143,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             ),
             (BoundKind::Many, false, true) => (
                 quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
+                leaf_value.sequence(),
                 vec![
                     log_import,
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
@@ -148,6 +156,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                     .expect("Unique ordered attributes should have a Rust element type");
                 (
                     quote! { #path::GraphLog<#path::List<#element_type>> },
+                    value::Value::plain(element_type.clone()).sequence(),
                     vec![
                         Import::Log(Log::Graph),
                         Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
@@ -156,6 +165,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
             (BoundKind::Many, false, false) => (
                 quote! { #path::AWBagLog<#rust_typ> },
+                value::bag(&quote! { #rust_typ }, &path),
                 vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
                     Collection::Bag(Bag::AWBag),
                 )))],
@@ -166,8 +176,10 @@ impl<'a> Generate for AttributeGenerator<'a> {
                     _ => Set::AWSet,
                 };
                 let set_name = rust_ident(set_typ.name());
+                let field_value = value::set(&set_typ, &quote! { #rust_typ }, &path);
                 (
                     quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
+                    field_value,
                     vec![
                         Import::Log(Log::Vec),
                         Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(Collection::Set(
@@ -178,7 +190,11 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
         };
 
-        let tokens = quote! { #name: #field_type };
+        let (value_type, value_imports) = field_value.into_parts();
+        let mut imports = imports;
+        imports.extend(value_imports);
+
+        let tokens = quote! { #name: #field_type => #value_type };
 
         Ok(Fragment::new(tokens, imports, warnings))
     }

@@ -9,7 +9,10 @@ use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         annotation::{DatatypeOverride, datatype_override, map_spec},
-        classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
+        classifier::{
+            containment_target_log_ident, containment_target_value_ident,
+            is_uninhabited_polymorphic_class,
+        },
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, Register, SimpleCrdt},
@@ -23,6 +26,7 @@ use crate::{
         generator::PRIVATE_MOD_PREFIX,
         ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log, Protocol},
+        value::{self, Value},
     },
 };
 
@@ -70,6 +74,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
 
         let name = value_ident(&self.reference.name);
         let target_type = containment_target_log_ident(self.ctx, target_class);
+        let target_value = containment_target_value_ident(self.ctx, target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
@@ -126,24 +131,34 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 })?
             };
 
-            let (value_log_ty, mut imports) = if matches!(value_bound, BoundKind::Optional) {
-                self.uw_map_optional_value_log_type(value_feature, &path)?
-            } else {
-                self.uw_map_value_log_type(target_class.idx, value_feature, &path)?
-            };
+            let (value_log_ty, value_value, mut imports) =
+                if matches!(value_bound, BoundKind::Optional) {
+                    self.uw_map_optional_value_log_type(value_feature, &path)?
+                } else {
+                    self.uw_map_value_log_type(target_class.idx, value_feature, &path)?
+                };
             imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
 
-            let stream = quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> };
+            let (entry_value, entry_imports) =
+                value_value.keyed_by(&key_ty, &path).into_parts();
+            imports.extend(entry_imports);
+
+            let stream =
+                quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> => #entry_value };
             return Ok(Fragment::new(stream, imports, warnings));
         }
 
-        let (field_type, imports) = match bound_kind {
+        let boxed = boxing_strategy != BoxingStrategy::NoBox;
+        let target_value = Value::plain(quote! { #target_value }).boxed_if(boxed);
+
+        let (field_type, field_value, imports) = match bound_kind {
             BoundKind::Single => {
                 if boxing_strategy == BoxingStrategy::NoBox {
-                    (quote! { #target_type }, vec![])
+                    (quote! { #target_type }, target_value, vec![])
                 } else {
                     (
                         boxed_target_type.clone(),
+                        target_value,
                         vec![Import::Protocol(Protocol::BoxedLog)],
                     )
                 }
@@ -154,6 +169,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::OptionLog<#boxed_target_type> }
                 },
+                target_value.optional(),
                 if boxing_strategy == BoxingStrategy::NoBox {
                     vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
                 } else {
@@ -169,6 +185,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::NestedListLog<#boxed_target_type> }
                 },
+                target_value.sequence(),
                 if boxing_strategy == BoxingStrategy::NoBox {
                     vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))]
                 } else {
@@ -180,7 +197,11 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             ),
         };
 
-        let stream = quote! { #name: #field_type };
+        let (value_type, value_imports) = field_value.into_parts();
+        let mut imports = imports;
+        imports.extend(value_imports);
+
+        let stream = quote! { #name: #field_type => #value_type };
 
         Ok(Fragment::new(stream, imports, warnings))
     }
@@ -197,7 +218,7 @@ impl<'a> ContainmentGenerator<'a> {
         &self,
         value_feature: &Structural,
         path: &syn::Path,
-    ) -> anyhow::Result<(TokenStream, Vec<Import>)> {
+    ) -> anyhow::Result<(TokenStream, Value, Vec<Import>)> {
         anyhow::ensure!(
             datatype_override(value_feature).is_none(),
             "UWMap optional value feature `{}` cannot override its datatype",
@@ -218,9 +239,11 @@ impl<'a> ContainmentGenerator<'a> {
         };
         let register = Register::MultiValue;
         let register_name = rust_ident(register.name());
+        let value = value::register(&register, &quote! { Option<#rust_ty> }, path);
 
         Ok((
             quote! { #path::VecLog<#path::#register_name<Option<#rust_ty>>> },
+            value,
             vec![
                 Import::Log(Log::Vec),
                 Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::Register(
@@ -235,7 +258,7 @@ impl<'a> ContainmentGenerator<'a> {
         entry_class: idx::Class,
         value_feature: &Structural,
         path: &syn::Path,
-    ) -> anyhow::Result<(TokenStream, Vec<Import>)> {
+    ) -> anyhow::Result<(TokenStream, Value, Vec<Import>)> {
         match value_feature.kind {
             structural::Typ::EAttribute => {
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
@@ -258,6 +281,7 @@ impl<'a> ContainmentGenerator<'a> {
                     primitive = override_primitive;
                 }
 
+                let leaf_value = value::leaf(&primitive, rust_ty.as_ref(), path);
                 let (log_ty, imports) = match primitive {
                     Primitive::Counter(_) => {
                         let rust_ty = rust_ty
@@ -304,7 +328,7 @@ impl<'a> ContainmentGenerator<'a> {
                         ],
                     ),
                 };
-                Ok((log_ty, imports))
+                Ok((log_ty, leaf_value, imports))
             }
             structural::Typ::EReference => {
                 anyhow::ensure!(
@@ -319,20 +343,26 @@ impl<'a> ContainmentGenerator<'a> {
                     value_class.name()
                 );
                 let value_log = containment_target_log_ident(self.ctx, value_class);
+                let value_value = containment_target_value_ident(self.ctx, value_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);
-                let log_ty = if boxing_strategy == BoxingStrategy::NoBox {
-                    quote! { #value_log }
-                } else {
+                let boxed = boxing_strategy != BoxingStrategy::NoBox;
+                let log_ty = if boxed {
                     quote! { #path::BoxedLog<#value_log> }
-                };
-                let imports = if boxing_strategy == BoxingStrategy::NoBox {
-                    Vec::new()
                 } else {
-                    vec![Import::Protocol(Protocol::BoxedLog)]
+                    quote! { #value_log }
                 };
-                Ok((log_ty, imports))
+                let imports = if boxed {
+                    vec![Import::Protocol(Protocol::BoxedLog)]
+                } else {
+                    Vec::new()
+                };
+                Ok((
+                    log_ty,
+                    Value::plain(quote! { #value_value }).boxed_if(boxed),
+                    imports,
+                ))
             }
         }
     }
