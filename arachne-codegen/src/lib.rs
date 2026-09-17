@@ -813,4 +813,78 @@ mod tests {
         assert!(package.contains("XMLElement::new(\"json:Number\")"));
         assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
     }
+
+    /// Runs generation on `ecore` and returns its error.
+    fn generation_error(ecore: &str) -> String {
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        let pack = parser
+            .ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+            .expect("package should exist");
+        match generate_from_parser(&parser, pack) {
+            Ok(_) => panic!("generation succeeded"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    /// The generator only emits the classes of the user's package, so a class extending one of
+    /// Ecore's own classes gets a `*_super` field whose log type is never generated.
+    #[test]
+    #[ignore = "reproduces generator emitting an uncompilable crate for a class extending an ecore class; fix pending"]
+    fn refuses_a_class_extending_an_ecore_class() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="elements" upperBound="-1" eType="#//Element" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Element" abstract="true"
+        eSuperTypes="platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EModelElement">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="elementId" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Part" eSuperTypes="#//Element"/>
+</ecore:EPackage>
+"##;
+
+        let error = generation_error(ecore);
+        assert!(
+            error.contains("`Element`") && error.contains("`EModelElement`"),
+            "the error names neither `Element` nor `EModelElement`: {error}"
+        );
+    }
+
+    /// Likewise a feature typed by one of Ecore's own classes refers to a type that is never
+    /// generated.
+    #[test]
+    #[ignore = "reproduces generator emitting an uncompilable crate for a feature typed by an ecore class; fix pending"]
+    fn refuses_a_feature_typed_by_an_ecore_class() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="annotations" upperBound="-1"
+            eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EAnnotation" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="label" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let error = generation_error(ecore);
+        assert!(
+            error.contains("`Model.annotations`") && error.contains("`EAnnotation`"),
+            "the error names neither `Model.annotations` nor `EAnnotation`: {error}"
+        );
+    }
 }
