@@ -69,7 +69,8 @@ fn generate_build_and_test(metamodel: &str, project: &str) {
 }
 
 /// A metamodel whose classes extend `EObject`, `EModelElement` and `ENamedElement`, and whose
-/// features are typed by `EObject` and `EModelElement`, generates a crate that builds.
+/// features are typed by `EObject` and `EModelElement`, generates a crate that builds and passes
+/// the tests of `tests/generated/annotated/`.
 #[test]
 #[ignore = "reproduces the generator refusing a metamodel that uses ecore's built-in classes; fix pending"]
 fn ecore_builtins() {
