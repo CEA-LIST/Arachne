@@ -12,7 +12,7 @@ use crate::{
         classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
-            crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
+            crdt::{Crdt, Map, Named, NestedCrdt, Primitive, Register, SimpleCrdt},
             to_crdt::ToCrdt,
         },
         feature::{
@@ -105,12 +105,12 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 value_feature.kind != structural::Typ::EReference || value_feature.containment,
                 "UWMap value feature cannot be a non-containment reference"
             );
+            let value_bound = normalize_bounds(value_feature.bounds, &value_feature.name).0;
             anyhow::ensure!(
-                matches!(
-                    normalize_bounds(value_feature.bounds, &value_feature.name).0,
-                    BoundKind::Single
-                ),
-                "UWMap value feature must be single-valued"
+                matches!(value_bound, BoundKind::Single)
+                    || (matches!(value_bound, BoundKind::Optional)
+                        && value_feature.kind == structural::Typ::EAttribute),
+                "UWMap value feature must be single-valued, or an optional attribute"
             );
 
             let key_class = self.ctx.classes().get(*key_feature.typ.unwrap()).unwrap();
@@ -126,8 +126,11 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 })?
             };
 
-            let (value_log_ty, mut imports) =
-                self.uw_map_value_log_type(target_class.idx, value_feature, &path)?;
+            let (value_log_ty, mut imports) = if matches!(value_bound, BoundKind::Optional) {
+                self.uw_map_optional_value_log_type(value_feature, &path)?
+            } else {
+                self.uw_map_value_log_type(target_class.idx, value_feature, &path)?
+            };
             imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
 
             let stream = quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> };
@@ -184,6 +187,49 @@ impl<'a> Generate for ContainmentGenerator<'a> {
 }
 
 impl<'a> ContainmentGenerator<'a> {
+    /// The log of a map entry's optional attribute value: a multi-value register over `Option<T>`.
+    ///
+    /// `UWMapLog` reads a key only while the key's value log is not default, and an `OptionLog`
+    /// with no value is default, so a key put without a value would not be read back. A register
+    /// holding `None` is not default: the key is read, with no value. Concurrent puts on one key
+    /// keep every value written, as the register does for a single-valued attribute.
+    fn uw_map_optional_value_log_type(
+        &self,
+        value_feature: &Structural,
+        path: &syn::Path,
+    ) -> anyhow::Result<(TokenStream, Vec<Import>)> {
+        anyhow::ensure!(
+            datatype_override(value_feature).is_none(),
+            "UWMap optional value feature `{}` cannot override its datatype",
+            value_feature.name
+        );
+        let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
+        let rust_ty = if value_class.is_enum() {
+            let enum_name = classifier_type_ident(self.ctx, value_class);
+            quote! { #enum_name }
+        } else {
+            let typ: BuiltinTyp = value_class
+                .name()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Failed to parse type: {}", value_class.name()))?;
+            typ.to_rust_type().ok_or_else(|| {
+                anyhow::anyhow!("UWMap value type `{}` has no Rust type", value_class.name())
+            })?
+        };
+        let register = Register::MultiValue;
+        let register_name = rust_ident(register.name());
+
+        Ok((
+            quote! { #path::VecLog<#path::#register_name<Option<#rust_ty>>> },
+            vec![
+                Import::Log(Log::Vec),
+                Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::Register(
+                    register,
+                )))),
+            ],
+        ))
+    }
+
     fn uw_map_value_log_type(
         &self,
         entry_class: idx::Class,
@@ -197,7 +243,7 @@ impl<'a> ContainmentGenerator<'a> {
                     let enum_name = classifier_type_ident(self.ctx, value_class);
                     (
                         Some(quote! { #enum_name }),
-                        Primitive::Register(crate::codegen::datatype::crdt::Register::MultiValue),
+                        Primitive::Register(Register::MultiValue),
                     )
                 } else {
                     let typ: BuiltinTyp = value_class.name().parse().map_err(|_| {

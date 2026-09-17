@@ -550,6 +550,41 @@ mod tests {
         assert!(!classifiers.contains("__classifiers::ListLog"));
     }
 
+    /// A key put without a value stays in the map, so an optional attribute value cannot be an
+    /// `OptionLog`, whose unset state `UWMapLog` does not read.
+    #[test]
+    fn uw_map_with_an_optional_attribute_value_uses_a_register_over_option() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" eType="#//Entry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Entry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains(
+            "entries:__classifiers::UWMapLog<std::string::String,__classifiers::VecLog<__classifiers::MVRegister<Option<std::string::String>>>>"
+        ));
+        assert!(classifiers.contains("pubusemoirai_crdt::register::mv_register::MVRegister;"));
+        assert!(!classifiers.contains("record!(Entry"));
+    }
+
     #[test]
     fn vec_log_attributes_import_vec_log() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>

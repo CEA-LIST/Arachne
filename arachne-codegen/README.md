@@ -223,10 +223,10 @@ Example on an attribute:
 `uw-map` is used on a multi-valued containment `EReference` whose target class acts as a map entry carrier. The target class must expose:
 
 - one `EAttribute` used as the key,
-- one required single-valued feature used as the value,
+- one required single-valued feature, or one optional (`0..1`) `EAttribute`, used as the value,
 - the value feature must not be a non-containment reference.
 
-The key and value features default to `key` and `value`, but can be customized. In practice, use `lowerBound=1` and `upperBound=1` on the value feature; non-containment reference values are rejected.
+The key and value features default to `key` and `value`, but can be customized. In practice, use `lowerBound=1` and `upperBound=1` on the value feature; non-containment reference values are rejected. An optional attribute value is generated as a multi-value register over `Option<T>` (`VecLog<MVRegister<Option<T>>>`), so that a key put with no value is still read, with the value `None`; it cannot take a `datatype` override.
 
 ```xml
 <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1"
