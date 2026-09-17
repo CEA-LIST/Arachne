@@ -8,7 +8,10 @@ mod utils;
 use std::path::PathBuf;
 
 pub use config::Config;
-use ecore_rs::repr::{Class, Pack, idx, structural};
+use ecore_rs::{
+    ctx::Ctx,
+    repr::{Class, Pack, idx, structural},
+};
 pub use error::{ArachneError, Result};
 use heck::ToSnakeCase;
 use log::{debug, info, warn};
@@ -58,7 +61,11 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         .ctx
         .packs()
         .iter()
-        .filter(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .filter(|p| {
+            p.name() != "[root]"
+                && p.name() != "[builtin]"
+                && Some(p.idx) != parser.ctx.ecore_pack()
+        })
         .count()
         > 1
     {
@@ -129,6 +136,8 @@ pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
 ) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>, usize)> {
+    refuse_ecore_classes(&parser.ctx, pack)?;
+
     let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
     let mut references = Generator::new(REFERENCES_PATH_MOD);
     let mut package = Generator::new(PACKAGE_PATH_MOD);
@@ -256,6 +265,41 @@ pub fn generate_from_parser<'a>(
     package.register(fragment);
 
     Ok((classifiers, references, package, generated_class_count))
+}
+
+/// Refuses a package whose classes extend, or have features typed by, Ecore's own classes.
+///
+/// The parser builds those classes in, but only the package's own classes are generated, so the
+/// generated crate would name logs that it never defines.
+fn refuse_ecore_classes(ctx: &Ctx, pack: &Pack) -> Result<()> {
+    let mut uses = Vec::new();
+    for class in pack.classes().iter().map(|idx| &ctx[*idx]) {
+        for sup in class.sup().iter().filter(|idx| ctx.is_ecore_class(**idx)) {
+            uses.push(format!(
+                "class `{}` extends `{}`",
+                class.name(),
+                ctx[*sup].name()
+            ));
+        }
+        for feature in class.structural() {
+            if let Some(typ) = feature.typ
+                && ctx.is_ecore_class(typ)
+            {
+                uses.push(format!(
+                    "feature `{}.{}` is typed by `{}`",
+                    class.name(),
+                    feature.name,
+                    ctx[typ].name()
+                ));
+            }
+        }
+    }
+
+    if uses.is_empty() {
+        Ok(())
+    } else {
+        Err(ArachneError::EcoreClassesNotGenerated(uses.join("; ")))
+    }
 }
 
 fn collect_reachable_classes(
@@ -832,7 +876,6 @@ mod tests {
     /// The generator only emits the classes of the user's package, so a class extending one of
     /// Ecore's own classes gets a `*_super` field whose log type is never generated.
     #[test]
-    #[ignore = "reproduces generator emitting an uncompilable crate for a class extending an ecore class; fix pending"]
     fn refuses_a_class_extending_an_ecore_class() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
@@ -863,7 +906,6 @@ mod tests {
     /// Likewise a feature typed by one of Ecore's own classes refers to a type that is never
     /// generated.
     #[test]
-    #[ignore = "reproduces generator emitting an uncompilable crate for a feature typed by an ecore class; fix pending"]
     fn refuses_a_feature_typed_by_an_ecore_class() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"

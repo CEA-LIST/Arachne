@@ -26,6 +26,9 @@ pub enum ArachneError {
 
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
+
+    #[error("Ecore's own classes are not generated yet: {0}")]
+    EcoreClassesNotGenerated(String),
 }
 
 /// Specialized Result type for Arachne
