@@ -169,7 +169,6 @@ pub enum Protocol {
     LwwPolicy,
     FairPolicy,
     Event,
-    PureCRDT,
     QueryOperation,
     Sink,
     SinkEffect,
@@ -178,7 +177,6 @@ pub enum Protocol {
     PathSegment,
     ObjectPath,
     Interner,
-    InternalizeOp,
     BoxedLog,
 }
 
@@ -193,11 +191,10 @@ impl ToUseStatement for Protocol {
             Protocol::IsLog => format!("{}::state::log::IsLog", PROTOCOL_PREFIX),
             Protocol::Version => format!("{}::clock::version_vector::Version", PROTOCOL_PREFIX),
             Protocol::ReplicaIdx => format!("{}::replica::ReplicaIdx", PROTOCOL_PREFIX),
-            Protocol::LwwPolicy => format!("{}::policy::LwwPolicy", CRDT_PREFIX),
-            Protocol::FairPolicy => format!("{}::policy::FairPolicy", CRDT_PREFIX),
+            Protocol::LwwPolicy => format!("{}::crdt::policy::LwwPolicy", PROTOCOL_PREFIX),
+            Protocol::FairPolicy => format!("{}::crdt::policy::FairPolicy", PROTOCOL_PREFIX),
             Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
             Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
-            Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
             Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
             Protocol::EffectContext => {
@@ -211,12 +208,6 @@ impl ToUseStatement for Protocol {
             Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
             Protocol::Interner => format!("{}::broadcast::internalizer::Interner", PROTOCOL_PREFIX),
-            Protocol::InternalizeOp => {
-                format!(
-                    "{}::broadcast::internalizer::InternalizeOp",
-                    PROTOCOL_PREFIX
-                )
-            }
             Protocol::BoxedLog => format!("{}::state::log::BoxedLog", PROTOCOL_PREFIX),
         }
     }

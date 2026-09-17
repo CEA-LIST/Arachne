@@ -219,7 +219,7 @@ impl<'a> ReadAsEcoreGenerator<'a> {
             impl #path::EvalNested<ReadAsEcore> for #package_log {
                 fn execute_query(
                     &self,
-                    _q: ReadAsEcore,
+                    _q: &ReadAsEcore,
                 ) -> <ReadAsEcore as #path::QueryOperation>::Response {
                     let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
                     document_root.add_attribute("xmi:version", "2.0");
