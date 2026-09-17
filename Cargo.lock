@@ -409,8 +409,10 @@ name = "deepsize"
 version = "0.2.0"
 source = "git+https://github.com/leo-olivier/deepsize.git#2a68cc6ba42d22f55b82e0649fd1645031f20dcb"
 dependencies = [
+ "bimap",
  "deepsize_derive",
- "elsa 1.11.2 (git+https://github.com/Manishearth/elsa?rev=91944aacda886a054a8e3ba9aa91c73ea04de96c)",
+ "elsa",
+ "petgraph 0.8.3",
  "stable_deref_trait",
 ]
 
@@ -481,14 +483,6 @@ dependencies = [
 name = "elsa"
 version = "1.11.2"
 source = "git+https://github.com/Manishearth/elsa?rev=91944aacda886a054a8e3ba9aa91c73ea04de96c#91944aacda886a054a8e3ba9aa91c73ea04de96c"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
-name = "elsa"
-version = "1.11.2"
-source = "git+https://github.com/leo-olivier/elsa.git#4eebc5c2e6f990a27af969ef63502fea57f3c72e"
 dependencies = [
  "stable_deref_trait",
 ]
@@ -770,7 +764,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "moirai-crdt"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "deepsize",
  "moirai-fuzz",
@@ -808,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "moirai-macros"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "deepsize",
  "moirai-protocol",
@@ -818,12 +812,13 @@ dependencies = [
 
 [[package]]
 name = "moirai-protocol"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "bimap",
+ "castaway",
  "deepsize",
- "elsa 1.11.2 (git+https://github.com/leo-olivier/elsa.git)",
- "petgraph 0.6.5",
+ "elsa",
+ "petgraph 0.8.3",
  "rustc-hash 2.1.1",
  "smallvec",
 ]
@@ -950,6 +945,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

@@ -24,8 +24,11 @@ heck = "0.5.0"
 log = "0.4.29"
 owo-colors = "4"
 xml-builder = "0.5.4"
-moirai-protocol = { version = "*", path = "../../moirai/moirai-protocol" }
-moirai-crdt = { version = "*", path = "../../moirai/moirai-crdt" }
-moirai-macros = { version = "*", path = "../../moirai/moirai-macros" }
+# One Moirai for the whole repository, the model-plane checkout the generated
+# crates already build against: the generator and what it generates cannot be
+# allowed to see two different versions of the interface.
+moirai-protocol = { version = "*", path = "../../moirai-model-plane/moirai-protocol" }
+moirai-crdt = { version = "*", path = "../../moirai-model-plane/moirai-crdt" }
+moirai-macros = { version = "*", path = "../../moirai-model-plane/moirai-macros" }
 moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
 pathdiff = "0.2"
