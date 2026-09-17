@@ -1,6 +1,12 @@
-use ecore_rs::repr::{Class, Structural, annot::Val, structural::Typ as StructuralTyp};
+use ecore_rs::{
+    ctx::Ctx,
+    repr::{Class, Structural, annot::Val, structural::Typ as StructuralTyp},
+};
 
-use crate::codegen::datatype::crdt::{Counter, Flag, Primitive, Register, Set};
+use crate::codegen::{
+    datatype::crdt::{Counter, Flag, Primitive, Register, Set},
+    ecore::map_entry_spec,
+};
 
 const SEMANTICS_SOURCE: &str = "urn:arachne:semantics";
 const DATATYPE_KEY: &str = "datatype";
@@ -54,6 +60,12 @@ pub fn uw_map_spec(feature: &Structural) -> Option<UwMapSpec> {
             .cloned()
             .unwrap_or_else(|| "value".to_string()),
     })
+}
+
+/// The map a containment is generated as, if any: by its `uw-map` annotation, or by EMF's map
+/// entry convention if it contains Ecore's own `EStringToStringMapEntry`.
+pub fn map_spec(ctx: &Ctx, feature: &Structural) -> Option<UwMapSpec> {
+    uw_map_spec(feature).or_else(|| map_entry_spec(ctx, feature))
 }
 
 pub fn transparent_field(class: &Class) -> Option<String> {

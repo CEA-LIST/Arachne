@@ -28,7 +28,7 @@ pub use crate::{
         path_map::PathMap,
         res::{Res, WithCtx},
     },
-    repr::{self, builtin, idx},
+    repr::{self, builtin, ecore, idx},
     traits::*,
 };
 

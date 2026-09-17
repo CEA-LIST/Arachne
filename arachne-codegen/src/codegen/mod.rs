@@ -3,6 +3,7 @@ pub mod classifier;
 pub mod cycles;
 mod datatype;
 pub mod descriptor;
+pub(crate) mod ecore;
 mod feature;
 pub mod generate;
 pub mod generator;

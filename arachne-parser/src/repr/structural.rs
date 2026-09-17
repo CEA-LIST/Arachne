@@ -70,6 +70,8 @@ pub struct Structural {
     pub annotations: Annots,
     /// Indicates whether the feature value should resolve proxies.
     pub resolve_proxies: Option<bool>,
+    /// Raw `eKeys` of the reference, in document order; they are not resolved.
+    pub keys: Vec<String>,
 }
 impl Structural {
     pub fn new(name: impl Into<String>, kind: Typ, typ: idx::Class, bounds: Bounds) -> Self {
@@ -92,6 +94,7 @@ impl Structural {
             default_value_literal: None,
             annotations: Annots::with_capacity(2),
             resolve_proxies: None,
+            keys: Vec::new(),
         }
     }
 
@@ -120,6 +123,7 @@ impl Structural {
             default_value_literal: None,
             annotations: Annots::with_capacity(2),
             resolve_proxies: None,
+            keys: Vec::new(),
         }
     }
 
@@ -224,5 +228,15 @@ impl Structural {
     }
     pub fn add_annotation(&mut self, annot: Annot) {
         self.annotations.push(annot)
+    }
+    /// Raw `eKeys` of the reference, in document order.
+    ///
+    /// These are the paths of the target's attributes that identify a target within the
+    /// reference, as written in the XML attribute, *e.g.* `#//Item/name`, and are not resolved.
+    pub fn keys(&self) -> &[String] {
+        &self.keys
+    }
+    pub fn add_key(&mut self, key: impl Into<String>) {
+        self.keys.push(key.into())
     }
 }

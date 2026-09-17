@@ -1,7 +1,7 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
 use log::warn;
 
-use crate::codegen::classifier::is_instantiable_class;
+use crate::codegen::{classifier::is_instantiable_class, ecore::is_eobject, warnings::Warning};
 use crate::utils::hash::HashSet;
 
 /// A non-containment reference in the Ecore model.
@@ -27,6 +27,8 @@ pub struct ReferenceAnalysis {
     /// Classes that need vertex ID types (sources ∪ targets of non-containment refs).
     /// Ordered deterministically for stable code generation.
     pub referenceable_classes: Vec<idx::Class>,
+    /// References left out, and why.
+    pub warnings: Vec<Warning>,
 }
 
 impl ReferenceAnalysis {
@@ -50,6 +52,7 @@ impl ReferenceAnalysis {
         let mut refs = Vec::new();
         let mut seen_refs = HashSet::default();
         let mut referenceable_set = HashSet::default();
+        let mut warnings = Vec::new();
 
         for &class_idx in package_classes {
             let class = &ctx.classes()[*class_idx];
@@ -66,6 +69,23 @@ impl ReferenceAnalysis {
                     Some(t) => t,
                     None => continue,
                 };
+
+                // `EAnnotation.eModelElement`, the container of an annotation.
+                if ctx.is_ecore_class(class_idx) && feature.transient == Some(true) {
+                    warnings.push(Warning::TransientEcoreReferenceNotGenerated {
+                        feature: format!("{}.{}", class.name(), feature.name),
+                    });
+                    continue;
+                }
+
+                // `EAnnotation.references`, and any reference typed by `EObject`: it refers to an
+                // object of any class, which the typed graph has no arc for.
+                if is_eobject(ctx, target_idx) {
+                    warnings.push(Warning::AnyObjectReferenceNotSupported {
+                        feature: format!("{}.{}", class.name(), feature.name),
+                    });
+                    continue;
+                }
 
                 if !package_set.contains(&target_idx) {
                     warn!(
@@ -127,6 +147,7 @@ impl ReferenceAnalysis {
         Self {
             refs,
             referenceable_classes,
+            warnings,
         }
     }
 

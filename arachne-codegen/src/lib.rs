@@ -18,8 +18,9 @@ pub use parser::EcoreParser;
 
 use crate::{
     codegen::{
-        classifier::{ClassGenerator, is_instantiable_class},
+        classifier::{ClassGenerator, is_instantiable_class, is_uninhabited_polymorphic_class},
         cycles::analyze_cycles,
+        ecore::is_eobject,
         generate::Generate,
         generator::Generator,
         package::PackageGenerator,
@@ -60,7 +61,11 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         .ctx
         .packs()
         .iter()
-        .filter(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .filter(|p| {
+            p.name() != "[root]"
+                && p.name() != "[builtin]"
+                && Some(p.idx) != parser.ctx.ecore_pack()
+        })
         .count()
         > 1
     {
@@ -125,16 +130,26 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 }
 
 /// The package generation targets: the first that is neither the parser's
-/// `[root]` nor `[builtin]` bookkeeping package.
+/// `[root]` nor `[builtin]` bookkeeping package, nor the built-in Ecore
+/// package the parser adds when a metamodel names one of Ecore's own classes.
+// TODO: Consider allowing the user to specify a package name in the config
 pub fn find_user_package(ctx: &ecore_rs::ctx::Ctx) -> Result<&Pack> {
     ctx.packs()
         .iter()
-        .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+        .find(|p| {
+            p.name() != "[root]" && p.name() != "[builtin]" && Some(p.idx) != ctx.ecore_pack()
+        })
         .ok_or(ArachneError::NoValidPackageFound)
 }
 
 /// Generates code from a parsed Ecore context.
 /// Returns the generated classifiers CRDT objects and the generated reference management code
+///
+/// Ecore's own classes that the package's classes extend or use (see `ecore_rs::repr::ecore`)
+/// are generated with them, and take part in the analyses below as the package's classes do,
+/// except `EObject`, which has no feature and is never generated: a supertype `EObject` adds no
+/// field, and neither a containment nor a reference typed by `EObject` is generated, each with a
+/// warning naming the feature.
 pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
@@ -146,11 +161,30 @@ pub fn generate_from_parser<'a>(
     let cycle_analysis = analyze_cycles(&parser.ctx)?;
 
     let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    // The classes the analyses below range over: the package's, then Ecore's but `EObject`.
+    let ecore_classes: Vec<idx::Class> = match parser.ctx.ecore_pack() {
+        Some(ecore_pack) => parser.ctx[ecore_pack]
+            .classes()
+            .iter()
+            .copied()
+            .filter(|class_idx| !is_eobject(&parser.ctx, *class_idx))
+            .collect(),
+        None => Vec::new(),
+    };
+    let package_classes_and_ecore: Vec<idx::Class> = package_classes
+        .iter()
+        .chain(ecore_classes.iter())
+        .copied()
+        .collect();
     let package_class_set: std::collections::HashSet<idx::Class> =
-        package_classes.iter().copied().collect();
+        package_classes_and_ecore.iter().copied().collect();
 
-    let top_level_roots =
-        compute_top_level_roots(&parser.ctx, &package_classes, &package_class_set);
+    let top_level_roots = compute_top_level_roots(
+        &parser.ctx,
+        &package_classes,
+        &package_classes_and_ecore,
+        &package_class_set,
+    );
 
     if top_level_roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()).into());
@@ -165,6 +199,12 @@ pub fn generate_from_parser<'a>(
             &package_class_set,
         ));
     }
+    // An abstract class of Ecore that no generated class extends, such as `ENamedElement` reached
+    // as a subclass of `EModelElement`, is left out instead of being skipped with a warning.
+    reachable_classes.retain(|class_idx| {
+        !parser.ctx.is_ecore_class(*class_idx)
+            || !is_uninhabited_polymorphic_class(&parser.ctx, &parser.ctx[*class_idx])
+    });
 
     // Get all classes in the package
     let classes: Vec<&Class> = parser
@@ -176,11 +216,16 @@ pub fn generate_from_parser<'a>(
 
     // Sort classes topologically by inheritance hierarchy
     let sorted_classes = topological_sort(&parser.ctx, &classes);
-    let reachable_package_classes: Vec<idx::Class> = package_classes
+    // The package's classes and the classes of Ecore generated with them.
+    let reachable_package_classes: Vec<idx::Class> = package_classes_and_ecore
         .iter()
         .copied()
         .filter(|idx| reachable_classes.contains(idx))
         .collect();
+    let generated_class_count = reachable_package_classes
+        .iter()
+        .filter(|idx| !parser.ctx.is_ecore_class(**idx))
+        .count();
     let reference_analysis = analyze_references(&parser.ctx, &reachable_package_classes);
 
     debug!(
@@ -212,7 +257,6 @@ pub fn generate_from_parser<'a>(
     references.register(fragment);
 
     info!("Generating package...");
-    let generated_class_count = reachable_package_classes.len();
     let package_gen = PackageGenerator::new(
         &parser.ctx,
         pack.idx,
@@ -229,10 +273,15 @@ pub fn generate_from_parser<'a>(
     Ok((classifiers, references, package, generated_class_count))
 }
 
-/// Computes the top-level root classes of a package: the concrete,
-/// non-enum, non-interface classes no other concrete class contains — falling
-/// back to abstract classes with concrete descendants and no external
-/// container when there is no such concrete class.
+/// Computes the top-level root classes of a package: the instantiable,
+/// non-enum, non-interface classes no other instantiable class contains —
+/// falling back to abstract classes and interfaces with concrete descendants
+/// and no external container when there is no such instantiable class.
+///
+/// `package_classes` are the package's own classes, the only candidates for a
+/// root. `package_classes_and_ecore` adds the built-in Ecore classes the
+/// package reaches, which contain and are contained like the package's own and
+/// so must be searched when asking whether a candidate has a container.
 ///
 /// Shared by code generation and metamodel-descriptor emission, so both name
 /// the same roots. Empty when the package has no viable root; callers decide
@@ -240,17 +289,18 @@ pub fn generate_from_parser<'a>(
 fn compute_top_level_roots(
     ctx: &ecore_rs::ctx::Ctx,
     package_classes: &[idx::Class],
+    package_classes_and_ecore: &[idx::Class],
     package_class_set: &std::collections::HashSet<idx::Class>,
 ) -> Vec<idx::Class> {
     let concrete_containment_incoming =
-        compute_concrete_containment_incoming(ctx, package_classes, package_class_set);
+        compute_concrete_containment_incoming(ctx, package_classes_and_ecore, package_class_set);
 
     let mut top_level_roots: Vec<idx::Class> = package_classes
         .iter()
         .copied()
         .filter(|class_idx| {
             let class = &ctx.classes()[**class_idx];
-            class.is_concrete()
+            codegen::classifier::is_instantiable_class(class)
                 && !class.is_enum()
                 && !class.is_interface()
                 && !concrete_containment_incoming.contains(class_idx)
@@ -267,13 +317,12 @@ fn compute_top_level_roots(
             .filter(|class_idx| {
                 let class = &ctx.classes()[**class_idx];
                 !class.is_enum()
-                    && !class.is_interface()
-                    && !class.is_concrete()
+                    && (class.is_interface() || !class.is_concrete())
                     && has_concrete_descendant(ctx, *class_idx, package_class_set)
                     && abstract_family_has_no_external_container(
                         ctx,
                         *class_idx,
-                        package_classes,
+                        package_classes_and_ecore,
                         package_class_set,
                     )
             })
@@ -529,6 +578,41 @@ mod tests {
             classifiers.contains("unique_list:__classifiers::GraphLog<__classifiers::List<i16>>")
         );
         assert!(!classifiers.contains("__classifiers::ListLog"));
+    }
+
+    /// A key put without a value stays in the map, so an optional attribute value cannot be an
+    /// `OptionLog`, whose unset state `UWMapLog` does not read.
+    #[test]
+    fn uw_map_with_an_optional_attribute_value_uses_a_register_over_option() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" eType="#//Entry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Entry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (classifiers, _references) = generate_modules_from_str(ecore);
+
+        assert!(classifiers.contains(
+            "entries:__classifiers::UWMapLog<std::string::String,__classifiers::VecLog<__classifiers::MVRegister<Option<std::string::String>>>>"
+        ));
+        assert!(classifiers.contains("pubusemoirai_crdt::register::mv_register::MVRegister;"));
+        assert!(!classifiers.contains("record!(Entry"));
     }
 
     #[test]
@@ -901,5 +985,230 @@ mod tests {
         assert!(package.contains("XMLElement::new(\"json:String\")"));
         assert!(package.contains("XMLElement::new(\"json:Number\")"));
         assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
+    }
+
+    /// A reference typed by Ecore's `EObject` refers to an object of any class, which would need
+    /// an arc to a vertex of any kind: it is refused, with a warning naming the feature, and
+    /// nothing is emitted for it.
+    #[test]
+    fn reference_to_any_object_is_refused_with_a_warning() {
+        use crate::codegen::{
+            cycles::analyze_cycles,
+            generate::Generate,
+            package::PackageGenerator,
+            reference::{ReferenceGenerator, analysis::analyze_references},
+        };
+
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="parts" upperBound="-1" eType="#//Part" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="ports" upperBound="-1" eType="#//Port" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Part">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="subject" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="port" eType="#//Port"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Port"/>
+</ecore:EPackage>
+"##;
+
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        let ctx = &parser.ctx;
+        let pack = ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() == "test")
+            .expect("package should exist");
+        let classes: Vec<_> = pack.classes().iter().copied().collect();
+        let model = *classes
+            .iter()
+            .find(|idx| ctx[**idx].name() == "Model")
+            .unwrap();
+        let cycles = analyze_cycles(ctx).expect("cycle analysis should succeed");
+        let analysis = analyze_references(ctx, &classes);
+
+        let references = normalize(
+            ReferenceGenerator::new(ctx, classes.clone(), vec![model], &cycles)
+                .generate()
+                .expect("references should generate")
+                .tokens(),
+        );
+        // `Part.port` is generated as any reference is; nothing at all is emitted for
+        // `Part.subject`: no edge type, no arc, no vertex kind, and no `EcoreEObject` anywhere.
+        assert!(references.contains("PartPortEdge[0,1]"));
+        assert!(references.contains("PartToPort:PartId->PortId(PartPortEdge)"));
+        assert!(references.contains("vertices{PartId,PortId}"));
+        assert!(!references.contains("Subject"), "{references}");
+        assert!(!references.contains("EcoreEObject"), "{references}");
+        assert!(
+            !references.contains("object_from_sink_kind"),
+            "{references}"
+        );
+
+        let package = normalize(
+            PackageGenerator::new(ctx, pack.idx, vec![model], &analysis)
+                .generate()
+                .expect("package should generate")
+                .tokens(),
+        );
+        // No object is given a second vertex: the package adds one vertex per sink, and no more.
+        assert!(package.contains("__package::instance_from_sink_kind(kind,sink.path())"));
+        assert!(!package.contains("object_from_sink_kind"), "{package}");
+        assert_eq!(package.matches("ReferenceManager::AddVertex").count(), 1);
+
+        let warnings: Vec<String> = analysis.warnings.iter().map(|w| w.message()).collect();
+        assert_eq!(
+            warnings,
+            vec![
+                "Reference `Part.subject` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer."
+                    .to_string()
+            ]
+        );
+    }
+
+    /// Generates `ecore` and returns its classifiers, references and package, normalized, and the
+    /// warnings of the three.
+    fn generate_all_from_parser(parser: &EcoreParser) -> (String, String, String, Vec<String>) {
+        let pack = parser
+            .ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+            .expect("package should exist");
+        let (classifiers, references, package, _generated_class_count) =
+            generate_from_parser(parser, pack).expect("generation should succeed");
+        let warnings = [&classifiers, &references, &package]
+            .iter()
+            .flat_map(|generator| generator.warning_messages())
+            .collect();
+
+        (
+            normalize(classifiers.build()),
+            normalize(references.build()),
+            normalize(package.build()),
+            warnings,
+        )
+    }
+
+    /// `Element` extends Ecore's `EModelElement` and `Port` its `ENamedElement`, `Model` extends
+    /// `EObject`, and `Part.subject` is typed by `EObject`: the classes of Ecore they use are
+    /// generated with them, under the `Ecore` prefix, and `EObject` is not.
+    #[test]
+    fn ecore_classes_a_package_uses_are_generated_with_it() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../examples/pet_metamodels/ecore_builtins.ecore");
+        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+        let (classifiers, references, _package, warnings) = generate_all_from_parser(&parser);
+
+        // An explicit `EObject` supertype adds no field.
+        assert!(classifiers.contains(
+            "__classifiers::record!(Model{parts:__classifiers::NestedListLog<PartLog>,});"
+        ));
+        assert!(!classifiers.contains("EcoreEObject"));
+        // Inherited features, as from any supertype.
+        assert!(classifiers.contains(
+            "__classifiers::record!(Element{e_model_element_super:EcoreEModelElementLog,"
+        ));
+        assert!(classifiers.contains(
+            "__classifiers::record!(Port{e_named_element_super:EcoreENamedElementLog,});"
+        ));
+        assert!(classifiers.contains(
+            "__classifiers::record!(EcoreENamedElement{e_model_element_super:EcoreEModelElementLog,name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>,});"
+        ));
+        assert!(classifiers.contains(
+            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog)|EcoreENamedElement(EcoreENamedElementKind,EcoreENamedElementKindLog)|Element(ElementKind,ElementKindLog));"
+        ));
+        // `eAnnotations` is an ordered containment, `source` an optional string, `details` a map
+        // from a key to an optional string; `contents` and `eModelElement` are not generated.
+        assert!(classifiers.contains(
+            "__classifiers::record!(EcoreEModelElement{e_annotations:__classifiers::NestedListLog<__classifiers::BoxedLog<EcoreEAnnotationLog>>,});"
+        ));
+        assert!(classifiers.contains(
+            "__classifiers::record!(EcoreEAnnotation{e_model_element_super:EcoreEModelElementLog,source:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>,details:__classifiers::UWMapLog<std::string::String,__classifiers::VecLog<__classifiers::MVRegister<Option<std::string::String>>>>,});"
+        ));
+        assert!(!classifiers.contains("EcoreEStringToStringMapEntry"));
+
+        // A reference typed by `EObject` is not generated at all; `EModelElement` is expanded over
+        // the generated classes, as any class is.
+        assert!(!references.contains("EcoreEObject"), "{references}");
+        assert!(!references.contains("Subject"), "{references}");
+        assert!(!references.contains("References"), "{references}");
+        assert!(
+            references
+                .contains("PortToEcoreEAnnotation:PortId->EcoreEAnnotationId(PortAnnotatedEdge)")
+        );
+        assert!(references.contains("PortToPart:PortId->PartId(PortAnnotatedEdge)"));
+        assert!(references.contains("PortToPort:PortId->PortId(PortAnnotatedEdge)"));
+        assert!(!references.contains("EModelElementEdge"));
+
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w
+                    .starts_with("Containment `EAnnotation.contents` holds objects of any class")),
+            "{warnings:#?}"
+        );
+        for feature in ["Part.subject", "EAnnotation.references"] {
+            assert!(
+                warnings.iter().any(|w| *w
+                    == format!(
+                        "Reference `{feature}` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer."
+                    )),
+                "{warnings:#?}"
+            );
+        }
+        assert!(
+            warnings.iter().any(|w| w.starts_with(
+                "Reference `EAnnotation.eModelElement` of Ecore's own classes is transient"
+            )),
+            "{warnings:#?}"
+        );
+    }
+
+    /// A feature typed by one of Ecore's classes is generated as for any class, over the family of
+    /// that class among the generated classes, and contains its objects as any containment does.
+    #[test]
+    fn features_typed_by_ecore_classes_are_generated_like_any_feature() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="notes" upperBound="-1"
+            eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EAnnotation" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="elements" upperBound="-1"
+            eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EModelElement" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Part"
+        eSuperTypes="http://www.eclipse.org/emf/2002/Ecore#//EModelElement"/>
+</ecore:EPackage>
+"##;
+
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        let (classifiers, _references, package, _warnings) = generate_all_from_parser(&parser);
+
+        assert!(classifiers.contains(
+            "__classifiers::record!(Model{notes:__classifiers::NestedListLog<EcoreEAnnotationLog>,elements:__classifiers::NestedListLog<EcoreEModelElementKindLog>,});"
+        ));
+        assert!(classifiers.contains(
+            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog)|Part(Part,PartLog));"
+        ));
+        // `Part` is contained through `Model.elements`, so `Model` is the only root. The only
+        // non-containment reference the built-ins bring in is `EAnnotation.references`, typed by
+        // `EObject` and refused, so the package has no reference manager at all.
+        assert!(package.contains("pubenumTest{Model(crate::classifiers::Model)}"));
+        assert!(!package.contains("Part(crate::classifiers::Part)"));
+        assert!(!package.contains("AddReference"), "{package}");
     }
 }

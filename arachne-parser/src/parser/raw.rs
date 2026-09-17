@@ -24,6 +24,14 @@ pub struct Parser<'input> {
     column: usize,
 }
 
+/// A position of the parser, to come back to.
+#[derive(Debug, Clone, Copy)]
+struct Mark {
+    cursor: usize,
+    line: usize,
+    column: usize,
+}
+
 /// # Parsing entry point
 impl<'input> Parser<'input> {
     pub fn parse(txt: &'input str, ctx: &mut Ctx) -> Res<()> {
@@ -49,12 +57,34 @@ impl<'input> Parser<'input> {
     }
 
     fn top(&mut self, ctx: &mut Ctx) -> Res<()> {
-        // ignore xml header
-        let _ = self.until_char('<', true);
-        let _ = self.until_char('>', true);
+        self.prolog()?;
+        if !self.tail().starts_with("<ecore:EPackage") {
+            bail!("expected an `ecore:EPackage` root element")
+        }
 
         let mut path = ctx.enter_root_pack()?;
         self.at_path(&mut path)
+    }
+
+    /// Skips what may come before the root element: a byte order mark, then whitespace, comments,
+    /// the XML declaration and processing instructions, each only if present.
+    fn prolog(&mut self) -> Res<()> {
+        const BYTE_ORDER_MARK: char = '\u{feff}';
+        if self.tail().starts_with(BYTE_ORDER_MARK) {
+            self.cursor += BYTE_ORDER_MARK.len_utf8();
+        }
+
+        loop {
+            self.ws_and_comments();
+            if !self.tail().starts_with("<?") {
+                return Ok(());
+            }
+            let Some(end) = self.tail().find("?>") else {
+                bail!("unterminated XML declaration or processing instruction")
+            };
+            let instruction = &self.tail()[..end + "?>".len()];
+            self.raw_tag(instruction)?;
+        }
     }
 }
 
@@ -78,6 +108,26 @@ impl<'input> Parser<'input> {
 
     pub fn position(&self) -> String {
         format!("line {}, column {}", self.line, self.column)
+    }
+
+    fn mark(&self) -> Mark {
+        Mark {
+            cursor: self.cursor,
+            line: self.line,
+            column: self.column,
+        }
+    }
+
+    /// Moves the parser back to `mark`, so that an error is reported there.
+    fn rewind(&mut self, mark: Mark) {
+        let Mark {
+            cursor,
+            line,
+            column,
+        } = mark;
+        self.cursor = cursor;
+        self.line = line;
+        self.column = column;
     }
 
     pub fn fail_on_eoi(&self) -> Res<()> {
@@ -192,7 +242,7 @@ impl<'input> Parser<'input> {
     pub fn try_raw_tag(&mut self, tag: impl AsRef<str>) -> bool {
         let tag = tag.as_ref();
         let tail = self.tail();
-        if tag.len() < self.tail().len() && tail.starts_with(tag) {
+        if tail.starts_with(tag) {
             for c in tag.chars() {
                 if c == '\n' {
                     self.line += 1;
@@ -531,6 +581,8 @@ impl<'input> Parser<'input> {
             mut is_interface,
             mut sup_typs,
         ) = (None, None, None, None, None, None, None);
+        // where `eSuperTypes` is, since supertypes are resolved after the class body
+        let mut sup_typs_mark = None;
         // operations XML tags can be closed directly with `/>`, or have parameters and end with
         // `</eOperations>`; this flag indicates the former
         let mut early_done = false;
@@ -544,6 +596,7 @@ impl<'input> Parser<'input> {
                 break 'attributes;
             }
 
+            let mark = self.mark();
             let (key_pref, key, val) = self.xml_colon_ident_attribute()?;
 
             match (&*key_pref, key) {
@@ -606,6 +659,7 @@ impl<'input> Parser<'input> {
                         );
                     }
                     sup_typs = Some(val);
+                    sup_typs_mark = Some(mark);
                 }
                 (["xsi"], "type") => {
                     if let Some(typ) = typ.as_ref() {
@@ -652,7 +706,20 @@ impl<'input> Parser<'input> {
                     Some(bit)
                 }
             }) {
-                let sup_idx = class_ctx.resolve_etype(sup_typ)?;
+                let sup_idx = match class_ctx.resolve_etype(sup_typ) {
+                    Ok(sup_idx) => sup_idx,
+                    Err(err) => {
+                        // the parser stands past the class body, report the error at the attribute
+                        if let Some(mark) = sup_typs_mark {
+                            self.rewind(mark);
+                        }
+                        return Err(err.with_context(format!(
+                            "failed to resolve supertype `{}` of class `{}`",
+                            sup_typ,
+                            class_ctx.current().name(),
+                        )));
+                    }
+                };
                 class_ctx.add_sup_class(sup_idx);
             }
         }
@@ -702,17 +769,50 @@ impl<'input> Parser<'input> {
         Ok(())
     }
 
-    /// Parses everything **after** a `<eAnnotations` until a `</eAnnotations>`.
+    /// Parses everything **after** a `<eAnnotations` until a `/>` or a `</eAnnotations>`.
     ///
     /// Expects no leading whitespaces, as all parsers do except for the top-level one.
     pub fn annotation(&mut self) -> Res<repr::Annot> {
-        let source = self.named_xml_attribute("source")?;
-        self.ws();
-        self.tag(">")?;
-        let mut annot = repr::Annot::with_capacity(source, 3);
+        let (mut source, mut references) = (None, None);
+        // annotations XML tags can be closed directly with `/>`, or have details and end with
+        // `</eAnnotations>`; this flag indicates the former
+        let mut early_done = false;
 
-        // log::debug!("|==| post source:");
-        // self.debug_show_tail_n(2, "| ");
+        'attributes: loop {
+            self.ws();
+
+            if self.try_raw_tag("/>") {
+                early_done = true;
+                break 'attributes;
+            } else if self.try_raw_tag(">") {
+                break 'attributes;
+            }
+
+            let (key, val) = self.xml_ident_attribute()?;
+            match key {
+                "source" => {
+                    self.handle_redef("annotation", "source", source.as_ref(), val)?;
+                    source = Some(val);
+                }
+                "references" => {
+                    self.handle_redef("annotation", "references", references.as_ref(), val)?;
+                    references = Some(val);
+                }
+                _ => bail!(@unexpected("annotation attribute") key),
+            }
+        }
+
+        let source =
+            source.ok_or_else(|| error!(@unexpected("`eAnnotations`") "with no source"))?;
+        let mut annot = repr::Annot::with_capacity(source, 3);
+        for reference in references.into_iter().flat_map(str::split_whitespace) {
+            annot.add_reference(reference);
+        }
+
+        if early_done {
+            annot.shrink_to_fit();
+            return Ok(annot);
+        }
 
         // parse `<details
         'details: loop {
@@ -978,9 +1078,10 @@ impl<'input> Parser<'input> {
             mut default_value,
             mut default_value_literal,
             mut resolve_proxies,
+            mut keys,
         ) = (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None,
+            None, None, None, None, None,
         );
 
         let mut early_done = false;
@@ -1065,6 +1166,10 @@ impl<'input> Parser<'input> {
                     self.handle_redef("class", "resolveProxies", resolve_proxies.as_ref(), val)?;
                     resolve_proxies = Some(val);
                 }
+                ([], "eKeys") => {
+                    self.handle_redef("class", "eKeys", keys.as_ref(), val)?;
+                    keys = Some(val);
+                }
                 _ => bail!(@unexpected("structural feature attribute") key),
             }
 
@@ -1144,8 +1249,23 @@ impl<'input> Parser<'input> {
         }
         structural.try_set_default_value(default_value);
         structural.try_set_default_value_literal(default_value_literal);
-        if opposite.is_some() {
-            warn!("`eOpposite` attributes are currently not supported, ignoring")
+        for key in keys.into_iter().flat_map(str::split_whitespace) {
+            structural.add_key(key);
+        }
+        if unsettable.is_some_and(|unsettable| helpers::bool(unsettable).unwrap_or(false)) {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `unsettable=\"true\"`, which is currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+            )
+        }
+        if let Some(opposite) = opposite {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` attributes are currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+                opposite,
+            )
         }
 
         // If early_done, parse nested content like eAnnotations

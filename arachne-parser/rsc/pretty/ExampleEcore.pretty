@@ -1,0 +1,43 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - laboratory #2
+    class Person [ecore:EClass] #10
+      subers: Student, Teacher
+      structural features:
+      - `name`: EAttribute of [0, 1] `EString`
+    class Student [ecore:EClass] #11
+      supers: Person
+      structural features:
+      - `kind`: EAttribute of [1, 1] `StudentKind`
+      - `advisor`: EReference of [0, 1] `Teacher`
+      - `enrolls`: EReference of [1, 1] `Course`
+      - `StudentID`: EAttribute of [0, 1] `EString`
+    class StudentKind [ecore:EEnum] #12
+    class Teacher [ecore:EClass] #13
+      supers: Person, Researcher
+      structural features:
+      - `advises`: EReference of [0, ∞[ `Student`
+      - `address`: EAttribute of [0, 1] `Address`
+      - `teaches`: EReference of [0, ∞[ `Course`
+    class Course [ecore:EClass] #14
+    class Address [ecore:EDataType] #15
+    class Researcher [ecore:EClass] #16
+      subers: Teacher
+      structural features:
+      - `manages`: EReference of [0, ∞[ `Researcher`
+    class Laboratory [ecore:EClass] #17
+      supers: ILaboratory
+      structural features:
+      - `researchers`: EReference of [0, ∞[ `Teacher`
+    class ILaboratory [ecore:EClass] #18
+      subers: Laboratory

@@ -2,6 +2,7 @@ prelude! {}
 
 pub mod bounds;
 pub mod builtin;
+pub mod ecore;
 pub mod idx;
 pub mod structural;
 
@@ -12,6 +13,7 @@ pub mod annot {
     pub type Source = String;
     pub type Key = String;
     pub type Val = String;
+    pub type Reference = String;
 }
 
 /// A package/class annotation.
@@ -22,6 +24,8 @@ pub mod annot {
 pub struct Annot {
     source: annot::Source,
     details: HashMap<annot::Key, annot::Val>,
+    /// Raw `references` of the annotation, in document order; they are not resolved.
+    references: Vec<annot::Reference>,
 }
 
 pub type Annots = Vec<Annot>;
@@ -38,11 +42,13 @@ impl Annot {
         Self {
             source: source.into(),
             details: HashMap::with_capacity(details_capa),
+            references: Vec::new(),
         }
     }
 
     pub fn shrink_to_fit(&mut self) {
-        self.details.shrink_to_fit()
+        self.details.shrink_to_fit();
+        self.references.shrink_to_fit()
     }
 
     pub fn source(&self) -> &str {
@@ -50,6 +56,16 @@ impl Annot {
     }
     pub fn details(&self) -> &HashMap<annot::Key, annot::Val> {
         &self.details
+    }
+    /// Raw `references` of the annotation, in document order.
+    ///
+    /// These are the paths as written in the XML attribute, *e.g.* `#//Class/feature`, and are not
+    /// resolved.
+    pub fn references(&self) -> &[annot::Reference] {
+        &self.references
+    }
+    pub fn add_reference(&mut self, reference: impl Into<annot::Reference>) {
+        self.references.push(reference.into())
     }
 
     /// Same as [`HashMap`]'s `insert` function, but fails with context on overwrite.
@@ -177,11 +193,46 @@ impl Path {
             return Ok(idx);
         }
 
+        if let Some(classifier) = ecore::classifier_path(s) {
+            return Self::resolve_ecore_classifier(ctx, classifier);
+        }
+
         let rel_pref = "#//";
         if let Some(s) = s.strip_prefix(rel_pref) {
             Self::resolve_relative_etype(ctx.path().clone(), ctx.ctx_mut(), s)
         } else {
             bail!("unsupported `eType` path `{}`", s);
+        }
+    }
+
+    /// Resolves the path of a classifier inside Ecore, see [`ecore::classifier_path`].
+    ///
+    /// If a package on the current path is Ecore itself, the classifier is one of that package's,
+    /// with forward referencing, and nothing is added to the context. Otherwise it must be one of
+    /// the classes of [`ecore`], added to the context the first time.
+    fn resolve_ecore_classifier(ctx: &mut ctx::PathCtx, classifier: &str) -> Res<idx::Class> {
+        let ecore_itself = ctx
+            .path()
+            .iter()
+            .filter(|p_idx| ctx.ctx()[*p_idx].ns_uri() == Some(ecore::NS_URI))
+            .last();
+        if let Some(p_idx) = ecore_itself {
+            let path = Path::of_idx(ctx.ctx(), p_idx);
+            return Self::resolve_relative_etype(path, ctx.ctx_mut(), classifier);
+        }
+
+        match ecore::Typ::from_name(classifier) {
+            Some(typ) => ctx.ctx_mut().ecore_class_idx(typ),
+            None => {
+                let supported = ecore::Typ::ALL.map(|typ| format!("`{typ}`"));
+                let (last, others) = supported.split_last().expect("[fatal] no Ecore class");
+                bail!(
+                    "unsupported Ecore class `{}`, the supported ones are {} and {}",
+                    classifier,
+                    others.join(", "),
+                    last,
+                )
+            }
         }
     }
 
@@ -385,7 +436,8 @@ pub struct Class {
     instance_class_name: Option<String>,
     literals: Vec<ELit>,
     annotations: Annots,
-    sup: BTreeSet<idx::Class>,
+    /// Supertypes in the order `eSuperTypes` declares them, without duplicates.
+    sup: Vec<idx::Class>,
     sub: BTreeSet<idx::Class>,
     structural: Vec<Structural>,
     operations: Operations,
@@ -429,7 +481,7 @@ impl Class {
             is_interface: is_interface.unwrap_or(false),
             literals: ELits::with_capacity(7),
             annotations: Annots::with_capacity(3),
-            sup: BTreeSet::new(),
+            sup: Vec::new(),
             sub: BTreeSet::new(),
             structural: Vec::with_capacity(5),
             operations: Operations::with_capacity(7),
@@ -449,11 +501,12 @@ impl Class {
             is_interface: _,
             literals,
             annotations,
-            sup: _,
+            sup,
             sub: _,
             structural,
             operations,
         } = self;
+        sup.shrink_to_fit();
         literals.shrink_to_fit();
         annotations.shrink_to_fit();
         structural.shrink_to_fit();
@@ -517,11 +570,20 @@ impl Class {
         &self.typ
     }
 
-    pub fn sup(&self) -> &BTreeSet<idx::Class> {
+    /// Supertypes in the order `eSuperTypes` declares them.
+    ///
+    /// EMF lists inherited features in this order, and generates an implementation class that
+    /// extends the implementation of the first one.
+    pub fn sup(&self) -> &[idx::Class] {
         &self.sup
     }
+    /// Appends `sup` to the supertypes, unless it is one already; returns true if it was not.
     pub fn add_sup(&mut self, sup: idx::Class) -> bool {
-        self.sup.insert(sup)
+        let is_new = !self.sup.contains(&sup);
+        if is_new {
+            self.sup.push(sup)
+        }
+        is_new
     }
 
     pub fn sub(&self) -> &BTreeSet<idx::Class> {

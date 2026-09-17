@@ -10,12 +10,15 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{DatatypeOverride, datatype_override, transparent_field, uw_map_spec},
+        annotation::{
+            DatatypeOverride, datatype_override, map_spec, transparent_field, uw_map_spec,
+        },
         cycles::CycleAnalysis,
         datatype::{
             crdt::{Crdt, Map as CrdtMap, Named, NestedCrdt, Primitive, Register, SimpleCrdt},
             to_crdt::ToCrdt,
         },
+        ecore::is_eobject,
         feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
@@ -134,6 +137,17 @@ impl<'a> ClassGenerator<'a> {
                     ecore_rs::repr::structural::Typ::EAttribute => {
                         attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
                     }
+                    ecore_rs::repr::structural::Typ::EReference
+                        if f.containment && f.typ.is_some_and(|typ| is_eobject(self.ctx, typ)) =>
+                    {
+                        refs.push(Fragment::new(
+                            TokenStream::new(),
+                            vec![],
+                            vec![Warning::AnyObjectContainmentNotSupported {
+                                feature: format!("{}.{}", self.class.name(), f.name),
+                            }],
+                        ));
+                    }
                     ecore_rs::repr::structural::Typ::EReference if f.containment => {
                         let target_is_uninhabited = if let Some(target_idx) = f.typ {
                             let target = &self.ctx.classes()[*target_idx];
@@ -164,6 +178,8 @@ impl<'a> ClassGenerator<'a> {
     }
 
     /// Compute inherited field names and types from superclasses
+    ///
+    /// Ecore's `EObject` has no feature, so a supertype `EObject` has no field.
     fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>, Vec<Import>) {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
@@ -171,6 +187,7 @@ impl<'a> ClassGenerator<'a> {
             .class
             .sup()
             .iter()
+            .filter(|idx| !is_eobject(self.ctx, **idx))
             .map(|idx| &self.ctx.classes()[**idx])
             .collect::<Vec<_>>();
 
@@ -219,7 +236,7 @@ impl<'a> ClassGenerator<'a> {
             && incoming_features.iter().all(|feature| {
                 feature.kind == structural::Typ::EReference
                     && feature.containment
-                    && uw_map_spec(feature).is_some()
+                    && map_spec(self.ctx, feature).is_some()
             })
     }
 

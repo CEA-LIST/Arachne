@@ -28,6 +28,22 @@ pub enum Warning {
         annotation: String,
         reason: String,
     },
+    /// A containment typed by Ecore's `EObject`, such as `EAnnotation.contents`, is not generated
+    AnyObjectContainmentNotSupported {
+        /// `Class.feature`
+        feature: String,
+    },
+    /// A non-containment reference typed by Ecore's `EObject`, such as `EAnnotation.references`,
+    /// is not generated: it would need an arc whose target is a vertex of any kind
+    AnyObjectReferenceNotSupported {
+        /// `Class.feature`
+        feature: String,
+    },
+    /// A transient reference of Ecore's own classes, `EAnnotation.eModelElement`, is not generated
+    TransientEcoreReferenceNotGenerated {
+        /// `Class.feature`
+        feature: String,
+    },
 }
 
 impl Warning {
@@ -76,6 +92,24 @@ impl Warning {
                 format!(
                     "Feature `{}` has unsupported annotation `{}`: {}.",
                     feature, annotation, reason
+                )
+            }
+            Warning::AnyObjectContainmentNotSupported { feature } => {
+                format!(
+                    "Containment `{}` holds objects of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated, and nothing it contains is replicated.",
+                    feature
+                )
+            }
+            Warning::AnyObjectReferenceNotSupported { feature } => {
+                format!(
+                    "Reference `{}` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer.",
+                    feature
+                )
+            }
+            Warning::TransientEcoreReferenceNotGenerated { feature } => {
+                format!(
+                    "Reference `{}` of Ecore's own classes is transient, the back-pointer of a containment: it is not generated.",
+                    feature
                 )
             }
             Warning::UnsupportedFeatureProperty {

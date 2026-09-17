@@ -157,6 +157,30 @@ Containment and non-containment references are mapped differently.
 
 Only references whose instantiable source and target classes are part of the generated reachable package slice are represented. References to classes outside that slice are skipped with a warning.
 
+A non-containment reference typed by Ecore's `EObject` refers to an object of any class. It is **not supported**: nothing is generated for it, with a warning naming the feature, and the references it would hold are not replicated. Storing it needs an arc whose target is a vertex of any kind, which the typed graph of Moirai does not offer: every arc of a `typed_graph!` schema names one source vertex kind and one target vertex kind. Projecting it onto the instantiable classes of the slice, as a reference to an ordinary class is projected, would declare one arc per class and does not scale (on SysON's SysML metamodel, one such reference over 167 concrete classes is 27,889 arcs); giving every object a second vertex of an `EObject` kind would cost a second vertex operation on every object create and update, in every metamodel that has such a reference. Both were rejected in favour of the refusal.
+
+### Ecore's own classes
+
+A metamodel may extend or use some of Ecore's own classes, for instance SysON's SysML `Element` extends `EModelElement` so that its objects carry annotations. The parser builds in `EObject`, `EModelElement`, `ENamedElement`, `EAnnotation` and `EStringToStringMapEntry` when a metamodel refers to them (by `http://www.eclipse.org/emf/2002/Ecore#//X` or by `platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//X`), and the generator emits those that the package's generated classes extend or use, transitively (a class extending `EModelElement` brings in `EAnnotation`), and only those. `EObject` itself is never emitted.
+
+Their generated Rust types take the reserved prefix `Ecore`: `EcoreEAnnotation`, `EcoreEAnnotationLog`, `EcoreEModelElementKind`, `EcoreEAnnotationId` and so on. A class of the metamodel named like one of Ecore's (`EAnnotation`) keeps its name; one whose name clashes with a prefixed name is renamed with the `Model` suffix, as for any other clash. Fields are named as for any supertype, for example `e_model_element_super: EcoreEModelElementLog`.
+
+| Ecore                                                                  | Generated representation                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EObject` as a supertype                                               | Nothing: no field.                                                                                                                                                                                                                                                        |
+| `EModelElement`, `ENamedElement`, `EAnnotation` as supertypes          | As any supertype: a `*_super` field, and a union family over the generated subclasses.                                                                                                                                                                                   |
+| `EModelElement.eAnnotations`                                           | As any ordered many-valued containment: `NestedListLog` of `EcoreEAnnotationLog`.                                                                                                                                                                                        |
+| `EAnnotation.source`, `ENamedElement.name`                             | As any optional `EString`: `OptionLog<GraphLog<List<char>>>`.                                                                                                                                                                                                            |
+| `EAnnotation.details`                                                  | A map from the key to an optional string, `UWMapLog<String, VecLog<MVRegister<Option<String>>>>`: keys are unique, concurrent puts on one key keep every value written until the next put, a remove loses to a concurrent put, and a key put with no value is read with `None`. |
+| `EAnnotation.references`, and any non-containment reference typed by `EObject` | **Not supported.** Not generated, with a warning naming the feature: it would need an arc to a vertex of any kind, which the typed graph does not offer. See [Management of References](#management-of-references).                                                          |
+| `EAnnotation.contents`, and any containment typed by `EObject`         | **Not supported.** Not generated, with a warning naming the feature: the objects it contains are not replicated.                                                                                                                                                         |
+| `EAnnotation.eModelElement`                                            | Not generated, with a warning: it is the transient back-pointer of `eAnnotations`.                                                                                                                                                                                       |
+| Features typed by `EModelElement`, `ENamedElement` or `EAnnotation`    | As for any class, over that class's family among the generated classes.                                                                                                                                                                                                  |
+
+`details` is recognised by EMF's convention for maps: a many-valued containment of a class whose `instanceClassName` is `java.util.Map$Entry` and whose features are `key` and `value`. Only Ecore's own `EStringToStringMapEntry` is recognised this way; a metamodel's own entry classes are generated as contained objects unless annotated as `uw-map`. Unlike EMF's `EMap`, the generated map keeps no order among its entries, cannot hold two entries with the same key, and holds a value as a whole string rather than as collaboratively edited text.
+
+`EModelElement.getEAnnotation` is skipped with a warning, as every operation is.
+
 ### Operations
 
 The code generator intentionally does not support Ecore operations at this stage. Every `EOperation` is skipped during generation and reported as a warning. This decision is primarily motivated by the semantic constraints of CRDTs and by limitations of the Ecore metamodel.
@@ -223,10 +247,10 @@ Example on an attribute:
 `uw-map` is used on a multi-valued containment `EReference` whose target class acts as a map entry carrier. The target class must expose:
 
 - one `EAttribute` used as the key,
-- one required single-valued feature used as the value,
+- one required single-valued feature, or one optional (`0..1`) `EAttribute`, used as the value,
 - the value feature must not be a non-containment reference.
 
-The key and value features default to `key` and `value`, but can be customized. In practice, use `lowerBound=1` and `upperBound=1` on the value feature; non-containment reference values are rejected.
+The key and value features default to `key` and `value`, but can be customized. In practice, use `lowerBound=1` and `upperBound=1` on the value feature; non-containment reference values are rejected. An optional attribute value is generated as a multi-value register over `Option<T>` (`VecLog<MVRegister<Option<T>>>`), so that a key put with no value is still read, with the value `None`; it cannot take a `datatype` override.
 
 ```xml
 <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1"

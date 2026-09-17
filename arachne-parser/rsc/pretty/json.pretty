@@ -1,0 +1,39 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - json #2
+    class Json [ecore:EClass] #10
+      subers: Array, Object, String, Number, Boolean
+    class Array [ecore:EClass] #11
+      supers: Json
+      structural features:
+      - `items`: EReference of [0, ∞[ `Json`
+    class Object [ecore:EClass] #12
+      supers: Json
+      structural features:
+      - `entry`: EReference of [0, ∞[ `Entry`
+    class Entry [ecore:EClass] #13
+      structural features:
+      - `key`: EAttribute of [1, 1] `EString`
+      - `value`: EReference of [1, 1] `Json`
+    class String [ecore:EClass] #14
+      supers: Json
+      structural features:
+      - `value`: EAttribute of [1, 1] `EString`
+    class Number [ecore:EClass] #15
+      supers: Json
+      structural features:
+      - `value`: EAttribute of [1, 1] `EDouble`
+    class Boolean [ecore:EClass] #16
+      supers: Json
+      structural features:
+      - `value`: EAttribute of [1, 1] `EBoolean`

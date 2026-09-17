@@ -43,7 +43,11 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         let analysis = analyze_references(self.ctx, &self.pack_classes);
 
         if !analysis.has_references() {
-            return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
+            return Ok(Fragment::new(
+                TokenStream::new(),
+                vec![],
+                analysis.warnings.clone(),
+            ));
         }
 
         debug!("Generating instance_from_sink_kind...");
@@ -86,7 +90,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             Import::Protocol(Protocol::ObjectPath),
         ];
 
-        Ok(Fragment::new(tokens, imports, vec![]))
+        Ok(Fragment::new(tokens, imports, analysis.warnings.clone()))
     }
 }
 
