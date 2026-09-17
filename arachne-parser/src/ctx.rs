@@ -2162,4 +2162,56 @@ mod tests {
             "the error names neither `Derived` nor its supertype: {error}"
         );
     }
+
+    /// `Class` keeps its supertypes in a `BTreeSet`, so they come back ordered by class index,
+    /// that is by first mention in the file, and not in the order `eSuperTypes` declares them,
+    /// which EMF uses to order inherited features and to pick the implementation's base class.
+    #[test]
+    #[ignore = "reproduces parser losing the declared order of supertypes; fix pending"]
+    fn keeps_supertypes_in_declaration_order() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="A" abstract="true"/>
+    <eClassifiers xsi:type="ecore:EClass" name="B" abstract="true"/>
+    <eClassifiers xsi:type="ecore:EClass" name="C" abstract="true"/>
+    <eClassifiers xsi:type="ecore:EClass" name="D" eSuperTypes="#//C #//A #//B"/>
+    <eClassifiers xsi:type="ecore:EClass" name="E" eSuperTypes="#//Later #//A"/>
+    <eClassifiers xsi:type="ecore:EClass" name="F" eSuperTypes="#//B #//A #//B"/>
+    <eClassifiers xsi:type="ecore:EClass" name="Later" abstract="true"/>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).unwrap_or_else(|e| panic!("refused: {e}"));
+        let test = pack_named(&ctx, "test");
+        let sups = |name: &str| {
+            class_named(&ctx, test, name)
+                .sup()
+                .iter()
+                .map(|idx| ctx[*idx].name().to_string())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(sups("D"), ["C", "A", "B"]);
+        assert_eq!(sups("E"), ["Later", "A"]);
+        assert_eq!(sups("F"), ["B", "A"]);
+
+        let subs = |name: &str| {
+            class_named(&ctx, test, name)
+                .sub()
+                .iter()
+                .map(|idx| ctx[*idx].name().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(subs("A"), ["D", "E", "F"]);
+        assert_eq!(subs("B"), ["D", "F"]);
+        assert_eq!(subs("Later"), ["E"]);
+
+        assert!(ctx.to_pretty_string().contains("supers: C, A, B"));
+    }
 }
