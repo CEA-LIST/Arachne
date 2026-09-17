@@ -55,7 +55,7 @@
 //! claim more than the file says:
 //!
 //! - **`leaf` is `Declared` only for [`LeafRule::Text`].** `EString` maps to
-//!   `EventGraph<List<char>>` with no parameter left over, so the declared
+//!   `GraphLog<List<char>>` with no parameter left over, so the declared
 //!   `eType` decided all of it. Every other leaf carries a parameter Ecore
 //!   cannot express — a counter's resettability, a flag's winning side, a
 //!   register's tie-break — and Arachne fills it in, so the source is
@@ -726,7 +726,7 @@ mod tests {
     /// construction the generator emits on the right.
     fn leaf_log(leaf: &LeafRule, rust: &str) -> String {
         match leaf {
-            LeafRule::Text => "EventGraph<List<char>>".to_string(),
+            LeafRule::Text => "GraphLog<List<char>>".to_string(),
             LeafRule::Counter { .. } => format!("VecLog<Counter<{rust}>>"),
             LeafRule::Flag {
                 wins: FlagWins::Enable,
@@ -814,8 +814,9 @@ mod tests {
     /// the private classifiers module dropped, `Box` dropped and every space
     /// squeezed out.
     ///
-    /// `Box` is a Rust representation choice the cycle analysis makes so a log
-    /// has a finite size; it changes no merge, and the rule does not name it.
+    /// `Box` — `BoxedLog` since Moirai v0.6 — is a Rust representation choice
+    /// the cycle analysis makes so a log has a finite size; it changes no
+    /// merge, and the rule does not name it.
     fn normalize(tokens: &proc_macro2::TokenStream) -> String {
         let rendered = tokens.to_string();
         let (_, typ) = rendered
@@ -825,25 +826,30 @@ mod tests {
         for chunk in typ.replace("__classifiers :: ", "").split_whitespace() {
             out.push_str(chunk);
         }
-        while let Some(start) = out.find("Box<") {
+        while let Some((start, opener)) = ["BoxedLog<", "Box<"]
+            .iter()
+            .filter_map(|opener| out.find(opener).map(|start| (start, *opener)))
+            .min_by_key(|(start, _)| *start)
+        {
+            let width = opener.len();
             let mut depth = 0usize;
             let mut end = None;
-            for (offset, ch) in out[start + 4..].char_indices() {
+            for (offset, ch) in out[start + width..].char_indices() {
                 match ch {
                     '<' => depth += 1,
                     '>' if depth == 0 => {
-                        end = Some(start + 4 + offset);
+                        end = Some(start + width + offset);
                         break;
                     }
                     '>' => depth -= 1,
                     _ => {}
                 }
             }
-            let end = end.expect("a balanced `Box<...>`");
+            let end = end.expect("a balanced `Box<...>` or `BoxedLog<...>`");
             out = format!(
                 "{}{}{}",
                 &out[..start],
-                &out[start + 4..end],
+                &out[start + width..end],
                 &out[end + 1..]
             );
         }
@@ -991,7 +997,8 @@ mod tests {
     /// record is empty.
     #[test]
     fn no_field_is_emitted_for_a_non_containment_reference() {
-        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore"))
+            .expect("behavior_tree.ecore should parse");
         let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         let (classifiers, _references, _package, _count) =
             crate::generate_from_parser(&parser, pack).expect("generation should succeed");
@@ -1011,7 +1018,8 @@ mod tests {
     /// for a policy nobody wrote down.
     #[test]
     fn ip3_bt_reports_five_house_defaults_all_on_ordered() {
-        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore"))
+            .expect("behavior_tree.ecore should parse");
         let ctx = &parser.ctx;
         let pack = crate::find_user_package(ctx).expect("a user package");
 
@@ -1291,7 +1299,8 @@ mod tests {
     /// memory, this checks that the rule survives the descriptor.
     #[test]
     fn ip4_from_descriptor_reproduces_spec_11_section_7() {
-        let parser = EcoreParser::from_file(example("behavior_tree.ecore")).expect("behavior_tree.ecore should parse");
+        let parser = EcoreParser::from_file(example("behavior_tree.ecore"))
+            .expect("behavior_tree.ecore should parse");
         let pack = crate::find_user_package(&parser.ctx).expect("a user package");
         let descriptor =
             crate::codegen::descriptor::descriptor_json(&parser.ctx, pack).expect("a descriptor");
@@ -1599,9 +1608,9 @@ mod tests {
                     .map(|text| (*text).to_string())
                     .or_else(|| info.payload().downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "panicked".to_string());
-                let at = info
-                    .location()
-                    .map_or_else(String::new, |loc| format!(" at {}:{}", loc.file(), loc.line()));
+                let at = info.location().map_or_else(String::new, |loc| {
+                    format!(" at {}:{}", loc.file(), loc.line())
+                });
                 *PANIC_MESSAGE.lock().expect("the panic slot") = Some(format!("{payload}{at}"));
             }));
         });
@@ -1702,7 +1711,9 @@ mod tests {
             let mut here: Vec<PathBuf> = Vec::new();
             let mut deeper: Vec<PathBuf> = Vec::new();
             for entry in entries.flatten() {
-                let Ok(kind) = entry.file_type() else { continue };
+                let Ok(kind) = entry.file_type() else {
+                    continue;
+                };
                 let path = entry.path();
                 if kind.is_dir() {
                     let name = entry.file_name();
@@ -1904,73 +1915,73 @@ mod tests {
             _ => None,
         };
 
-        let (shape_column, leaf_column, arm, expected, emitted_column, agree) = match (&rule,
-            emitted)
-        {
-            (MergeRule::Unsupported { reason }, _) => (
-                String::new(),
-                reason.as_str().to_string(),
-                String::new(),
-                String::new(),
-                String::new(),
-                "no-field".to_string(),
-            ),
-            (MergeRule::Reference { many, .. }, _) => (
-                if *many { "many" } else { "single" }.to_string(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                "no-field".to_string(),
-            ),
-            (_, Some(Err(error))) => (
-                match &rule {
-                    MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } => {
-                        shape_name(shape)
-                    }
-                    _ => String::new(),
-                },
-                String::new(),
-                String::new(),
-                String::new(),
-                error,
-                "generator-refused".to_string(),
-            ),
-            (MergeRule::Attribute { shape, leaf }, Some(Ok(emitted))) => {
-                let declared = feature
-                    .typ
-                    .and_then(|typ| ctx.classes().get(*typ))
-                    .expect("a generated attribute has a resolved type");
-                let rust = rust_type(declared);
-                let expected = attribute_type(shape, leaf, &rust);
-                let agree = if expected == emitted { "yes" } else { "NO" };
-                (
-                    shape_name(shape),
-                    format!("{leaf:?}"),
-                    leaf_arm(shape, leaf),
-                    expected,
-                    emitted,
-                    agree.to_string(),
-                )
-            }
-            (MergeRule::Containment { shape, target }, Some(Ok(emitted))) => {
-                let target = ctx
-                    .classes()
-                    .get(target.index())
-                    .expect("a containment target is a classifier");
-                let expected = containment_type(shape, target);
-                let agree = if expected == emitted { "yes" } else { "NO" };
-                (
-                    shape_name(shape),
+        let (shape_column, leaf_column, arm, expected, emitted_column, agree) =
+            match (&rule, emitted) {
+                (MergeRule::Unsupported { reason }, _) => (
+                    String::new(),
+                    reason.as_str().to_string(),
                     String::new(),
                     String::new(),
-                    expected,
-                    emitted,
-                    agree.to_string(),
-                )
-            }
-            (_, None) => unreachable!("only a reference and an unsupported feature emit nothing"),
-        };
+                    String::new(),
+                    "no-field".to_string(),
+                ),
+                (MergeRule::Reference { many, .. }, _) => (
+                    if *many { "many" } else { "single" }.to_string(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    "no-field".to_string(),
+                ),
+                (_, Some(Err(error))) => (
+                    match &rule {
+                        MergeRule::Attribute { shape, .. }
+                        | MergeRule::Containment { shape, .. } => shape_name(shape),
+                        _ => String::new(),
+                    },
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    error,
+                    "generator-refused".to_string(),
+                ),
+                (MergeRule::Attribute { shape, leaf }, Some(Ok(emitted))) => {
+                    let declared = feature
+                        .typ
+                        .and_then(|typ| ctx.classes().get(*typ))
+                        .expect("a generated attribute has a resolved type");
+                    let rust = rust_type(declared);
+                    let expected = attribute_type(shape, leaf, &rust);
+                    let agree = if expected == emitted { "yes" } else { "NO" };
+                    (
+                        shape_name(shape),
+                        format!("{leaf:?}"),
+                        leaf_arm(shape, leaf),
+                        expected,
+                        emitted,
+                        agree.to_string(),
+                    )
+                }
+                (MergeRule::Containment { shape, target }, Some(Ok(emitted))) => {
+                    let target = ctx
+                        .classes()
+                        .get(target.index())
+                        .expect("a containment target is a classifier");
+                    let expected = containment_type(shape, target);
+                    let agree = if expected == emitted { "yes" } else { "NO" };
+                    (
+                        shape_name(shape),
+                        String::new(),
+                        String::new(),
+                        expected,
+                        emitted,
+                        agree.to_string(),
+                    )
+                }
+                (_, None) => {
+                    unreachable!("only a reference and an unsupported feature emit nothing")
+                }
+            };
 
         vec![
             rel.to_string(),
@@ -2096,7 +2107,10 @@ mod tests {
         let mut done: BTreeMap<String, ()> = BTreeMap::new();
         if let Ok(text) = std::fs::read_to_string(&files_path) {
             for line in text.lines().skip(1) {
-                if let Some(name) = line.strip_prefix('"').and_then(|rest| rest.split('"').next()) {
+                if let Some(name) = line
+                    .strip_prefix('"')
+                    .and_then(|rest| rest.split('"').next())
+                {
                     done.insert(name.to_string(), ());
                 }
             }
@@ -2133,7 +2147,11 @@ mod tests {
             watchdog(files_path.clone(), timeout);
         }
         let corpus = ecore_files(&root);
-        println!("corpus: {} .ecore files under {}", corpus.len(), root.display());
+        println!(
+            "corpus: {} .ecore files under {}",
+            corpus.len(),
+            root.display()
+        );
 
         let mut processed = 0usize;
         for path in &corpus {
