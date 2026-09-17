@@ -1021,7 +1021,6 @@ mod tests {
     /// `annotation` reads a `source` attribute and then requires `>`, so an annotation closed
     /// with `/>` is refused, although it is how Ecore writes an annotation with no details.
     #[test]
-    #[ignore = "reproduces parser refusing a self-closing annotation; fix pending"]
     fn parses_self_closing_annotations() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
@@ -1075,6 +1074,7 @@ mod tests {
             .expect("label feature should exist");
         assert_eq!(sources(label.annotations()), ["on-feature"]);
         assert!(label.annotations()[0].details().is_empty());
+        assert!(label.annotations()[0].references().is_empty());
 
         assert!(node
             .structural()
@@ -1086,7 +1086,6 @@ mod tests {
     /// `EAnnotation.references` is refused, in whichever order the two attributes come and
     /// whether or not the annotation has details.
     #[test]
-    #[ignore = "reproduces parser refusing an annotation with a references attribute; fix pending"]
     fn parses_annotation_references() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
@@ -1135,14 +1134,23 @@ mod tests {
 
         let subsetting = annotation("subsetting");
         assert_eq!(subsetting.source(), "subsets");
+        assert_eq!(
+            subsetting.references(),
+            ["#//Usage/nested", "#//Step/parameter"]
+        );
         assert!(subsetting.details().is_empty());
 
         let redefining = annotation("redefining");
         assert_eq!(redefining.source(), "redefines");
+        assert_eq!(redefining.references(), ["#//Usage/nested"]);
         assert!(redefining.details().is_empty());
 
         let documented = annotation("documented");
         assert_eq!(documented.source(), "subsets");
+        assert_eq!(
+            documented.references(),
+            ["#//Step/parameter", "#//Usage/nested"]
+        );
         assert_eq!(
             documented.details().get("note").map(String::as_str),
             Some("kept")

@@ -702,17 +702,50 @@ impl<'input> Parser<'input> {
         Ok(())
     }
 
-    /// Parses everything **after** a `<eAnnotations` until a `</eAnnotations>`.
+    /// Parses everything **after** a `<eAnnotations` until a `/>` or a `</eAnnotations>`.
     ///
     /// Expects no leading whitespaces, as all parsers do except for the top-level one.
     pub fn annotation(&mut self) -> Res<repr::Annot> {
-        let source = self.named_xml_attribute("source")?;
-        self.ws();
-        self.tag(">")?;
-        let mut annot = repr::Annot::with_capacity(source, 3);
+        let (mut source, mut references) = (None, None);
+        // annotations XML tags can be closed directly with `/>`, or have details and end with
+        // `</eAnnotations>`; this flag indicates the former
+        let mut early_done = false;
 
-        // log::debug!("|==| post source:");
-        // self.debug_show_tail_n(2, "| ");
+        'attributes: loop {
+            self.ws();
+
+            if self.try_raw_tag("/>") {
+                early_done = true;
+                break 'attributes;
+            } else if self.try_raw_tag(">") {
+                break 'attributes;
+            }
+
+            let (key, val) = self.xml_ident_attribute()?;
+            match key {
+                "source" => {
+                    self.handle_redef("annotation", "source", source.as_ref(), val)?;
+                    source = Some(val);
+                }
+                "references" => {
+                    self.handle_redef("annotation", "references", references.as_ref(), val)?;
+                    references = Some(val);
+                }
+                _ => bail!(@unexpected("annotation attribute") key),
+            }
+        }
+
+        let source =
+            source.ok_or_else(|| error!(@unexpected("`eAnnotations`") "with no source"))?;
+        let mut annot = repr::Annot::with_capacity(source, 3);
+        for reference in references.into_iter().flat_map(str::split_whitespace) {
+            annot.add_reference(reference);
+        }
+
+        if early_done {
+            annot.shrink_to_fit();
+            return Ok(annot);
+        }
 
         // parse `<details
         'details: loop {
