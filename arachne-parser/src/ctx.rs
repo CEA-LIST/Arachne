@@ -2214,4 +2214,37 @@ mod tests {
 
         assert!(ctx.to_pretty_string().contains("supers: C, A, B"));
     }
+
+    /// `class_structural` knows no `eKeys` attribute, so a reference that declares the attributes
+    /// identifying its targets is refused.
+    #[test]
+    #[ignore = "reproduces parser refusing ekeys; fix pending"]
+    fn parses_reference_keys() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Container">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="items" upperBound="-1"
+            eType="#//Item" containment="true" eKeys="#//Item/name  #//Item/version"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="plain" upperBound="-1"
+            eType="#//Item" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Item">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="version"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).unwrap_or_else(|e| panic!("refused: {e}"));
+        let container = class_named(&ctx, pack_named(&ctx, "test"), "Container");
+        assert_eq!(container.structural().len(), 2);
+    }
 }
