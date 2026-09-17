@@ -8,12 +8,10 @@ mod __package {
     pub use moirai_protocol::crdt::query::QueryOperation;
     pub use moirai_protocol::state::sink::SinkEffect;
     pub use moirai_protocol::state::effect_context::EffectContext;
-    pub use moirai_protocol::broadcast::internalizer::Interner;
-    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_crdt::policy::FairPolicy;
+    pub use moirai_protocol::crdt::policy::FairPolicy;
     pub use moirai_protocol::state::po_log::VecLog;
-    pub use moirai_protocol::crdt::pure_crdt::PureCRDT;
+    pub use petgraph::graph::DiGraph;
     pub use crate::references::*;
 }
 #[derive(Debug, Clone)]
@@ -71,9 +69,7 @@ pub struct SimpleumlValue {
     pub t_type: crate::classifiers::TTypeKindValue,
     pub model_element: crate::classifiers::ModelElementKindValue,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub refs: <__package::ReferenceManager<
-        __package::FairPolicy,
-    > as __package::PureCRDT>::Value,
+    pub refs: __package::DiGraph<__package::Instance, __package::Ref>,
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -106,9 +102,12 @@ impl SimpleumlLog {
     }
 }
 impl __package::IsLog for SimpleumlLog {
-    type Value = SimpleumlValue;
+    type Command = Simpleuml;
     type Op = Simpleuml;
     type Rejection = SimpleumlRejection;
+    fn prepare(&self, command: Self::Command) -> Self::Op {
+        command
+    }
     fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
             Simpleuml::PackageableKind(o) => {
@@ -275,20 +274,17 @@ impl __package::IsLog for SimpleumlLog {
             && self.model_element_log.is_default()
     }
 }
-impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
-for SimpleumlLog {
+impl __package::EvalNested<__package::Read<SimpleumlValue>> for SimpleumlLog {
     fn execute_query(
         &self,
-        _q: __package::Read<<Self as __package::IsLog>::Value>,
-    ) -> <__package::Read<
-        <Self as __package::IsLog>::Value,
-    > as __package::QueryOperation>::Response {
+        _q: &__package::Read<SimpleumlValue>,
+    ) -> <__package::Read<SimpleumlValue> as __package::QueryOperation>::Response {
         SimpleumlValue {
-            packageable: self.packageable_log.execute_query(__package::Read::new()),
-            classifier: self.classifier_log.execute_query(__package::Read::new()),
-            t_type: self.t_type_log.execute_query(__package::Read::new()),
-            model_element: self.model_element_log.execute_query(__package::Read::new()),
-            refs: self.reference_manager_log.execute_query(__package::Read::new()),
+            packageable: self.packageable_log.execute_query(&__package::Read::new()),
+            classifier: self.classifier_log.execute_query(&__package::Read::new()),
+            t_type: self.t_type_log.execute_query(&__package::Read::new()),
+            model_element: self.model_element_log.execute_query(&__package::Read::new()),
+            refs: self.reference_manager_log.execute_query(&__package::Read::new()),
         }
     }
 }
@@ -304,27 +300,11 @@ impl moirai_network::query::QueryableLog for SimpleumlLog {
         >,
     ) -> serde_json::Value {
         use moirai_protocol::replica::IsReplica;
-        let value: SimpleumlValue = replica.query(__package::Read::new());
+        let value: SimpleumlValue = replica.query(&__package::Read::new());
         serde_json::to_value(&value)
             .unwrap_or_else(|e| {
                 serde_json::json!({ "error" : format!("serialize: {}", e) })
             })
-    }
-}
-impl __package::InternalizeOp for Simpleuml {
-    fn internalize(self, interner: &__package::Interner) -> Self {
-        match self {
-            Simpleuml::PackageableKind(op) => Simpleuml::PackageableKind(op.clone()),
-            Simpleuml::ClassifierKind(op) => Simpleuml::ClassifierKind(op.clone()),
-            Simpleuml::TTypeKind(op) => Simpleuml::TTypeKind(op.clone()),
-            Simpleuml::ModelElementKind(op) => Simpleuml::ModelElementKind(op.clone()),
-            Simpleuml::AddReference(op) => {
-                Simpleuml::AddReference(op.internalize(interner))
-            }
-            Simpleuml::RemoveReference(op) => {
-                Simpleuml::RemoveReference(op.internalize(interner))
-            }
-        }
     }
 }
 /// Serializes the current model state as XMI conforming to the source Ecore metamodel.
@@ -341,7 +321,7 @@ impl ReadAsEcore {
 impl __package::EvalNested<ReadAsEcore> for SimpleumlLog {
     fn execute_query(
         &self,
-        _q: ReadAsEcore,
+        _q: &ReadAsEcore,
     ) -> <ReadAsEcore as __package::QueryOperation>::Response {
         let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
         document_root.add_attribute("xmi:version", "2.0");

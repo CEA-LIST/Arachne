@@ -8,12 +8,10 @@ mod __package {
     pub use moirai_protocol::crdt::query::QueryOperation;
     pub use moirai_protocol::state::sink::SinkEffect;
     pub use moirai_protocol::state::effect_context::EffectContext;
-    pub use moirai_protocol::broadcast::internalizer::Interner;
-    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_crdt::policy::FairPolicy;
+    pub use moirai_protocol::crdt::policy::FairPolicy;
     pub use moirai_protocol::state::po_log::VecLog;
-    pub use moirai_protocol::crdt::pure_crdt::PureCRDT;
+    pub use petgraph::graph::DiGraph;
     pub use crate::references::*;
 }
 #[derive(Debug, Clone)]
@@ -51,9 +49,7 @@ impl std::fmt::Display for BehaviortreeRejection {
 pub struct BehaviortreeValue {
     pub root: crate::classifiers::RootValue,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub refs: <__package::ReferenceManager<
-        __package::FairPolicy,
-    > as __package::PureCRDT>::Value,
+    pub refs: __package::DiGraph<__package::Instance, __package::Ref>,
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -74,9 +70,12 @@ impl BehaviortreeLog {
     }
 }
 impl __package::IsLog for BehaviortreeLog {
-    type Value = BehaviortreeValue;
+    type Command = Behaviortree;
     type Op = Behaviortree;
     type Rejection = BehaviortreeRejection;
+    fn prepare(&self, command: Self::Command) -> Self::Op {
+        command
+    }
     fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
             Behaviortree::Root(o) => {
@@ -196,17 +195,14 @@ impl __package::IsLog for BehaviortreeLog {
         self.reference_manager_log.is_default() && self.root_log.is_default()
     }
 }
-impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
-for BehaviortreeLog {
+impl __package::EvalNested<__package::Read<BehaviortreeValue>> for BehaviortreeLog {
     fn execute_query(
         &self,
-        _q: __package::Read<<Self as __package::IsLog>::Value>,
-    ) -> <__package::Read<
-        <Self as __package::IsLog>::Value,
-    > as __package::QueryOperation>::Response {
+        _q: &__package::Read<BehaviortreeValue>,
+    ) -> <__package::Read<BehaviortreeValue> as __package::QueryOperation>::Response {
         BehaviortreeValue {
-            root: self.root_log.execute_query(__package::Read::new()),
-            refs: self.reference_manager_log.execute_query(__package::Read::new()),
+            root: self.root_log.execute_query(&__package::Read::new()),
+            refs: self.reference_manager_log.execute_query(&__package::Read::new()),
         }
     }
 }
@@ -222,24 +218,11 @@ impl moirai_network::query::QueryableLog for BehaviortreeLog {
         >,
     ) -> serde_json::Value {
         use moirai_protocol::replica::IsReplica;
-        let value: BehaviortreeValue = replica.query(__package::Read::new());
+        let value: BehaviortreeValue = replica.query(&__package::Read::new());
         serde_json::to_value(&value)
             .unwrap_or_else(|e| {
                 serde_json::json!({ "error" : format!("serialize: {}", e) })
             })
-    }
-}
-impl __package::InternalizeOp for Behaviortree {
-    fn internalize(self, interner: &__package::Interner) -> Self {
-        match self {
-            Behaviortree::Root(op) => Behaviortree::Root(op.clone()),
-            Behaviortree::AddReference(op) => {
-                Behaviortree::AddReference(op.internalize(interner))
-            }
-            Behaviortree::RemoveReference(op) => {
-                Behaviortree::RemoveReference(op.internalize(interner))
-            }
-        }
     }
 }
 /// Serializes the current model state as XMI conforming to the source Ecore metamodel.
@@ -256,7 +239,7 @@ impl ReadAsEcore {
 impl __package::EvalNested<ReadAsEcore> for BehaviortreeLog {
     fn execute_query(
         &self,
-        _q: ReadAsEcore,
+        _q: &ReadAsEcore,
     ) -> <ReadAsEcore as __package::QueryOperation>::Response {
         let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
         document_root.add_attribute("xmi:version", "2.0");

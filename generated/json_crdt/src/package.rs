@@ -8,8 +8,6 @@ mod __package {
     pub use moirai_protocol::crdt::query::QueryOperation;
     pub use moirai_protocol::state::sink::SinkEffect;
     pub use moirai_protocol::state::effect_context::EffectContext;
-    pub use moirai_protocol::broadcast::internalizer::Interner;
-    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
 }
 #[derive(Debug, Clone)]
@@ -44,9 +42,12 @@ impl JsonLog {
     }
 }
 impl __package::IsLog for JsonLog {
-    type Value = JsonValue;
+    type Command = Json;
     type Op = Json;
     type Rejection = JsonRejection;
+    fn prepare(&self, command: Self::Command) -> Self::Op {
+        command
+    }
     fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
             Json::JsonKind(o) => {
@@ -82,16 +83,13 @@ impl __package::IsLog for JsonLog {
         true && self.json_log.is_default()
     }
 }
-impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
-for JsonLog {
+impl __package::EvalNested<__package::Read<JsonValue>> for JsonLog {
     fn execute_query(
         &self,
-        _q: __package::Read<<Self as __package::IsLog>::Value>,
-    ) -> <__package::Read<
-        <Self as __package::IsLog>::Value,
-    > as __package::QueryOperation>::Response {
+        _q: &__package::Read<JsonValue>,
+    ) -> <__package::Read<JsonValue> as __package::QueryOperation>::Response {
         JsonValue {
-            json: self.json_log.execute_query(__package::Read::new()),
+            json: self.json_log.execute_query(&__package::Read::new()),
         }
     }
 }
@@ -107,18 +105,11 @@ impl moirai_network::query::QueryableLog for JsonLog {
         >,
     ) -> serde_json::Value {
         use moirai_protocol::replica::IsReplica;
-        let value: JsonValue = replica.query(__package::Read::new());
+        let value: JsonValue = replica.query(&__package::Read::new());
         serde_json::to_value(&value)
             .unwrap_or_else(|e| {
                 serde_json::json!({ "error" : format!("serialize: {}", e) })
             })
-    }
-}
-impl __package::InternalizeOp for Json {
-    fn internalize(self, interner: &__package::Interner) -> Self {
-        match self {
-            Json::JsonKind(op) => Json::JsonKind(op.clone()),
-        }
     }
 }
 /// Serializes the current model state as XMI conforming to the source Ecore metamodel.
@@ -135,7 +126,7 @@ impl ReadAsEcore {
 impl __package::EvalNested<ReadAsEcore> for JsonLog {
     fn execute_query(
         &self,
-        _q: ReadAsEcore,
+        _q: &ReadAsEcore,
     ) -> <ReadAsEcore as __package::QueryOperation>::Response {
         let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
         document_root.add_attribute("xmi:version", "2.0");

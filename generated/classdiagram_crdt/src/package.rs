@@ -8,12 +8,10 @@ mod __package {
     pub use moirai_protocol::crdt::query::QueryOperation;
     pub use moirai_protocol::state::sink::SinkEffect;
     pub use moirai_protocol::state::effect_context::EffectContext;
-    pub use moirai_protocol::broadcast::internalizer::Interner;
-    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_crdt::policy::FairPolicy;
+    pub use moirai_protocol::crdt::policy::FairPolicy;
     pub use moirai_protocol::state::po_log::VecLog;
-    pub use moirai_protocol::crdt::pure_crdt::PureCRDT;
+    pub use petgraph::graph::DiGraph;
     pub use crate::references::*;
 }
 #[derive(Debug, Clone)]
@@ -59,9 +57,7 @@ pub struct ClassdiagramValue {
     pub feature: crate::classifiers::FeatureValue,
     pub relation: crate::classifiers::RelationValue,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub refs: <__package::ReferenceManager<
-        __package::FairPolicy,
-    > as __package::PureCRDT>::Value,
+    pub refs: __package::DiGraph<__package::Instance, __package::Ref>,
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -90,9 +86,12 @@ impl ClassdiagramLog {
     }
 }
 impl __package::IsLog for ClassdiagramLog {
-    type Value = ClassdiagramValue;
+    type Command = Classdiagram;
     type Op = Classdiagram;
     type Rejection = ClassdiagramRejection;
+    fn prepare(&self, command: Self::Command) -> Self::Op {
+        command
+    }
     fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
             Classdiagram::Class(o) => {
@@ -241,19 +240,16 @@ impl __package::IsLog for ClassdiagramLog {
             && self.feature_log.is_default() && self.relation_log.is_default()
     }
 }
-impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
-for ClassdiagramLog {
+impl __package::EvalNested<__package::Read<ClassdiagramValue>> for ClassdiagramLog {
     fn execute_query(
         &self,
-        _q: __package::Read<<Self as __package::IsLog>::Value>,
-    ) -> <__package::Read<
-        <Self as __package::IsLog>::Value,
-    > as __package::QueryOperation>::Response {
+        _q: &__package::Read<ClassdiagramValue>,
+    ) -> <__package::Read<ClassdiagramValue> as __package::QueryOperation>::Response {
         ClassdiagramValue {
-            class: self.class_log.execute_query(__package::Read::new()),
-            feature: self.feature_log.execute_query(__package::Read::new()),
-            relation: self.relation_log.execute_query(__package::Read::new()),
-            refs: self.reference_manager_log.execute_query(__package::Read::new()),
+            class: self.class_log.execute_query(&__package::Read::new()),
+            feature: self.feature_log.execute_query(&__package::Read::new()),
+            relation: self.relation_log.execute_query(&__package::Read::new()),
+            refs: self.reference_manager_log.execute_query(&__package::Read::new()),
         }
     }
 }
@@ -269,26 +265,11 @@ impl moirai_network::query::QueryableLog for ClassdiagramLog {
         >,
     ) -> serde_json::Value {
         use moirai_protocol::replica::IsReplica;
-        let value: ClassdiagramValue = replica.query(__package::Read::new());
+        let value: ClassdiagramValue = replica.query(&__package::Read::new());
         serde_json::to_value(&value)
             .unwrap_or_else(|e| {
                 serde_json::json!({ "error" : format!("serialize: {}", e) })
             })
-    }
-}
-impl __package::InternalizeOp for Classdiagram {
-    fn internalize(self, interner: &__package::Interner) -> Self {
-        match self {
-            Classdiagram::Class(op) => Classdiagram::Class(op.clone()),
-            Classdiagram::Feature(op) => Classdiagram::Feature(op.clone()),
-            Classdiagram::Relation(op) => Classdiagram::Relation(op.clone()),
-            Classdiagram::AddReference(op) => {
-                Classdiagram::AddReference(op.internalize(interner))
-            }
-            Classdiagram::RemoveReference(op) => {
-                Classdiagram::RemoveReference(op.internalize(interner))
-            }
-        }
     }
 }
 /// Serializes the current model state as XMI conforming to the source Ecore metamodel.
@@ -305,7 +286,7 @@ impl ReadAsEcore {
 impl __package::EvalNested<ReadAsEcore> for ClassdiagramLog {
     fn execute_query(
         &self,
-        _q: ReadAsEcore,
+        _q: &ReadAsEcore,
     ) -> <ReadAsEcore as __package::QueryOperation>::Response {
         let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
         document_root.add_attribute("xmi:version", "2.0");

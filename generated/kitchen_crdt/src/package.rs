@@ -8,12 +8,10 @@ mod __package {
     pub use moirai_protocol::crdt::query::QueryOperation;
     pub use moirai_protocol::state::sink::SinkEffect;
     pub use moirai_protocol::state::effect_context::EffectContext;
-    pub use moirai_protocol::broadcast::internalizer::Interner;
-    pub use moirai_protocol::broadcast::internalizer::InternalizeOp;
     pub use moirai_protocol::state::sink::SinkCollector;
-    pub use moirai_crdt::policy::FairPolicy;
+    pub use moirai_protocol::crdt::policy::FairPolicy;
     pub use moirai_protocol::state::po_log::VecLog;
-    pub use moirai_protocol::crdt::pure_crdt::PureCRDT;
+    pub use petgraph::graph::DiGraph;
     pub use crate::references::*;
 }
 #[derive(Debug, Clone)]
@@ -59,9 +57,7 @@ pub struct TestValue {
     pub bar: crate::classifiers::BarValue,
     pub baz: crate::classifiers::BazValue,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub refs: <__package::ReferenceManager<
-        __package::FairPolicy,
-    > as __package::PureCRDT>::Value,
+    pub refs: __package::DiGraph<__package::Instance, __package::Ref>,
 }
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -90,9 +86,12 @@ impl TestLog {
     }
 }
 impl __package::IsLog for TestLog {
-    type Value = TestValue;
+    type Command = Test;
     type Op = Test;
     type Rejection = TestRejection;
+    fn prepare(&self, command: Self::Command) -> Self::Op {
+        command
+    }
     fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
         match op {
             Test::Foo(o) => self.foo_log.is_enabled(o).map_err(TestRejection::Foo),
@@ -232,19 +231,16 @@ impl __package::IsLog for TestLog {
             && self.bar_log.is_default() && self.baz_log.is_default()
     }
 }
-impl __package::EvalNested<__package::Read<<Self as __package::IsLog>::Value>>
-for TestLog {
+impl __package::EvalNested<__package::Read<TestValue>> for TestLog {
     fn execute_query(
         &self,
-        _q: __package::Read<<Self as __package::IsLog>::Value>,
-    ) -> <__package::Read<
-        <Self as __package::IsLog>::Value,
-    > as __package::QueryOperation>::Response {
+        _q: &__package::Read<TestValue>,
+    ) -> <__package::Read<TestValue> as __package::QueryOperation>::Response {
         TestValue {
-            foo: self.foo_log.execute_query(__package::Read::new()),
-            bar: self.bar_log.execute_query(__package::Read::new()),
-            baz: self.baz_log.execute_query(__package::Read::new()),
-            refs: self.reference_manager_log.execute_query(__package::Read::new()),
+            foo: self.foo_log.execute_query(&__package::Read::new()),
+            bar: self.bar_log.execute_query(&__package::Read::new()),
+            baz: self.baz_log.execute_query(&__package::Read::new()),
+            refs: self.reference_manager_log.execute_query(&__package::Read::new()),
         }
     }
 }
@@ -260,22 +256,11 @@ impl moirai_network::query::QueryableLog for TestLog {
         >,
     ) -> serde_json::Value {
         use moirai_protocol::replica::IsReplica;
-        let value: TestValue = replica.query(__package::Read::new());
+        let value: TestValue = replica.query(&__package::Read::new());
         serde_json::to_value(&value)
             .unwrap_or_else(|e| {
                 serde_json::json!({ "error" : format!("serialize: {}", e) })
             })
-    }
-}
-impl __package::InternalizeOp for Test {
-    fn internalize(self, interner: &__package::Interner) -> Self {
-        match self {
-            Test::Foo(op) => Test::Foo(op.clone()),
-            Test::Bar(op) => Test::Bar(op.clone()),
-            Test::Baz(op) => Test::Baz(op.clone()),
-            Test::AddReference(op) => Test::AddReference(op.internalize(interner)),
-            Test::RemoveReference(op) => Test::RemoveReference(op.internalize(interner)),
-        }
     }
 }
 /// Serializes the current model state as XMI conforming to the source Ecore metamodel.
@@ -292,7 +277,7 @@ impl ReadAsEcore {
 impl __package::EvalNested<ReadAsEcore> for TestLog {
     fn execute_query(
         &self,
-        _q: ReadAsEcore,
+        _q: &ReadAsEcore,
     ) -> <ReadAsEcore as __package::QueryOperation>::Response {
         let mut document_root = xml_builder::XMLElement::new("xmi:XMI");
         document_root.add_attribute("xmi:version", "2.0");
