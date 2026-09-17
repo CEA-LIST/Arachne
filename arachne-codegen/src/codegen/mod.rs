@@ -2,6 +2,7 @@ pub(crate) mod annotation;
 pub mod classifier;
 pub mod cycles;
 mod datatype;
+pub(crate) mod ecore;
 mod feature;
 pub mod generate;
 pub mod generator;

@@ -893,6 +893,75 @@ mod tests {
         assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
     }
 
+    /// A reference typed by Ecore's `EObject` refers to an object of any class: one arc per
+    /// concrete owner, to one vertex kind that every object also has, instead of one arc per
+    /// concrete class of the package.
+    #[test]
+    fn reference_to_any_object_is_one_arc_to_the_object_vertex() {
+        use crate::codegen::{
+            cycles::analyze_cycles, generate::Generate, package::PackageGenerator,
+            reference::{ReferenceGenerator, analysis::analyze_references},
+        };
+
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="parts" upperBound="-1" eType="#//Part" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="ports" upperBound="-1" eType="#//Port" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Part">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="subject" eType="ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Port"/>
+</ecore:EPackage>
+"##;
+
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        let ctx = &parser.ctx;
+        let pack = ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() == "test")
+            .expect("package should exist");
+        let classes: Vec<_> = pack.classes().iter().copied().collect();
+        let model = *classes
+            .iter()
+            .find(|idx| ctx[**idx].name() == "Model")
+            .unwrap();
+        let cycles = analyze_cycles(ctx).expect("cycle analysis should succeed");
+        let analysis = analyze_references(ctx, &classes);
+
+        let references = normalize(
+            ReferenceGenerator::new(ctx, classes.clone(), vec![model], &cycles)
+                .generate()
+                .expect("references should generate")
+                .tokens(),
+        );
+        assert!(references.contains("PartSubjectEdge[0,1]"));
+        assert!(references.contains("PartToEcoreEObject:PartId->EcoreEObjectId(PartSubjectEdge)"));
+        assert!(!references.contains("PartToPort"));
+        assert!(!references.contains("PartToModel"));
+        assert!(references.contains("vertices{PartId,EcoreEObjectId}"));
+        assert!(!references.contains("\"EcoreEObject\"=>"));
+        assert!(references.contains(
+            "pubfnobject_from_sink_kind(kind:&str,path:&__references::ObjectPath,)->Option<Instance>{matchkind{\"Model\"|\"Part\"|\"Port\"=>Some(Instance::EcoreEObjectId(EcoreEObjectId(path.clone()))),_=>None,}}"
+        ));
+
+        let package = normalize(
+            PackageGenerator::new(ctx, pack.idx, vec![model], &analysis)
+                .generate()
+                .expect("package should generate")
+                .tokens(),
+        );
+        assert!(package.contains("__package::object_from_sink_kind(kind,sink.path())"));
+    }
+
     /// Runs generation on `ecore` and returns its error.
     fn generation_error(ecore: &str) -> String {
         let parser = EcoreParser::from_string(ecore).expect("ecore should parse");

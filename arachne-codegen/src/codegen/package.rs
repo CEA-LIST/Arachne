@@ -360,6 +360,30 @@ impl<'a> PackageGenerator<'a> {
         // Package generation ignores the parent EffectContext and always creates a new root context
         // This is because the package log is the top-level log and should not be nested within another context.
 
+        // Every object is also a vertex of an object of any class, when a reference is typed by
+        // Ecore's `EObject`.
+        let object_vertex = if self.ref_analysis.any_object_class.is_some() {
+            quote! {
+                let object_vertex_ops = sink.kind()
+                    .and_then(|kind| #path::object_from_sink_kind(kind, sink.path()))
+                    .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
+                if let Some(o) = object_vertex_ops {
+                    reference_effect_disambiguator += 1;
+                    let mut ctx = #path::EffectContext::silent();
+                    self.reference_manager_log.effect(
+                        #path::ProtocolEvent::unfold_with_disambiguator(
+                            event.clone(),
+                            reference_effect_disambiguator,
+                            o,
+                        ),
+                        &mut ctx
+                    );
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         let effect = if self.has_references() {
             quote! {
                 let mut sink = #path::SinkCollector::new();
@@ -402,6 +426,7 @@ impl<'a> PackageGenerator<'a> {
                                     &mut ctx
                                 );
                             }
+                            #object_vertex
                         }
                         #path::SinkEffect::Delete => {
                             reference_effect_disambiguator += 1;

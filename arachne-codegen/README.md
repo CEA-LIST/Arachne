@@ -157,6 +157,8 @@ Containment and non-containment references are mapped differently.
 
 Only references whose instantiable source and target classes are part of the generated reachable package slice are represented. References to classes outside that slice are skipped with a warning.
 
+A non-containment reference typed by Ecore's `EObject` refers to an object of any class. It is not projected onto the instantiable classes of the slice, which would declare one arc per class: each instantiable owner gets a single arc whose target is the vertex kind of `EObject` (`EcoreEObjectId`), and every object of an instantiable class of the slice is added to the `ReferenceManager` as a vertex of that kind too, at the same path as its own vertex. Such a reference is stored by the path of the object it refers to, whatever that object's class.
+
 ### Operations
 
 The code generator intentionally does not support Ecore operations at this stage. Every `EOperation` is skipped during generation and reported as a warning. This decision is primarily motivated by the semantic constraints of CRDTs and by limitations of the Ecore metamodel.
