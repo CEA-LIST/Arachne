@@ -2218,7 +2218,6 @@ mod tests {
     /// `class_structural` knows no `eKeys` attribute, so a reference that declares the attributes
     /// identifying its targets is refused.
     #[test]
-    #[ignore = "reproduces parser refusing ekeys; fix pending"]
     fn parses_reference_keys() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
@@ -2246,5 +2245,10 @@ mod tests {
         let ctx = Ctx::parse(ecore).unwrap_or_else(|e| panic!("refused: {e}"));
         let container = class_named(&ctx, pack_named(&ctx, "test"), "Container");
         assert_eq!(container.structural().len(), 2);
+        assert_eq!(
+            container.structural()[0].keys(),
+            ["#//Item/name", "#//Item/version"]
+        );
+        assert!(container.structural()[1].keys().is_empty());
     }
 }

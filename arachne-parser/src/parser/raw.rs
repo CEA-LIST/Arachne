@@ -1078,9 +1078,10 @@ impl<'input> Parser<'input> {
             mut default_value,
             mut default_value_literal,
             mut resolve_proxies,
+            mut keys,
         ) = (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None,
+            None, None, None, None, None,
         );
 
         let mut early_done = false;
@@ -1165,6 +1166,10 @@ impl<'input> Parser<'input> {
                     self.handle_redef("class", "resolveProxies", resolve_proxies.as_ref(), val)?;
                     resolve_proxies = Some(val);
                 }
+                ([], "eKeys") => {
+                    self.handle_redef("class", "eKeys", keys.as_ref(), val)?;
+                    keys = Some(val);
+                }
                 _ => bail!(@unexpected("structural feature attribute") key),
             }
 
@@ -1244,6 +1249,9 @@ impl<'input> Parser<'input> {
         }
         structural.try_set_default_value(default_value);
         structural.try_set_default_value_literal(default_value_literal);
+        for key in keys.into_iter().flat_map(str::split_whitespace) {
+            structural.add_key(key);
+        }
         if unsettable.is_some_and(|unsettable| helpers::bool(unsettable).unwrap_or(false)) {
             warn!(
                 "Structural feature `{}` of class `{}` sets `unsettable=\"true\"`, which is currently not supported, ignoring",
