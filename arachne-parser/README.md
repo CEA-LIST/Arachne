@@ -29,6 +29,8 @@ classifier =
     "<eClassifiers"
         "xsi:type" "=" string
         "name" "=" string
+        "instanceClassName" "=" string
+        "instanceTypeName" "=" string
         "abstract" "=" string
     ">"
         (annotation | operation | structural_feature)
@@ -45,11 +47,17 @@ annotation =
 operation =
     "<eOperations"
         "name" "=" string
+        "ordered" "=" bool_string
+        "unique" "=" bool_string
+        "lowerBound" "=" nat_string
+        "upperBound" "=" int_string
         "eType" "=" string
     ">"
         (
             "<eParameters"
                 "name" "=" string
+                "ordered" "=" bool_string
+                "unique" "=" bool_string
                 "lowerBound" "=" nat_string
                 "upperBound" "=" int_string
                 "eType" "=" string

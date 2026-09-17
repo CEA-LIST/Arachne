@@ -7,6 +7,7 @@ pub enum BoundKind {
     Many,
 }
 
+/// Normalize bounds to a `BoundKind` and generate warnings for unsupported bounds.
 pub fn normalize_bounds(
     bounds: ecore_rs::repr::bounds::Bounds,
     attribute: &str,

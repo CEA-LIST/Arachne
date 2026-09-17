@@ -225,10 +225,6 @@ fn sanitize_package_name(name: &str) -> String {
     }
 }
 
-fn to_path_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
 fn format_with_prettyplease(tokens: TokenStream) -> Result<String> {
     let syntax_tree = syn::parse2(tokens)?;
     Ok(prettyplease::unparse(&syntax_tree))

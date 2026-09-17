@@ -1,0 +1,6 @@
+.git
+.DS_Store
+target
+generated
+__pycache__
+*.py[cod]

@@ -21,13 +21,14 @@ impl ToCrdt for EcoreType {
             EcoreType::EBoolean => Primitive::Flag(Default::default()),
             EcoreType::EChar => Primitive::Register(Default::default()),
             EcoreType::EString => Primitive::List,
+            // We do not support object types for CRDTs, and don't expect to encounter them
             EcoreType::Object => unimplemented!(),
         }
     }
 
     fn to_rust_type(&self) -> Option<TokenStream> {
         match self {
-            EcoreType::EByte => Some(quote! { u8 }),
+            EcoreType::EByte => Some(quote! { i8 }),
             EcoreType::EShort => Some(quote! { i16 }),
             EcoreType::EInt => Some(quote! { i32 }),
             EcoreType::ELong => Some(quote! { i64 }),

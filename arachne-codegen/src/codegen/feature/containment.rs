@@ -2,26 +2,27 @@ use ecore_rs::{
     ctx::Ctx,
     repr::{Structural, builtin::Typ as BuiltinTyp, idx, structural},
 };
-use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
-use syn::Ident;
+use proc_macro2::TokenStream;
+use quote::quote;
 
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         annotation::{DatatypeOverride, datatype_override, uw_map_spec},
-        classifier::containment_target_log_ident,
+        classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
             to_crdt::ToCrdt,
         },
-        feature::bounds::{BoundKind, normalize_bounds},
+        feature::{
+            bounds::{BoundKind, normalize_bounds},
+            typed_element::unsupported_feature_properties,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
-        import::{Import, Log},
-        warnings::Warning,
+        ident::{classifier_type_ident, rust_ident, value_ident},
+        import::{Import, Log, Protocol},
     },
 };
 
@@ -56,59 +57,23 @@ impl<'a> Generate for ContainmentGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.reference.bounds, &self.reference.name);
 
-        if let Some(changeable) = self.reference.changeable
-            && !changeable
-        {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "changeable".into(),
-                value: "false".into(),
-            })
-        }
-
-        if let Some(transient) = self.reference.transient {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "transient".into(),
-                value: transient.to_string(),
-            })
-        }
-        if let Some(volatile) = self.reference.volatile {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "volatile".into(),
-                value: volatile.to_string(),
-            })
-        }
-        if let Some(derived) = self.reference.derived {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
-        if let Some(derived) = self.reference.unsettable {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.reference.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
+        unsupported_feature_properties(self.reference, &mut warnings);
 
         let target_class = self
             .ctx
             .classes()
             .get(*self.reference.typ.unwrap())
             .unwrap();
+        if is_uninhabited_polymorphic_class(self.ctx, target_class) {
+            return Ok(Fragment::new(TokenStream::new(), vec![], warnings));
+        }
 
-        let snake = self.reference.name.to_snake_case();
-        let name = syn::parse_str::<Ident>(&snake)
-            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
-        let target_type = containment_target_log_ident(target_class);
+        let name = value_ident(&self.reference.name);
+        let target_type = containment_target_log_ident(self.ctx, target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
-        let boxed_target_type = quote! { Box<#target_type> };
+        let boxed_target_type = quote! { #path::BoxedLog<#target_type> };
 
         if let Some(spec) = uw_map_spec(self.reference) {
             anyhow::ensure!(
@@ -150,7 +115,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
 
             let key_class = self.ctx.classes().get(*key_feature.typ.unwrap()).unwrap();
             let key_ty = if key_class.is_enum() {
-                let enum_name = format_ident!("{}", key_class.name().to_upper_camel_case());
+                let enum_name = classifier_type_ident(self.ctx, key_class);
                 quote! { #enum_name }
             } else {
                 let typ: BuiltinTyp = key_class.name().parse().map_err(|_| {
@@ -174,7 +139,10 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 if boxing_strategy == BoxingStrategy::NoBox {
                     (quote! { #target_type }, vec![])
                 } else {
-                    (boxed_target_type.clone(), vec![])
+                    (
+                        boxed_target_type.clone(),
+                        vec![Import::Protocol(Protocol::BoxedLog)],
+                    )
                 }
             }
             BoundKind::Optional => (
@@ -183,7 +151,14 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::OptionLog<#boxed_target_type> }
                 },
-                vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
+                } else {
+                    vec![
+                        Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
+                        Import::Protocol(Protocol::BoxedLog),
+                    ]
+                },
             ),
             BoundKind::Many => (
                 if boxing_strategy == BoxingStrategy::NoBox {
@@ -191,7 +166,14 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 } else {
                     quote! { #path::NestedListLog<#boxed_target_type> }
                 },
-                vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))]
+                } else {
+                    vec![
+                        Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                        Import::Protocol(Protocol::BoxedLog),
+                    ]
+                },
             ),
         };
 
@@ -212,7 +194,7 @@ impl<'a> ContainmentGenerator<'a> {
             structural::Typ::EAttribute => {
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
                 let (rust_ty, mut primitive) = if value_class.is_enum() {
-                    let enum_name = format_ident!("{}", value_class.name().to_upper_camel_case());
+                    let enum_name = classifier_type_ident(self.ctx, value_class);
                     (
                         Some(quote! { #enum_name }),
                         Primitive::Register(crate::codegen::datatype::crdt::Register::MultiValue),
@@ -243,7 +225,7 @@ impl<'a> ContainmentGenerator<'a> {
                         )
                     }
                     Primitive::Flag(flag) => {
-                        let flag_name = format_ident!("{}", flag.name());
+                        let flag_name = rust_ident(flag.name());
                         (
                             quote! { #path::VecLog<#path::#flag_name> },
                             vec![
@@ -257,7 +239,7 @@ impl<'a> ContainmentGenerator<'a> {
                     Primitive::Register(register) => {
                         let rust_ty = rust_ty
                             .ok_or_else(|| anyhow::anyhow!("Register must have a Rust type"))?;
-                        let register_name = format_ident!("{}", register.name());
+                        let register_name = rust_ident(register.name());
                         (
                             quote! { #path::VecLog<#path::#register_name<#rust_ty>> },
                             vec![
@@ -269,9 +251,9 @@ impl<'a> ContainmentGenerator<'a> {
                         )
                     }
                     Primitive::List => (
-                        quote! { #path::EventGraph<#path::List<char>> },
+                        quote! { #path::GraphLog<#path::List<char>> },
                         vec![
-                            Import::Log(Log::EventGraph),
+                            Import::Log(Log::Graph),
                             Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
                         ],
                     ),
@@ -284,16 +266,27 @@ impl<'a> ContainmentGenerator<'a> {
                     "UWMap value feature cannot be a non-containment reference"
                 );
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
-                let value_log = containment_target_log_ident(value_class);
+                anyhow::ensure!(
+                    !is_uninhabited_polymorphic_class(self.ctx, value_class),
+                    "UWMap value feature `{}` targets abstract class `{}` with no concrete subclasses",
+                    value_feature.name,
+                    value_class.name()
+                );
+                let value_log = containment_target_log_ident(self.ctx, value_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);
                 let log_ty = if boxing_strategy == BoxingStrategy::NoBox {
                     quote! { #value_log }
                 } else {
-                    quote! { Box<#value_log> }
+                    quote! { #path::BoxedLog<#value_log> }
                 };
-                Ok((log_ty, Vec::new()))
+                let imports = if boxing_strategy == BoxingStrategy::NoBox {
+                    Vec::new()
+                } else {
+                    vec![Import::Protocol(Protocol::BoxedLog)]
+                };
+                Ok((log_ty, imports))
             }
         }
     }

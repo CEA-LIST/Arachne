@@ -4,10 +4,7 @@ use ecore_rs::{
     ctx::Ctx,
     repr::{Structural, builtin::Typ},
 };
-use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::Span;
 use quote::quote;
-use syn::Ident;
 
 use crate::{
     CLASSIFIERS_PATH_MOD,
@@ -17,11 +14,14 @@ use crate::{
             crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
             to_crdt::ToCrdt,
         },
-        feature::bounds::{BoundKind, normalize_bounds},
+        feature::{
+            bounds::{BoundKind, normalize_bounds},
+            typed_element::unsupported_feature_properties,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{classifier_type_ident, rust_ident, value_ident},
         import::{Import, Log},
-        warnings::Warning,
     },
 };
 
@@ -45,48 +45,9 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (bound_kind, mut warnings) =
             normalize_bounds(self.attribute.bounds, &self.attribute.name);
 
-        if let Some(changeable) = self.attribute.changeable
-            && !changeable
-        {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "changeable".into(),
-                value: "false".into(),
-            })
-        }
+        unsupported_feature_properties(self.attribute, &mut warnings);
 
-        if let Some(transient) = self.attribute.transient {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "transient".into(),
-                value: transient.to_string(),
-            })
-        }
-        if let Some(volatile) = self.attribute.volatile {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "volatile".into(),
-                value: volatile.to_string(),
-            })
-        }
-        if let Some(derived) = self.attribute.derived {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
-        if let Some(derived) = self.attribute.unsettable {
-            warnings.push(Warning::UnsupportedFeatureProperty {
-                feature: self.attribute.name.clone(),
-                property: "derived".into(),
-                value: derived.to_string(),
-            })
-        }
-
-        let snake = self.attribute.name.to_snake_case();
-        let name = syn::parse_str::<Ident>(&snake)
-            .unwrap_or_else(|_| Ident::new_raw(&snake, Span::call_site()));
+        let name = value_ident(&self.attribute.name);
         let class_typ = self
             .ctx
             .classes()
@@ -94,7 +55,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             .unwrap();
 
         let (rust_typ, mut crdt) = if class_typ.is_enum() {
-            let enum_name = Ident::new(&class_typ.name().to_upper_camel_case(), Span::call_site());
+            let enum_name = classifier_type_ident(self.ctx, class_typ);
             (
                 Some(quote! { #enum_name }),
                 Primitive::Register(Default::default()),
@@ -117,7 +78,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
         let (log_type, crdt_inner, log_import) = match &crdt {
             Primitive::Counter(_) => {
                 let rust_typ = rust_typ.clone().expect("Counter should have a rust type");
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
@@ -125,7 +86,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 )
             }
             Primitive::Flag(_) => {
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name },
@@ -134,7 +95,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             }
             Primitive::Register(_) => {
                 let rust_typ = rust_typ.clone().expect("Register should have a rust type");
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                let type_name = rust_ident(crdt.name());
                 (
                     quote! { #path::VecLog },
                     quote! { #path::#type_name<#rust_typ> },
@@ -142,19 +103,20 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 )
             }
             Primitive::List => {
-                // EString -> List<char>, uses EventGraph as log type
-                let type_name = syn::Ident::new(crdt.name(), Span::call_site());
+                // EString -> List<char>, uses GraphLog as log type
+                let type_name = rust_ident(crdt.name());
                 (
-                    quote! { #path::EventGraph },
+                    quote! { #path::GraphLog },
                     quote! { #path::#type_name<char> },
-                    Import::Log(Log::EventGraph),
+                    Import::Log(Log::Graph),
                 )
             }
         };
 
         let (field_type, imports) = match (
             bound_kind,
-            self.attribute.unique.unwrap_or(false),
+            // Default to true if not specified, as per Ecore spec
+            self.attribute.unique.unwrap_or(true),
             self.attribute.ordered.unwrap_or(true),
         ) {
             (BoundKind::Single, _, _) => (
@@ -175,24 +137,20 @@ impl<'a> Generate for AttributeGenerator<'a> {
             (BoundKind::Many, false, true) => (
                 quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
                 vec![
-                    Import::Log(Log::EventGraph),
+                    log_import,
                     Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
                     Import::Crdt(Crdt::Nested(NestedCrdt::List)),
                 ],
             ),
             (BoundKind::Many, true, true) => {
-                // TODO: Unique list case
-                warnings.push(Warning::UnsupportedPropertyCombination {
-                    feature: self.attribute.name.clone(),
-                    properties: vec!["unique".into(), "ordered".into()],
-                    applied: vec!["ordered".into()],
-                });
+                let element_type = rust_typ
+                    .clone()
+                    .expect("Unique ordered attributes should have a Rust element type");
                 (
-                    quote! { #path::ListLog<#log_type<#crdt_inner>> },
+                    quote! { #path::GraphLog<#path::List<#element_type>> },
                     vec![
-                        Import::Log(Log::EventGraph),
-                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
-                        Import::Crdt(Crdt::Nested(NestedCrdt::List)),
+                        Import::Log(Log::Graph),
+                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
                     ],
                 )
             }
@@ -207,12 +165,15 @@ impl<'a> Generate for AttributeGenerator<'a> {
                     Some(DatatypeOverride::Set(set)) => set,
                     _ => Set::AWSet,
                 };
-                let set_name = syn::Ident::new(set_typ.name(), Span::call_site());
+                let set_name = rust_ident(set_typ.name());
                 (
                     quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
-                    vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
-                        Collection::Set(set_typ),
-                    )))],
+                    vec![
+                        Import::Log(Log::Vec),
+                        Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(Collection::Set(
+                            set_typ,
+                        )))),
+                    ],
                 )
             }
         };

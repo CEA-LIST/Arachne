@@ -96,13 +96,6 @@ impl Config {
             )));
         }
 
-        if !self.moirai_root.exists() {
-            return Err(crate::error::ArachneError::Config(format!(
-                "Moirai root does not exist: {:?}",
-                self.moirai_root
-            )));
-        }
-
         Ok(())
     }
 }

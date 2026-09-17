@@ -7,9 +7,12 @@ use std::collections::{HashMap, HashSet};
 
 use ecore_rs::{ctx::Ctx, prelude::idx::Class};
 
-use crate::codegen::classifier::{has_subclasses, inherited_field_ident};
+use crate::codegen::classifier::{
+    has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+};
 
 type ClassIdx = Class;
+type ArcKey = (ClassIdx, String, ClassIdx);
 
 /// Represents a containment relationship in the type hierarchy
 #[derive(Clone, Debug)]
@@ -39,9 +42,9 @@ pub struct CycleAnalysis {
 /// Strategy for applying Box wrapper
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoxingStrategy {
-    /// Box a single reference: field: Box<T>
+    /// Box a single reference value: field log uses BoxedLog<T>
     DirectReference,
-    /// Box elements in a collection: field: ListLog<Box<T>>
+    /// Box collection element values: field log uses ListLog<BoxedLog<T>>
     CollectionElement,
     /// Do not box (cycle broken elsewhere)
     NoBox,
@@ -107,7 +110,11 @@ impl<'a> CycleAnalyzer<'a> {
                 let field_name = structural.name.clone();
                 let is_many = structural.bounds.ubound != Some(1);
 
-                if Self::is_polymorphic_class(target_class) {
+                if is_uninhabited_polymorphic_class(self.ctx, target_class) {
+                    continue;
+                }
+
+                if has_codegen_polymorphic_family(self.ctx, target_class) {
                     for member in self.polymorphic_family_members(target) {
                         edges.push(ContainmentEdge {
                             source,
@@ -153,23 +160,23 @@ impl<'a> CycleAnalyzer<'a> {
             adj_list.entry(edge.source).or_default().push(edge);
         }
 
-        let mut visited = HashSet::new();
         let mut rec_stack = Vec::new();
+        let mut edge_stack = Vec::new();
         let mut rec_stack_set = HashSet::new();
+        let mut seen_cycles = HashSet::new();
 
         for start_idx in 0..num_classes {
             let start = ClassIdx::from(start_idx);
 
-            if !visited.contains(&start) {
-                Self::dfs_find_cycles(
-                    start,
-                    &adj_list,
-                    &mut visited,
-                    &mut rec_stack,
-                    &mut rec_stack_set,
-                    &mut cycles,
-                );
-            }
+            Self::dfs_find_cycles(
+                start,
+                &adj_list,
+                &mut rec_stack,
+                &mut edge_stack,
+                &mut rec_stack_set,
+                &mut cycles,
+                &mut seen_cycles,
+            );
         }
 
         cycles
@@ -179,12 +186,12 @@ impl<'a> CycleAnalyzer<'a> {
     fn dfs_find_cycles(
         node: ClassIdx,
         adj_list: &HashMap<ClassIdx, Vec<&ContainmentEdge>>,
-        visited: &mut HashSet<ClassIdx>,
         rec_stack: &mut Vec<ClassIdx>,
+        edge_stack: &mut Vec<ContainmentEdge>,
         rec_stack_set: &mut HashSet<ClassIdx>,
         cycles: &mut Vec<Vec<ContainmentEdge>>,
+        seen_cycles: &mut HashSet<Vec<ArcKey>>,
     ) {
-        visited.insert(node);
         rec_stack.push(node);
         rec_stack_set.insert(node);
 
@@ -192,67 +199,27 @@ impl<'a> CycleAnalyzer<'a> {
             for edge in outgoing_edges {
                 let target = edge.target;
 
-                if !visited.contains(&target) {
+                if !rec_stack_set.contains(&target) {
+                    edge_stack.push((*edge).clone());
                     Self::dfs_find_cycles(
                         target,
                         adj_list,
-                        visited,
                         rec_stack,
+                        edge_stack,
                         rec_stack_set,
                         cycles,
+                        seen_cycles,
                     );
+                    edge_stack.pop();
                 } else if rec_stack_set.contains(&target)
                     && let Some(pos) = rec_stack.iter().position(|&n| n == target)
                 {
-                    let cycle_path: Vec<ClassIdx> = rec_stack[pos..].to_vec();
+                    let mut cycle_edges = edge_stack[pos..].to_vec();
+                    cycle_edges.push((*edge).clone());
 
-                    if !cycles.is_empty() {
-                        let cycle_set: HashSet<_> = cycle_path.iter().cloned().collect();
-                        let is_duplicate = cycles.iter().any(|existing_cycle| {
-                            let existing_set: HashSet<_> =
-                                existing_cycle.iter().map(|e| e.source).collect();
-                            cycle_set == existing_set
-                        });
-
-                        if !is_duplicate {
-                            let mut cycle_edges = Vec::new();
-                            for i in 0..cycle_path.len() {
-                                let from = cycle_path[i];
-                                let to = cycle_path[(i + 1) % cycle_path.len()];
-
-                                if let Some(edges) = adj_list.get(&from) {
-                                    for e in edges {
-                                        if e.target == to {
-                                            cycle_edges.push((*e).clone());
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if !cycle_edges.is_empty() {
-                                cycles.push(cycle_edges);
-                            }
-                        }
-                    } else {
-                        let mut cycle_edges = Vec::new();
-                        for i in 0..cycle_path.len() {
-                            let from = cycle_path[i];
-                            let to = cycle_path[(i + 1) % cycle_path.len()];
-
-                            if let Some(edges) = adj_list.get(&from) {
-                                for e in edges {
-                                    if e.target == to {
-                                        cycle_edges.push((*e).clone());
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if !cycle_edges.is_empty() {
-                            cycles.push(cycle_edges);
-                        }
+                    let key = Self::canonical_cycle_key(&cycle_edges);
+                    if !cycle_edges.is_empty() && seen_cycles.insert(key) {
+                        cycles.push(cycle_edges);
                     }
                 }
             }
@@ -260,6 +227,15 @@ impl<'a> CycleAnalyzer<'a> {
 
         rec_stack.pop();
         rec_stack_set.remove(&node);
+    }
+
+    fn canonical_cycle_key(cycle: &[ContainmentEdge]) -> Vec<ArcKey> {
+        let mut key = cycle
+            .iter()
+            .map(|edge| (edge.source, edge.field_name.clone(), edge.target))
+            .collect::<Vec<_>>();
+        key.sort();
+        key
     }
 
     /// Phase 3: Determine which edges need Box wrapping using heuristics
@@ -308,7 +284,7 @@ impl<'a> CycleAnalyzer<'a> {
                 };
                 let target_class = &self.ctx.classes()[*target_idx];
 
-                if !Self::is_polymorphic_class(target_class) {
+                if !has_codegen_polymorphic_family(self.ctx, target_class) {
                     continue;
                 }
 
@@ -336,14 +312,20 @@ impl<'a> CycleAnalyzer<'a> {
 
     fn polymorphic_family_members(&self, root: ClassIdx) -> HashSet<ClassIdx> {
         let mut members = HashSet::new();
+        let mut visited = HashSet::new();
         let mut stack = vec![root];
 
         while let Some(class_idx) = stack.pop() {
-            if !members.insert(class_idx) {
+            if !visited.insert(class_idx) {
                 continue;
             }
 
             let class = &self.ctx.classes()[*class_idx];
+            if is_uninhabited_polymorphic_class(self.ctx, class) {
+                continue;
+            }
+
+            members.insert(class_idx);
             stack.extend(class.sub().iter().copied());
         }
 
@@ -370,10 +352,6 @@ impl<'a> CycleAnalyzer<'a> {
                 .copied()
                 .any(|target| Self::path_exists(adj_list, target, goal, visited))
         })
-    }
-
-    fn is_polymorphic_class(class: &ecore_rs::repr::Class) -> bool {
-        class.is_abstract() || class.is_interface() || has_subclasses(class)
     }
 
     /// Select the best edge to break in a cycle using heuristics

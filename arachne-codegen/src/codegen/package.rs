@@ -1,15 +1,20 @@
 use ecore_rs::{ctx::Ctx, repr::idx};
-use heck::{ToSnakeCase, ToUpperCamelCase};
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::TokenStream;
+use quote::quote;
 use syn::Ident;
 
 use crate::{
-    PACKAGE_PATH_MOD,
+    CLASSIFIERS_PATH_MOD, PACKAGE_PATH_MOD,
     codegen::{
-        classifier::{polymorphic_kind_ident, polymorphic_kind_log_ident},
+        classifier::{
+            has_codegen_polymorphic_family, polymorphic_kind_ident, polymorphic_kind_log_ident,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
+        ident::{
+            classifier_type_ident_with_suffix, type_ident, type_ident_with_suffix, value_ident,
+            value_ident_with_suffix,
+        },
         import::{Import, Log, Protocol},
         reference::analysis::ReferenceAnalysis,
     },
@@ -18,6 +23,11 @@ use crate::{
 #[derive(Clone, Copy)]
 struct RootMeta {
     class_idx: idx::Class,
+}
+
+fn classifiers_path() -> syn::Path {
+    syn::parse_str(&format!("crate::{CLASSIFIERS_PATH_MOD}"))
+        .expect("generated classifiers module path should be valid")
 }
 
 pub struct PackageGenerator<'a> {
@@ -59,20 +69,24 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn root_variant_ident(&self, root: RootMeta) -> Ident {
-        polymorphic_kind_ident(self.root_class(root))
+        polymorphic_kind_ident(self.ctx, self.root_class(root))
     }
 
     fn root_log_ident(&self, root: RootMeta) -> Ident {
-        polymorphic_kind_log_ident(self.root_class(root))
+        polymorphic_kind_log_ident(self.ctx, self.root_class(root))
     }
 
     fn root_value_ident(&self, root: RootMeta) -> Ident {
-        let kind_name = polymorphic_kind_ident(self.root_class(root));
-        format_ident!("{}Value", kind_name)
+        let class = self.root_class(root);
+        if has_codegen_polymorphic_family(self.ctx, class) {
+            classifier_type_ident_with_suffix(self.ctx, class, "KindValue")
+        } else {
+            classifier_type_ident_with_suffix(self.ctx, class, "Value")
+        }
     }
 
     fn root_field_ident(&self, root: RootMeta) -> Ident {
-        format_ident!("{}_log", self.root_class_name(root).to_snake_case())
+        value_ident_with_suffix(self.root_class_name(root), "log")
     }
 
     fn has_references(&self) -> bool {
@@ -85,16 +99,13 @@ impl<'a> PackageGenerator<'a> {
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
-            Import::Protocol(Protocol::Event),
+            Import::Custom("moirai_protocol::event::Event as ProtocolEvent"),
             Import::Protocol(Protocol::QueryOperation),
-            Import::Protocol(Protocol::ObjectPath),
             Import::Protocol(Protocol::SinkEffect),
-            Import::Protocol(Protocol::SinkOwnership),
+            Import::Protocol(Protocol::EffectContext),
             Import::Protocol(Protocol::Interner),
             Import::Protocol(Protocol::InternalizeOp),
             Import::Protocol(Protocol::SinkCollector),
-            Import::Log(Log::PartiallyOrdered),
-            Import::Custom("crate::classifiers::*"),
         ];
 
         if self.has_references() {
@@ -103,7 +114,6 @@ impl<'a> PackageGenerator<'a> {
                 Import::Log(Log::Vec),
                 Import::Protocol(Protocol::PureCRDT),
                 Import::Custom("crate::references::*"),
-                Import::Custom("crate::classifiers::*"),
             ]);
         }
 
@@ -114,10 +124,11 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_ident = type_ident(package_name);
+        let classifiers = classifiers_path();
         let root_variants = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
-            quote! { #variant(#path::#variant) }
+            quote! { #variant(#classifiers::#variant) }
         });
         let reference_variants = if self.has_references() {
             quote! { , AddReference(#path::Refs), RemoveReference(#path::Refs) }
@@ -135,18 +146,73 @@ impl<'a> PackageGenerator<'a> {
         }
     }
 
-    fn generate_package_value_struct(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+    fn generate_package_rejection_enum(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
+        let reference_log_ty = quote! { #path::VecLog<#path::ReferenceManager<#path::FairPolicy>> };
+        let classifiers = classifiers_path();
+
+        let root_variants = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let log_ty = self.root_log_ident(root);
+            quote! {
+                #variant(<#classifiers::#log_ty as #path::IsLog>::Rejection)
+            }
+        });
+        let root_display_arms = self.roots().into_iter().map(|root| {
+            let variant = self.root_variant_ident(root);
+            let label = variant.to_string();
+            quote! {
+                Self::#variant(error) => write!(f, "{}: {}", #label, error)
+            }
+        });
+        let reference_variants = if self.has_references() {
+            quote! {
+                AddReference(<#reference_log_ty as #path::IsLog>::Rejection),
+                RemoveReference(<#reference_log_ty as #path::IsLog>::Rejection),
+            }
+        } else {
+            quote! {}
+        };
+        let reference_display_arms = if self.has_references() {
+            quote! {
+                Self::AddReference(error) => write!(f, "AddReference: {}", error),
+                Self::RemoveReference(error) => write!(f, "RemoveReference: {}", error),
+            }
+        } else {
+            quote! {}
+        };
+
+        quote! {
+            #[derive(Debug)]
+            pub enum #package_rejection_name {
+                #(#root_variants,)*
+                #reference_variants
+            }
+
+            impl std::fmt::Display for #package_rejection_name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    match self {
+                        #(#root_display_arms,)*
+                        #reference_display_arms
+                    }
+                }
+            }
+        }
+    }
+
+    fn generate_package_value_struct(&self) -> TokenStream {
+        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
+        let path: syn::Path =
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let classifiers = classifiers_path();
         let root_fields = self.roots().into_iter().map(|root| {
-            let field = Ident::new(
-                &self.root_class_name(root).to_snake_case(),
-                Span::call_site(),
-            );
+            let field = value_ident(self.root_class_name(root));
             let value_ty = self.root_value_ident(root);
-            quote! { pub #field: #path::#value_ty }
+            quote! { pub #field: #classifiers::#value_ty }
         });
         let refs_field = if self.has_references() {
             // petgraph::Graph doesn't implement Serialize/Deserialize,
@@ -171,20 +237,21 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_package_log_struct(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
+        let classifiers = classifiers_path();
 
         let root_fields = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
-            quote! { #field: #path::#log_ty }
+            quote! { #field: #classifiers::#log_ty }
         });
         let root_getters = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! {
-                pub fn #field(&self) -> &#path::#log_ty {
+                pub fn #field(&self) -> &#classifiers::#log_ty {
                     &self.#field
                 }
             }
@@ -225,14 +292,20 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
+        let package_ident = type_ident(package_name);
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
+        let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
 
         let enabled_root_arms = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             let field = self.root_field_ident(root);
-            quote! { #package_ident::#variant(o) => self.#field.is_enabled(o) }
+            quote! {
+                #package_ident::#variant(o) => self
+                    .#field
+                    .is_enabled(o)
+                    .map_err(#package_rejection_name::#variant)
+            }
         });
         let stabilize_roots = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
@@ -246,15 +319,22 @@ impl<'a> PackageGenerator<'a> {
             let field = self.root_field_ident(root);
             quote! { self.#field.is_default() }
         });
+        let reference_default_check = if self.has_references() {
+            quote! { self.reference_manager_log.is_default() }
+        } else {
+            quote! { true }
+        };
 
         let reference_is_enabled = if self.has_references() {
             quote! {
                 #package_ident::AddReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone())),
+                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone()))
+                    .map_err(#package_rejection_name::AddReference),
                 #package_ident::RemoveReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone())),
+                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone()))
+                    .map_err(#package_rejection_name::RemoveReference),
             }
         } else {
             quote! {}
@@ -272,66 +352,74 @@ impl<'a> PackageGenerator<'a> {
         let root_variants = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
-            let field_stringify = self.root_class_name(root).to_snake_case();
-            if self.has_references() {
-                quote! { #package_ident::#variant(o) =>
-                #path::IsLog::effect(&mut self.#log_field, #path::Event::unfold(event.clone(), o), #path::ObjectPath::new(#package_name).field(#field_stringify), &mut sink, #path::SinkOwnership::Owned),
-                }
-            } else {
-                quote! {
-                    #package_ident::#variant(o) => self.#log_field.effect(
-                        #path::Event::unfold(event.clone(), o),
-                        __package::ObjectPath::new(#package_name),
-                        &mut __package::SinkCollector::new(),
-                        #path::SinkOwnership::Owned
-                    ),
+            let field_stringify = value_ident(self.root_class_name(root)).to_string();
+            quote! {
+                #package_ident::#variant(o) => {
+                    let child_event = #path::ProtocolEvent::unfold(event.clone(), o);
+                    ctx.with_field(#field_stringify, |ctx| {
+                        self.#log_field.effect(child_event, ctx);
+                    });
                 }
             }
         });
 
+        // Package generation ignores the parent EffectContext and always creates a new root context
+        // This is because the package log is the top-level log and should not be nested within another context.
+
         let effect = if self.has_references() {
             quote! {
-            let mut sink = #path::SinkCollector::new();
-                match event.op().clone() {
-                    #(#root_variants)*
-                    #package_ident::AddReference(o) =>
-                        self.reference_manager_log.effect(
-                            #path::Event::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
-                            __package::ObjectPath::new(#package_name),
-                            &mut __package::SinkCollector::new(),
-                            #path::SinkOwnership::Owned
-                        ),
-                    #package_ident::RemoveReference(o) =>
-                        self.reference_manager_log.effect(
-                            #path::Event::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
-                            __package::ObjectPath::new(#package_name),
-                            &mut __package::SinkCollector::new(),
-                            #path::SinkOwnership::Owned
-                        ),
+                let mut sink = #path::SinkCollector::new();
+                {
+                    let mut ctx = #path::EffectContext::root(#package_name, Some(&mut sink));
+                    match event.op().clone() {
+                        #(#root_variants)*
+                        #package_ident::AddReference(o) => {
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
+                                &mut ctx
+                            );
+                        }
+                        #package_ident::RemoveReference(o) => {
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
+                                &mut ctx
+                            );
+                        }
+                    }
                 }
+                let mut reference_effect_disambiguator = 0u32;
                 for sink in sink.into_sinks() {
                     match sink.effect() {
                         #path::SinkEffect::Create | #path::SinkEffect::Update => {
-                            let vertex_ops = #path::instance_from_path(sink.path())
+                            let vertex_ops = sink.kind()
+                                .and_then(|kind| #path::instance_from_sink_kind(kind, sink.path()))
                                 .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
                             if let Some(o) = vertex_ops {
+                                reference_effect_disambiguator += 1;
+                                let mut ctx = #path::EffectContext::silent();
                                 self.reference_manager_log.effect(
-                                    #path::Event::unfold(event.clone(), o),
-                                    __package::ObjectPath::new(#package_name),
-                                    &mut __package::SinkCollector::new(),
-                                    #path::SinkOwnership::Owned
+                                    #path::ProtocolEvent::unfold_with_disambiguator(
+                                        event.clone(),
+                                        reference_effect_disambiguator,
+                                        o,
+                                    ),
+                                    &mut ctx
                                 );
                             }
                         }
                         #path::SinkEffect::Delete => {
-                            self.reference_manager_log.effect(__package::Event::unfold(
-                                event.clone(),
-                                __package::ReferenceManager::DeleteSubtree {
-                                    prefix: sink.path().clone(),
-                                }),
-                                __package::ObjectPath::new(#package_name),
-                                &mut __package::SinkCollector::new(),
-                                #path::SinkOwnership::Owned
+                            reference_effect_disambiguator += 1;
+                            let mut ctx = #path::EffectContext::silent();
+                            self.reference_manager_log.effect(
+                                #path::ProtocolEvent::unfold_with_disambiguator(
+                                    event.clone(),
+                                    reference_effect_disambiguator,
+                                    #path::ReferenceManager::DeleteSubtree {
+                                        prefix: sink.path().clone(),
+                                    }),
+                                &mut ctx
                             );
                         }
                     }
@@ -339,6 +427,7 @@ impl<'a> PackageGenerator<'a> {
             }
         } else {
             quote! {
+                let mut ctx = #path::EffectContext::root(#package_name, None);
                 match event.op().clone() {
                     #(#root_variants)*
                 }
@@ -349,15 +438,16 @@ impl<'a> PackageGenerator<'a> {
             impl #path::IsLog for #package_log_name {
                 type Value = #package_value_name;
                 type Op = #package_ident;
+                type Rejection = #package_rejection_name;
 
-                fn is_enabled(&self, op: &Self::Op) -> bool {
+                fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
                     match op {
                         #(#enabled_root_arms,)*
                         #reference_is_enabled
                     }
                 }
 
-                fn effect(&mut self, event: #path::Event<Self::Op>, _path: #path::ObjectPath, _sink: &mut #path::SinkCollector, _ownership: #path::SinkOwnership) {
+                fn effect(&mut self, event: #path::ProtocolEvent<Self::Op>, _ctx: &mut #path::EffectContext<'_>) {
                     #effect
                 }
 
@@ -372,7 +462,7 @@ impl<'a> PackageGenerator<'a> {
                 }
 
                 fn is_default(&self) -> bool {
-                    true #(&& #default_checks)*
+                    #reference_default_check #(&& #default_checks)*
                 }
             }
         }
@@ -380,16 +470,13 @@ impl<'a> PackageGenerator<'a> {
 
     fn generate_eval_nested_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = format_ident!("{}Log", package_name.to_upper_camel_case());
-        let package_value_name = format_ident!("{}Value", package_name.to_upper_camel_case());
+        let package_log_name = type_ident_with_suffix(package_name, "Log");
+        let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
         let root_reads = self.roots().into_iter().map(|root| {
-            let field_name = Ident::new(
-                &self.root_class_name(root).to_snake_case(),
-                Span::call_site(),
-            );
+            let field_name = value_ident(self.root_class_name(root));
             let log_field = self.root_field_ident(root);
             quote! { #field_name: self.#log_field.execute_query(#path::Read::new()) }
         });
@@ -453,7 +540,7 @@ impl<'a> PackageGenerator<'a> {
 
     fn translate_ids_impl(&self) -> TokenStream {
         let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = format_ident!("{}", package_name.to_upper_camel_case());
+        let package_ident = type_ident(package_name);
         let translate_root_arms = self.roots().into_iter().map(|root| {
             let variant = self.root_variant_ident(root);
             quote! { #package_ident::#variant(op) => #package_ident::#variant(op.clone()) }
@@ -487,6 +574,7 @@ impl<'a> PackageGenerator<'a> {
 impl<'a> Generate for PackageGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
         let package_enum = self.generate_package_enum();
+        let package_rejection = self.generate_package_rejection_enum();
         let package_value = self.generate_package_value_struct();
         let package_log = self.generate_package_log_struct();
         let is_log_impl = self.generate_is_log_impl();
@@ -494,20 +582,9 @@ impl<'a> Generate for PackageGenerator<'a> {
         let queryable_log_impl = self.generate_queryable_log_impl();
         let translate_ids = self.translate_ids_impl();
 
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let ref_manager_log = if self.has_references() {
-            quote! {
-                pub type ReferenceManagerLog = #path::POLog<#path::ReferenceManager<#path::FairPolicy>, #path::ReferenceManagerState<#path::FairPolicy>>;
-            }
-        } else {
-            quote! {}
-        };
-
         let tokens = quote! {
-            #ref_manager_log
-
             #package_enum
+            #package_rejection
             #package_value
             #package_log
             #is_log_impl
@@ -516,6 +593,8 @@ impl<'a> Generate for PackageGenerator<'a> {
             #translate_ids
         };
 
-        Ok(Fragment::new(tokens, self.imports(), vec![]))
+        let imports = self.imports();
+
+        Ok(Fragment::new(tokens, imports, vec![]))
     }
 }

@@ -1,5 +1,7 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
+use log::warn;
 
+use crate::codegen::classifier::is_instantiable_class;
 use crate::utils::hash::HashSet;
 
 /// A non-containment reference in the Ecore model.
@@ -60,12 +62,18 @@ impl ReferenceAnalysis {
                     continue;
                 }
 
-                let target_idx = match feature.typ {
+                let target_idx: idx::Class = match feature.typ {
                     Some(t) => t,
                     None => continue,
                 };
 
                 if !package_set.contains(&target_idx) {
+                    warn!(
+                        "Reference `{}` in class `{}` points to a target class `{}` outside the package slice. Skipping.",
+                        feature.name,
+                        class.name(),
+                        ctx.class(target_idx).name()
+                    );
                     continue;
                 }
 
@@ -151,7 +159,7 @@ impl ReferenceAnalysis {
 
         let mut result = Vec::new();
 
-        if class.is_concrete() {
+        if is_instantiable_class(class) {
             result.push(class_idx);
         }
 

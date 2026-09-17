@@ -4,6 +4,7 @@ use crate::utils::hash::{HashMap, HashSet};
 
 /// Sorts classes in topological order of the inheritance hierarchy.
 /// Parent classes come before child classes, allowing inheritance links to be generated.
+/// Recall that the inheritance hierarchy is a strict partial order, so a topological sort is always possible.
 pub fn topological_sort<'a>(ctx: &ecore_rs::ctx::Ctx, classes: &[&'a Class]) -> Vec<&'a Class> {
     let mut sorted = Vec::new();
     let mut visited = HashSet::default();
