@@ -424,10 +424,12 @@ mod tests {
     /// the four `formatVersion` 2 keys: the facets as written, the annotation,
     /// the merge rule and its provenance.
     ///
-    /// `TreeNode.ID` is the shape of a required text slot; `TreeNode.name` the
-    /// same leaf under an `OptionLog`, its `presence` `declared` because
-    /// `lowerBound="0" upperBound="1"` differs from Ecore's `1..1` default for
-    /// an attribute.
+    /// `TreeNode.ID` is the shape of a required text slot, its `presence`
+    /// `declared` because `lowerBound="1"` differs from Ecore's `0..1` default;
+    /// `TreeNode.name` the same leaf under an `OptionLog`, and although it
+    /// writes `lowerBound="0" upperBound="1"` it resolves to that default, so
+    /// the conservative reading calls it `ecoreDefault` rather than claim a
+    /// declaration the parsed feature no longer distinguishes.
     #[test]
     fn bt_tree_node_declares_only_its_own_features() {
         let descriptor = bt_descriptor();
@@ -441,14 +443,14 @@ mod tests {
                  "merge": {"kind": "attribute", "shape": {"kind": "single"},
                            "leaf": {"kind": "text"}},
                  "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "ecoreDefault"}},
+                                "leaf": "declared", "presence": "declared"}},
                 {"name": "name", "kind": "string", "many": false,
                  "required": false, "isId": false,
                  "facets": {"ordered": null, "unique": null}, "annotation": null,
                  "merge": {"kind": "attribute", "shape": {"kind": "optional"},
                            "leaf": {"kind": "text"}},
                  "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "declared"}},
+                                "leaf": "declared", "presence": "ecoreDefault"}},
             ])
         );
     }

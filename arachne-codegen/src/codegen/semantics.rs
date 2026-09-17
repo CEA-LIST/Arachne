@@ -65,12 +65,11 @@
 //!   multi-valued containment whatever `ordered` says, so the value acted on
 //!   is Arachne's and not the file's. What the file wrote is still visible: it
 //!   is the `facets` object of the descriptor entry.
-//! - **`presence` is `EcoreDefault` when the bounds equal Ecore's default for
-//!   the feature kind** — `1..1` for an attribute, `0..1` for a reference —
-//!   and `Declared` otherwise. The parsed [`Structural`] does not keep whether
-//!   `lowerBound` was written, only what it resolved to, and reading
-//!   equal-to-default as a default is the side that never over-claims a
-//!   declaration.
+//! - **`presence` is `EcoreDefault` when the bounds equal Ecore's default**,
+//!   `0..1` for either feature kind, and `Declared` otherwise. The parsed
+//!   [`Structural`] does not keep whether `lowerBound` was written, only what
+//!   it resolved to, and reading equal-to-default as a default is the side
+//!   that never over-claims a declaration.
 //!
 //! One facet has no slot: which of `AWSet` and `RWSet` an `aw-set` or
 //! `rw-set` annotation chose. [`Provenance`] names four facets and the set
@@ -435,12 +434,18 @@ fn presence_of(feature: &Structural) -> Presence {
     }
 }
 
-/// Ecore's default bounds for the feature's kind: `1..1` for an attribute,
-/// `0..1` for a reference (`structural.rs`'s `parse_bounds`).
+/// Ecore's default bounds, `0..1`, for either feature kind
+/// (`structural.rs`'s `parse_bounds`).
+///
+/// Until upstream's parser fixes, arachne read a silent `lowerBound` on an
+/// attribute as `1`, so this read `1..1` as the attribute default. Ecore
+/// defaults `ETypedElement.lowerBound` to `0` for every typed element, which
+/// is what the parser now does, and reading `1..1` as a default here would
+/// call a written `lowerBound="1"` an Ecore default and a silent attribute a
+/// declaration — the descriptor's provenance the wrong way round on both.
 fn presence_source(feature: &Structural) -> FacetSource {
     let default = match feature.kind {
-        structural::Typ::EAttribute => (1usize, Some(1usize)),
-        structural::Typ::EReference => (0usize, Some(1usize)),
+        structural::Typ::EAttribute | structural::Typ::EReference => (0usize, Some(1usize)),
     };
     if (feature.bounds.lbound, feature.bounds.ubound) == default {
         FacetSource::EcoreDefault
@@ -1557,12 +1562,15 @@ mod tests {
             "`Foo.set` is a bag, because `unique` is silent and Arachne reads that as false"
         );
 
+        // `myChar` writes no `lowerBound`, and since upstream's parser fixes that is Ecore's
+        // `0`, not the `1` arachne used to read: the attribute is optional, and the source of
+        // its presence is the Ecore default rather than anything the file declared.
         let (rule, provenance) = merge_rule(feature("myChar"), foo, ctx);
         assert_eq!(
             (rule, provenance.leaf, provenance.presence),
             (
                 MergeRule::Attribute {
-                    shape: Shape::Single,
+                    shape: Shape::Optional,
                     leaf: LeafRule::Register {
                         tie: TieBreak::MultiValue,
                     },

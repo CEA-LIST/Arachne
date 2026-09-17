@@ -1,14 +1,14 @@
 {
   "bt.metamodel.json": {
     "nsURI": "http://www.example.org/behaviortree",
-    "digest": "704356c81751dac49104ce1f3ccc085fa3b7ada84dc4e7da548843dfd5f250eb"
+    "digest": "b899ec335e7dc46303d5a7871a1370a12db8858718bea57dc6f58f01c474feb5"
   },
   "uml.metamodel.json": {
     "nsURI": "http:///SimpleUML.ecore",
-    "digest": "c3a3807ac29deb198cbb5f7cb2a534dc03eacac135c0b00c302e9896337ecc9a"
+    "digest": "fe72e2f61c75fddee74e6f07f1160a364130b2b08501b53d2b416be906b352f3"
   },
   "json.metamodel.json": {
     "nsURI": "http://www.example.org/json",
-    "digest": "b3ee4308f9789314083f42e4798718e2f5d9c0961acf290c39317798eeafa5c7"
+    "digest": "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30"
   }
 }
