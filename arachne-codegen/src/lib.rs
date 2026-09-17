@@ -716,7 +716,7 @@ mod tests {
         );
 
         assert!(classifiers.contains("__classifiers::record!(A{"));
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(B,BLog));"));
+        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(B,BLog=>BValue));"));
     }
 
     #[test]
@@ -744,7 +744,7 @@ mod tests {
         let (classifiers, _references) = generate_modules_from_str(ecore);
 
         assert!(classifiers.contains(
-            "__classifiers::union!(TypesLibraryKind=NativeTypesLibrary(NativeTypesLibrary,NativeTypesLibraryLog)|UserDefinedTypesLibrary(UserDefinedTypesLibrary,UserDefinedTypesLibraryLog));"
+            "__classifiers::union!(TypesLibraryKind=NativeTypesLibrary(NativeTypesLibrary,NativeTypesLibraryLog=>NativeTypesLibraryValue)|UserDefinedTypesLibrary(UserDefinedTypesLibrary,UserDefinedTypesLibraryLog=>UserDefinedTypesLibraryValue));"
         ));
         assert!(classifiers.contains("pubenumTypesLibraryKindModel{"));
         assert!(classifiers.contains(
@@ -759,9 +759,9 @@ mod tests {
             "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
         );
 
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));"));
-        assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog)|C(C,CLog));"));
-        assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>,}"));
+        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(BKind,BKindLog=>BKindValue));"));
+        assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog=>BValue)|C(C,CLog=>CValue));"));
+        assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>=>Option<AKindValue>,}"));
     }
 
     #[test]
@@ -790,7 +790,7 @@ mod tests {
 
         assert!(classifiers.contains("pubusemoirai_protocol::state::log::BoxedLog;"));
         assert!(classifiers.contains(
-            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>,}"
+            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>=>Option<Box<UnionValue>>,}"
         ));
         assert!(!classifiers.contains("OptionLog<Box<UnionLog>>"));
     }
@@ -862,8 +862,8 @@ mod tests {
 
         println!("classifiers: {}", classifiers);
 
-        assert!(classifiers.contains("AKind=C(C,CLog)"));
-        assert!(classifiers.contains("BKind=C(C,CLog)"));
+        assert!(classifiers.contains("AKind=C(C,CLog=>CValue)"));
+        assert!(classifiers.contains("BKind=C(C,CLog=>CValue)"));
     }
 
     #[test]
@@ -875,7 +875,7 @@ mod tests {
 
         let (classifiers, references) = generate_modules_from_str(&ecore);
 
-        assert!(classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog));"));
+        assert!(classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog=>BazValue));"));
         assert!(classifiers.contains("__classifiers::record!(Abstract{"));
         assert!(classifiers.contains(
             "name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>"
@@ -919,7 +919,7 @@ mod tests {
         assert!(!classifiers.contains("constraints:"));
         assert!(
             classifiers
-                .contains("__classifiers::record!(Method{named_element_super:NamedElementLog,});")
+                .contains("__classifiers::record!(Method{named_element_super:NamedElementLog=>NamedElementValue,});")
         );
         assert!(classifiers.contains("__classifiers::record!(NamedElement{});"));
     }
@@ -1109,29 +1109,29 @@ mod tests {
 
         // An explicit `EObject` supertype adds no field.
         assert!(classifiers.contains(
-            "__classifiers::record!(Model{parts:__classifiers::NestedListLog<PartLog>,});"
+            "__classifiers::record!(Model{parts:__classifiers::NestedListLog<PartLog>=>Vec<PartValue>,});"
         ));
         assert!(!classifiers.contains("EcoreEObject"));
         // Inherited features, as from any supertype.
         assert!(classifiers.contains(
-            "__classifiers::record!(Element{e_model_element_super:EcoreEModelElementLog,"
+            "__classifiers::record!(Element{e_model_element_super:EcoreEModelElementLog=>EcoreEModelElementValue,"
         ));
         assert!(classifiers.contains(
-            "__classifiers::record!(Port{e_named_element_super:EcoreENamedElementLog,});"
+            "__classifiers::record!(Port{e_named_element_super:EcoreENamedElementLog=>EcoreENamedElementValue,});"
         ));
         assert!(classifiers.contains(
-            "__classifiers::record!(EcoreENamedElement{e_model_element_super:EcoreEModelElementLog,name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>,});"
+            "__classifiers::record!(EcoreENamedElement{e_model_element_super:EcoreEModelElementLog=>EcoreEModelElementValue,name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>=>Option<Vec<char>>,});"
         ));
         assert!(classifiers.contains(
-            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog)|EcoreENamedElement(EcoreENamedElementKind,EcoreENamedElementKindLog)|Element(ElementKind,ElementKindLog));"
+            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog=>EcoreEAnnotationValue)|EcoreENamedElement(EcoreENamedElementKind,EcoreENamedElementKindLog=>EcoreENamedElementKindValue)|Element(ElementKind,ElementKindLog=>ElementKindValue));"
         ));
         // `eAnnotations` is an ordered containment, `source` an optional string, `details` a map
         // from a key to an optional string; `contents` and `eModelElement` are not generated.
         assert!(classifiers.contains(
-            "__classifiers::record!(EcoreEModelElement{e_annotations:__classifiers::NestedListLog<__classifiers::BoxedLog<EcoreEAnnotationLog>>,});"
+            "__classifiers::record!(EcoreEModelElement{e_annotations:__classifiers::NestedListLog<__classifiers::BoxedLog<EcoreEAnnotationLog>>=>Vec<Box<EcoreEAnnotationValue>>,});"
         ));
         assert!(classifiers.contains(
-            "__classifiers::record!(EcoreEAnnotation{e_model_element_super:EcoreEModelElementLog,source:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>,details:__classifiers::UWMapLog<std::string::String,__classifiers::VecLog<__classifiers::MVRegister<Option<std::string::String>>>>,});"
+            "__classifiers::record!(EcoreEAnnotation{e_model_element_super:EcoreEModelElementLog=>EcoreEModelElementValue,source:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>=>Option<Vec<char>>,details:__classifiers::UWMapLog<std::string::String,__classifiers::VecLog<__classifiers::MVRegister<Option<std::string::String>>>>=>__classifiers::HashMap<std::string::String,__classifiers::HashSet<Option<std::string::String>>>,});"
         ));
         assert!(!classifiers.contains("EcoreEStringToStringMapEntry"));
 
@@ -1199,10 +1199,10 @@ mod tests {
         let (classifiers, _references, package, _warnings) = generate_all_from_parser(&parser);
 
         assert!(classifiers.contains(
-            "__classifiers::record!(Model{notes:__classifiers::NestedListLog<EcoreEAnnotationLog>,elements:__classifiers::NestedListLog<EcoreEModelElementKindLog>,});"
+            "__classifiers::record!(Model{notes:__classifiers::NestedListLog<EcoreEAnnotationLog>=>Vec<EcoreEAnnotationValue>,elements:__classifiers::NestedListLog<EcoreEModelElementKindLog>=>Vec<EcoreEModelElementKindValue>,});"
         ));
         assert!(classifiers.contains(
-            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog)|Part(Part,PartLog));"
+            "__classifiers::union!(EcoreEModelElementKind=EcoreEAnnotation(EcoreEAnnotation,EcoreEAnnotationLog=>EcoreEAnnotationValue)|Part(Part,PartLog=>PartValue));"
         ));
         // `Part` is contained through `Model.elements`, so `Model` is the only root. The only
         // non-containment reference the built-ins bring in is `EAnnotation.references`, typed by

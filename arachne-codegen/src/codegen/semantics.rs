@@ -811,8 +811,13 @@ mod tests {
     }
 
     /// The emitted fragment as a comparable string: the field name dropped,
-    /// the private classifiers module dropped, `Box` dropped and every space
-    /// squeezed out.
+    /// the read-out after `=>` dropped, the private classifiers module
+    /// dropped, `Box` dropped and every space squeezed out.
+    ///
+    /// The read-out is dropped because the rule is about the merge, and a
+    /// value type is a projection of the log, not a choice the rule makes:
+    /// since Moirai v0.7 a `record!` field is `name : Log => Value`, and the
+    /// `Value` half is `codegen/value.rs`'s function of the `Log` half.
     ///
     /// `Box` — `BoxedLog` since Moirai v0.6 — is a Rust representation choice
     /// the cycle analysis makes so a log has a finite size; it changes no
@@ -822,6 +827,12 @@ mod tests {
         let (_, typ) = rendered
             .split_once(" : ")
             .unwrap_or_else(|| panic!("a field fragment is `name : type`, got `{rendered}`"));
+        let typ = typ
+            .split_once(" => ")
+            .map(|(log, _)| log)
+            .unwrap_or_else(|| {
+                panic!("a field fragment is `name : log => value`, got `{rendered}`")
+            });
         let mut out = String::with_capacity(typ.len());
         for chunk in typ.replace("__classifiers :: ", "").split_whitespace() {
             out.push_str(chunk);
