@@ -229,6 +229,10 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
 }
 
 fn run_describe(args: DescribeArgs) -> Result<()> {
+    // `main` reports a failure through `log::error!`, which writes nothing until a logger is
+    // installed, so a refusal from here — a metamodel using Ecore's own classes, say — used to
+    // exit 1 in silence. `error` keeps stdout a descriptor and says why when there is none.
+    init_logger_at("error");
     let parser = arachne_codegen::EcoreParser::from_file(&args.input)
         .map_err(|e| anyhow!("Failed to parse '{}': {}", args.input.display(), e))?;
     let pack = arachne_codegen::find_user_package(&parser.ctx)?;
@@ -248,6 +252,7 @@ fn run_describe(args: DescribeArgs) -> Result<()> {
 
 /// `{nsURI, digest}` for a descriptor file, as a registration names it.
 fn run_digest(args: DigestArgs) -> Result<()> {
+    init_logger_at("error");
     let text = fs::read_to_string(&args.input)
         .map_err(|e| anyhow!("Failed to read '{}': {}", args.input.display(), e))?;
     let descriptor: serde_json::Value = serde_json::from_str(&text)
