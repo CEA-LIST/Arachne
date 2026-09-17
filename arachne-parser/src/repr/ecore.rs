@@ -28,6 +28,13 @@ pub const NS_URI: &str = "http://www.eclipse.org/emf/2002/Ecore";
 pub const NS_PREFIX: &str = "ecore";
 /// Name of the package holding Ecore's classes.
 pub const PACKAGE_NAME: &str = "ecore";
+/// Location of `Ecore.ecore` in the Eclipse plugin that ships it.
+///
+/// The Ecore editor inserts this spelling by default when a metamodel refers to one of Ecore's
+/// classes, and SysON's SysML metamodel uses it. EMF has no rule equating it with [`NS_URI`] but,
+/// in Eclipse, loads the file from this location, which declares the same classes under the same
+/// namespace URI; it is taken to mean [`NS_URI`] here.
+pub const PLATFORM_URI: &str = "platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore";
 /// Source of the annotations Ecore puts on its own classes.
 const ANNOTATION_SOURCE: &str = NS_URI;
 
@@ -83,10 +90,12 @@ impl Typ {
     }
 }
 
-/// Path, inside Ecore, of the classifier `s` names by Ecore's namespace URI.
+/// Path, inside Ecore, of the classifier `s` names by Ecore's namespace URI or by
+/// [`PLATFORM_URI`].
 ///
 /// `s` is the value of an `eType` or of one `eSuperTypes` token: `ecore:EClass` may lead it, as it
-/// leads an `eType`. Returns `None` if `s` does not name Ecore by its namespace URI.
+/// leads an `eType`. Returns `None` if `s` names Ecore by neither URI; in particular the relative
+/// `Ecore.ecore#//X` and the same-document `#//X` do not name Ecore, as in EMF.
 ///
 /// ```rust
 /// # use ecore_rs::repr::ecore::classifier_path;
@@ -94,6 +103,9 @@ impl Typ {
 /// assert_eq!(classifier_path(uri), Some("EModelElement"));
 /// let etype = "ecore:EClass http://www.eclipse.org/emf/2002/Ecore#//EObject";
 /// assert_eq!(classifier_path(etype), Some("EObject"));
+/// let platform = "platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EModelElement";
+/// assert_eq!(classifier_path(platform), Some("EModelElement"));
+/// assert_eq!(classifier_path("Ecore.ecore#//EObject"), None);
 /// assert_eq!(classifier_path("#//EObject"), None);
 /// ```
 pub fn classifier_path(s: &str) -> Option<&str> {
@@ -102,7 +114,9 @@ pub fn classifier_path(s: &str) -> Option<&str> {
         .strip_prefix("ecore:EClass")
         .filter(|rest| rest.starts_with(char::is_whitespace))
         .map_or(s, str::trim_start);
-    s.strip_prefix(NS_URI)?.strip_prefix("#//")
+    s.strip_prefix(NS_URI)
+        .or_else(|| s.strip_prefix(PLATFORM_URI))?
+        .strip_prefix("#//")
 }
 
 /// Adds the Ecore package and its classes to `ctx`, and returns the package and the class of each

@@ -194,9 +194,7 @@ impl Path {
         }
 
         if let Some(classifier) = ecore::classifier_path(s) {
-            if let Some(idx) = Self::resolve_ecore_classifier(ctx, classifier)? {
-                return Ok(idx);
-            }
+            return Self::resolve_ecore_classifier(ctx, classifier);
         }
 
         let rel_pref = "#//";
@@ -207,15 +205,12 @@ impl Path {
         }
     }
 
-    /// Resolves the path of a classifier inside Ecore, as named by Ecore's namespace URI.
+    /// Resolves the path of a classifier inside Ecore, see [`ecore::classifier_path`].
     ///
     /// If a package on the current path is Ecore itself, the classifier is one of that package's,
-    /// with forward referencing, and nothing is added to the context. Otherwise it is one of the
-    /// classes of [`ecore`], added to the context the first time; `None` if it is not one of them.
-    fn resolve_ecore_classifier(
-        ctx: &mut ctx::PathCtx,
-        classifier: &str,
-    ) -> Res<Option<idx::Class>> {
+    /// with forward referencing, and nothing is added to the context. Otherwise it must be one of
+    /// the classes of [`ecore`], added to the context the first time.
+    fn resolve_ecore_classifier(ctx: &mut ctx::PathCtx, classifier: &str) -> Res<idx::Class> {
         let ecore_itself = ctx
             .path()
             .iter()
@@ -223,12 +218,21 @@ impl Path {
             .last();
         if let Some(p_idx) = ecore_itself {
             let path = Path::of_idx(ctx.ctx(), p_idx);
-            return Self::resolve_relative_etype(path, ctx.ctx_mut(), classifier).map(Some);
+            return Self::resolve_relative_etype(path, ctx.ctx_mut(), classifier);
         }
 
         match ecore::Typ::from_name(classifier) {
-            Some(typ) => ctx.ctx_mut().ecore_class_idx(typ).map(Some),
-            None => Ok(None),
+            Some(typ) => ctx.ctx_mut().ecore_class_idx(typ),
+            None => {
+                let supported = ecore::Typ::ALL.map(|typ| format!("`{typ}`"));
+                let (last, others) = supported.split_last().expect("[fatal] no Ecore class");
+                bail!(
+                    "unsupported Ecore class `{}`, the supported ones are {} and {}",
+                    classifier,
+                    others.join(", "),
+                    last,
+                )
+            }
         }
     }
 

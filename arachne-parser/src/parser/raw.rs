@@ -24,6 +24,14 @@ pub struct Parser<'input> {
     column: usize,
 }
 
+/// A position of the parser, to come back to.
+#[derive(Debug, Clone, Copy)]
+struct Mark {
+    cursor: usize,
+    line: usize,
+    column: usize,
+}
+
 /// # Parsing entry point
 impl<'input> Parser<'input> {
     pub fn parse(txt: &'input str, ctx: &mut Ctx) -> Res<()> {
@@ -100,6 +108,26 @@ impl<'input> Parser<'input> {
 
     pub fn position(&self) -> String {
         format!("line {}, column {}", self.line, self.column)
+    }
+
+    fn mark(&self) -> Mark {
+        Mark {
+            cursor: self.cursor,
+            line: self.line,
+            column: self.column,
+        }
+    }
+
+    /// Moves the parser back to `mark`, so that an error is reported there.
+    fn rewind(&mut self, mark: Mark) {
+        let Mark {
+            cursor,
+            line,
+            column,
+        } = mark;
+        self.cursor = cursor;
+        self.line = line;
+        self.column = column;
     }
 
     pub fn fail_on_eoi(&self) -> Res<()> {
@@ -553,6 +581,8 @@ impl<'input> Parser<'input> {
             mut is_interface,
             mut sup_typs,
         ) = (None, None, None, None, None, None, None);
+        // where `eSuperTypes` is, since supertypes are resolved after the class body
+        let mut sup_typs_mark = None;
         // operations XML tags can be closed directly with `/>`, or have parameters and end with
         // `</eOperations>`; this flag indicates the former
         let mut early_done = false;
@@ -566,6 +596,7 @@ impl<'input> Parser<'input> {
                 break 'attributes;
             }
 
+            let mark = self.mark();
             let (key_pref, key, val) = self.xml_colon_ident_attribute()?;
 
             match (&*key_pref, key) {
@@ -628,6 +659,7 @@ impl<'input> Parser<'input> {
                         );
                     }
                     sup_typs = Some(val);
+                    sup_typs_mark = Some(mark);
                 }
                 (["xsi"], "type") => {
                     if let Some(typ) = typ.as_ref() {
@@ -674,7 +706,20 @@ impl<'input> Parser<'input> {
                     Some(bit)
                 }
             }) {
-                let sup_idx = class_ctx.resolve_etype(sup_typ)?;
+                let sup_idx = match class_ctx.resolve_etype(sup_typ) {
+                    Ok(sup_idx) => sup_idx,
+                    Err(err) => {
+                        // the parser stands past the class body, report the error at the attribute
+                        if let Some(mark) = sup_typs_mark {
+                            self.rewind(mark);
+                        }
+                        return Err(err.with_context(format!(
+                            "failed to resolve supertype `{}` of class `{}`",
+                            sup_typ,
+                            class_ctx.current().name(),
+                        )));
+                    }
+                };
                 class_ctx.add_sup_class(sup_idx);
             }
         }

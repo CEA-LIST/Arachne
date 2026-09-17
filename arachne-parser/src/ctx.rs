@@ -1947,7 +1947,6 @@ mod tests {
     /// `platform:/plugin` location of `Ecore.ecore`, which the Ecore editor inserts by default and
     /// SysON's metamodel uses, is refused.
     #[test]
-    #[ignore = "reproduces parser refusing the platform:/plugin spelling of ecore's classes; fix pending"]
     fn resolves_the_platform_spelling_of_ecore_classes() {
         const NS_URI: &str = "http://www.eclipse.org/emf/2002/Ecore#//";
         const PLATFORM: &str = "platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//";
@@ -2001,7 +2000,6 @@ mod tests {
     /// Ecore itself may name its classes by the `platform:/plugin` location of `Ecore.ecore`,
     /// which is the file itself.
     #[test]
-    #[ignore = "reproduces parser refusing the platform:/plugin spelling of ecore's classes; fix pending"]
     fn ecore_itself_resolves_platform_uris_to_its_own_classes() {
         let probe = r##"<eClassifiers xsi:type="ecore:EClass" name="Probe" eSuperTypes="platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EModelElement">
     <eStructuralFeatures xsi:type="ecore:EReference" name="payload" eType="ecore:EClass platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//EObject"/>
@@ -2028,7 +2026,6 @@ mod tests {
     /// A name of Ecore outside the classes built in falls through to the generic refusal, which
     /// says `eType` for a supertype and does not say which of Ecore's classes are supported.
     #[test]
-    #[ignore = "reproduces parser refusing unsupported ecore classes without naming the supported ones; fix pending"]
     fn refuses_other_ecore_classes_naming_the_supported_ones() {
         for (super_types, etype, class) in [
             (
@@ -2128,7 +2125,6 @@ mod tests {
     /// `class` parses the whole body of a class before it resolves the supertypes, so a supertype
     /// that fails to resolve is reported at the end of the class, where the parser stands.
     #[test]
-    #[ignore = "reproduces parser reporting a failed supertype at the end of its class; fix pending"]
     fn reports_a_failed_supertype_at_its_class() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
