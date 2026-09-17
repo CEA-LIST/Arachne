@@ -904,6 +904,87 @@ impl<'a, 'b> ClassCtx<'a, 'b> {
 mod tests {
     use super::Ctx;
 
+    /// A package with one class and one attribute, with no XML declaration before it and no
+    /// newline after it.
+    const BARE_PACKAGE: &str = r##"<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>"##;
+
+    const XML_DECLARATION: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+
+    fn assert_parses_bare_package(ecore: &str) {
+        let ctx = match Ctx::parse(ecore) {
+            Ok(ctx) => ctx,
+            Err(e) => panic!("refused: {e}"),
+        };
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        assert!(node
+            .structural()
+            .iter()
+            .any(|feature| feature.name == "label"));
+    }
+
+    /// `top` skips everything up to the first `>` without looking at it, `at_path` accepts the
+    /// end of input, and nothing asks for a package, so input with no `EPackage` in it parses as
+    /// an empty model.
+    #[test]
+    #[ignore = "reproduces parser accepting input with no EPackage; fix pending"]
+    fn refuses_input_with_no_epackage_root() {
+        for input in [
+            "",
+            "hello world",
+            "<not ecore",
+            XML_DECLARATION,
+            "<foo>bar</foo>\n",
+        ] {
+            match Ctx::parse(input) {
+                Ok(_) => panic!("input {input:?} parsed as an empty model"),
+                Err(e) => assert!(
+                    e.to_string().contains("`ecore:EPackage`"),
+                    "input {input:?} refused without naming the missing root: {e}"
+                ),
+            }
+        }
+    }
+
+    /// `top` takes the first tag to be the XML declaration and throws it away, so a file that
+    /// starts with its `EPackage` loses that tag and is refused at its first classifier.
+    #[test]
+    #[ignore = "reproduces parser refusing a file with no XML declaration; fix pending"]
+    fn parses_a_file_with_no_xml_declaration() {
+        assert_parses_bare_package(&format!("{BARE_PACKAGE}\n"));
+    }
+
+    /// `try_raw_tag` only matches a tag strictly shorter than the rest of the input, so a file
+    /// whose last bytes are `</ecore:EPackage>` is refused.
+    #[test]
+    #[ignore = "reproduces parser refusing a file with no trailing newline; fix pending"]
+    fn parses_a_file_with_no_trailing_newline() {
+        assert_parses_bare_package(&format!("{XML_DECLARATION}{BARE_PACKAGE}"));
+    }
+
+    /// `top` skips to the first `<` one byte per character, so the three bytes of a byte order
+    /// mark leave the cursor inside it.
+    #[test]
+    #[ignore = "reproduces parser panic on a leading byte order mark; fix pending"]
+    fn parses_a_file_starting_with_a_byte_order_mark() {
+        assert_parses_bare_package(&format!("\u{feff}{XML_DECLARATION}{BARE_PACKAGE}\n"));
+    }
+
     #[test]
     fn parses_structural_feature_default_values() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
