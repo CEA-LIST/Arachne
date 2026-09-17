@@ -8,13 +8,14 @@
 //! metamodel that never does parses exactly as if the package did not exist.
 //!
 //! The classes hold what the parser would hold after reading their declarations in EMF's
-//! `Ecore.ecore`, with three differences:
+//! `Ecore.ecore`, with two differences:
 //!
 //! - `eOpposite` cannot be represented, so `EModelElement.eAnnotations` and
 //!   `EAnnotation.eModelElement` do not know they are opposites;
-//! - `EObject` is abstract, where `Ecore.ecore` declares it concrete;
 //! - `EObject` has none of its operations (`eClass`, `eContainer`, `eGet`...), whose types are
 //!   Ecore classes and datatypes outside this package.
+//!
+//! In particular `EObject` is concrete, as `Ecore.ecore` declares it.
 //!
 //! Features typed by `EString` use the builtin datatype.
 
@@ -79,7 +80,7 @@ impl Typ {
     }
 
     fn is_abstract(self) -> bool {
-        matches!(self, Typ::EModelElement | Typ::ENamedElement | Typ::EObject)
+        matches!(self, Typ::EModelElement | Typ::ENamedElement)
     }
 
     fn instance_class_name(self) -> Option<&'static str> {
@@ -225,7 +226,7 @@ pub(crate) fn populate(ctx: &mut Ctx) -> Res<(idx::Pack, [idx::Class; 5])> {
     ctx[named_element].add_annotation(constraints("WellFormedName")?);
     ctx[named_element].add_structural(feature("name", EAttribute, string, None)?);
 
-    // `EObject`, `Ecore.ecore` line 196, has no structural feature.
+    // `EObject`, `Ecore.ecore` line 196, is concrete and has no structural feature.
 
     // `EStringToStringMapEntry`, `Ecore.ecore` lines 493-496.
     let entry = class(Typ::EStringToStringMapEntry);

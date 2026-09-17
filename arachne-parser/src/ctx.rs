@@ -1571,8 +1571,8 @@ mod tests {
     const ECORE_NS_URI: &str = "http://www.eclipse.org/emf/2002/Ecore";
 
     /// The five classes of Ecore that metamodels use, written as `Ecore.ecore` declares them,
-    /// except that `EString` is the builtin datatype, `EObject` is abstract and has none of its
-    /// operations, whose types are Ecore classes outside these five.
+    /// except that `EString` is the builtin datatype and `EObject` has none of its operations,
+    /// whose types are Ecore classes outside these five.
     const ECORE_SUBSET: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="ecore" nsURI="http://www.eclipse.org/emf/2002/Ecore" nsPrefix="ecore">
@@ -1603,7 +1603,7 @@ mod tests {
     </eAnnotations>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
-  <eClassifiers xsi:type="ecore:EClass" name="EObject" abstract="true"/>
+  <eClassifiers xsi:type="ecore:EClass" name="EObject"/>
   <eClassifiers xsi:type="ecore:EClass" name="EStringToStringMapEntry" instanceClassName="java.util.Map$Entry">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
