@@ -2746,9 +2746,10 @@ fn register_name_descriptor() -> Value {
     descriptor
 }
 
-/// **The one difference `ip14` reports that is not a merge**, pinned here as
-/// the smallest script that shows it: the generated read-out of a nested list
-/// depends on whether anyone read it while the events were arriving.
+/// **The difference `ip14` used to report that was not a merge**, kept here as
+/// the smallest script that showed it and now a gate: the generated read-out of
+/// a nested list no longer depends on whether anyone read it while the events
+/// were arriving.
 ///
 /// `a` creates a `DataType` at `Model.ownedElements[0]` and everyone sees it.
 /// Then `a` writes one character into its `name`, `b` concurrently writes one
@@ -2756,8 +2757,8 @@ fn register_name_descriptor() -> Value {
 /// events. Update-wins says `b`'s write survives the delete it is concurrent
 /// with and the element stays, holding `b`'s character, which is what the
 /// interpreted path reads either way and what the generated path reads when
-/// nothing is read in between. Read the generated log once after each of the
-/// three deliveries and it reads the empty document instead — the element is
+/// nothing is read in between. Reading the generated log once after each of the
+/// three deliveries used to give the empty document instead — the element was
 /// gone.
 ///
 /// It is not the facet defaults and not the interpreted path. It is
@@ -2767,17 +2768,18 @@ fn register_name_descriptor() -> Value {
 /// version compares `Greater` to the *previous event's*, and `Version`'s
 /// `partial_cmp` answers `Greater` for two events of one origin from the
 /// origin's own sequence without looking at what else each has seen. A
-/// concurrent event therefore takes the replay path, and the replay is only
+/// concurrent event therefore took the replay path, and the replay is only
 /// valid for an event that is causally after everything the log holds. The
-/// cache is populated by a read, which is why the state depends on whether
+/// cache is populated by a read, which is why the state depended on whether
 /// anyone looked.
 ///
-/// Ignored, not deleted: it is a defect of the merge layer this oracle sits
-/// on, it has a fix that is not this task's to make, and `ip14`,
+/// `CachedLog` keeps the join of every version it has taken in now and replays
+/// only an event that is after all of it, so `a`'s delete — which never saw
+/// `b`'s write — recomputes. Both readings agree, `ip14`,
 /// `only_one_root_arm_is_ever_written` and
-/// `the_thirty_scripts_find_exactly_one_kind_of_difference` fail on it.
+/// `the_thirty_scripts_find_exactly_one_kind_of_difference` are green, and this
+/// is a gate rather than a pin.
 #[test]
-#[ignore = "a reproducer for a `CachedLog` defect in moirai-protocol, not a gate"]
 fn a_read_between_deliveries_changes_what_the_generated_nested_list_holds() {
     let root = Path::default();
     let child = root.clone().child(Hop {
@@ -2843,9 +2845,9 @@ fn a_read_between_deliveries_changes_what_the_generated_nested_list_holds() {
 
     let unread = run(false);
     let read = run(true);
-    assert_ne!(
+    assert_eq!(
         unread, read,
-        "the defect this pins is gone; make both `ip14` and this one a gate again"
+        "the read between deliveries changes nothing"
     );
     assert_eq!(
         unread["ownedElements"],
@@ -2853,8 +2855,8 @@ fn a_read_between_deliveries_changes_what_the_generated_nested_list_holds() {
         "with nothing read in between, update-wins keeps the element"
     );
     assert_eq!(
-        read.get("ownedElements"),
-        None,
-        "with a read after each delivery, the element is gone"
+        read["ownedElements"],
+        json!([{ECLASS: "DataType", "name": "b"}]),
+        "and with a read after each delivery, update-wins still keeps it"
     );
 }

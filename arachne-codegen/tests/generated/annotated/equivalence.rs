@@ -1220,14 +1220,15 @@ fn len_of(element: &Value, feature: &str) -> usize {
 /// One edit a writer looking at `doc` could make.
 ///
 /// `creating` is false for the second writer of a concurrent round. Two
-/// writers inserting into *one* ordered containment at once is the finding
-/// `json_crdt`'s `ip28` already drives and pins — the nested list's own
-/// resolution puts two concurrent inserts in opposite orders on the two paths
-/// — and on this metamodel it also reaches `moirai-protocol`'s `CachedLog`
-/// defect, which panics rather than diverges. Both are Moirai's and neither
-/// is Ecore's, so the scripts here stay off them and
+/// writers inserting into *one* ordered containment at once used to be a
+/// finding: `json_crdt`'s `ip28` had seven of thirty scripts disagreeing on it
+/// and on this metamodel the same schedule panicked. Both were
+/// `moirai-protocol`'s `CachedLog` replaying a concurrent event and neither was
+/// the nested list's own resolution, which is the same eg-walker on both paths,
+/// and the cache is fixed. The exclusion is kept so that the corpus and its
+/// counts stay comparable with the runs that came before, and
 /// [`ip36_two_writers_inserting_into_one_sequence_at_once_is_moirais_own_finding`]
-/// drives them on their own.
+/// drives the shape on its own as a gate.
 fn propose(doc: &Value, rng: &mut Rng, writer: char, creating: bool) -> Option<Edit> {
     const ALPHABET: [char; 4] = ['a', 'b', 'c', 'd'];
     const KEYS: [&str; 3] = ["one", "two", "three"];
@@ -1737,28 +1738,27 @@ fn ip33_the_named_annotation_scenarios_agree_on_both_paths() {
 /// canonical read-outs of both replicas of both paths compared after every
 /// operation and after every delivery.
 ///
-/// # The one difference the run finds, and whose it is
+/// # No difference, read between deliveries or not
 ///
 /// A script whose noisy run differs is re-run **silently** — the same edits in
 /// the same order, nothing read until the very end — and has to agree then.
 /// That is not a weakening of the claim, it is the claim sharpened: a
 /// difference that survives a silent replay is a real disagreement between the
-/// two paths and fails here, and a difference that only a reader creates is
+/// two paths, and a difference that only a reader creates was
 /// `moirai-protocol`'s `CachedLog`, which `NestedListLog` holds its positions
-/// list in (`nested_list.rs:58`). It replays one operation onto the
+/// list in (`nested_list.rs:58`). It replayed one operation onto the
 /// materialised value rather than recomputing whenever the incoming event's
-/// version compares `Greater` to the *previous* event's, and `Version`'s
+/// version compared `Greater` to the *previous* event's, and `Version`'s
 /// `partial_cmp` answers `Greater` for two events of one origin from the
 /// origin's own sequence without looking at what else each of them has seen;
-/// the cache is populated by a read, which is why the divergence appears only
-/// when someone looked. `simpleuml_crdt`'s
-/// `a_read_between_deliveries_changes_what_the_generated_nested_list_holds` is
-/// the other reproducer, and this is a third, on a metamodel that shares no
-/// class with it.
+/// the cache is populated by a read, which is why the divergence appeared only
+/// when someone looked. Three of these thirty scripts fell out that way.
 ///
-/// The run prints how many scripts fall out that way, so a number that moves
-/// is visible; what is asserted is that the silent residual is empty and that
-/// the finding is still reachable at all.
+/// `CachedLog` compares against the join of every version it has taken in now
+/// and replays only an event that is after all of it, so none of them do: both
+/// residuals are empty, and the test asserts both. The noisy run agreeing on
+/// its own is the stronger statement, and the silent re-run is kept because it
+/// is what tells the two kinds of difference apart if either comes back.
 #[test]
 fn ip34_thirty_scripts_over_ecore_builtins_find_no_difference() {
     let mut edits = 0usize;
@@ -1807,25 +1807,35 @@ fn ip34_thirty_scripts_over_ecore_builtins_find_no_difference() {
         real.join("\n\n")
     );
     assert!(
-        !only_when_read.is_empty(),
-        "no script reaches `CachedLog`'s defect any more; if it is fixed, say so here"
+        only_when_read.is_empty(),
+        "{} of {} scripts differ only when the oracle reads between deliveries, which is \
+         `CachedLog` replaying a concurrent event and is fixed: {:?}",
+        only_when_read.len(),
+        scripts.len(),
+        only_when_read
     );
 }
 
 /// The exclusion the script generator carries, driven on its own: two writers
 /// inserting into **one** ordered containment at once.
 ///
-/// Ignored rather than a gate, because what it finds is not this metamodel's
-/// and not the descriptor's. `json_crdt`'s `ip28` already drives and pins it —
-/// seven of its thirty scripts put two concurrently inserted list elements in
-/// opposite orders on the two paths, which is `NestedListLog`'s own
-/// resolution — and on this metamodel it also reaches `CachedLog`, which
-/// panics rather than diverges when an incremental insert index lands past the
-/// materialised length. `propose` therefore lets only one writer of a
-/// concurrent round create, and this is where that decision is written down
-/// and can be re-checked.
+/// This was ignored rather than a gate, on the reading that what it finds is
+/// `NestedListLog`'s own resolution: `json_crdt`'s `ip28` had seven of thirty
+/// scripts putting two concurrently inserted list elements in opposite orders
+/// on the two paths, and on this metamodel the same schedule reached
+/// `CachedLog` hard enough to panic, an incremental insert index landing past
+/// the materialised length. Both were the cache and neither was the
+/// resolution: the two paths run the same eg-walker, and only the generated
+/// one sat behind `CachedLog`. With the cache replaying only an event that is
+/// after everything the log holds, `ip28` is thirty of thirty and this is a
+/// gate — two writers inserting into one ordered containment at once agree on
+/// both paths and on both replicas.
+///
+/// `propose` still lets only one writer of a concurrent round create, so the
+/// thirty scripts of `ip34` do not drive this shape; that exclusion is now a
+/// corpus decision rather than a necessity, and this is where it is written
+/// down and can be re-checked.
 #[test]
-#[ignore = "a reproducer for `ip28` and for `CachedLog`, both of them Moirai's; not a gate"]
 fn ip36_two_writers_inserting_into_one_sequence_at_once_is_moirais_own_finding() {
     let mut harness = Harness::opened();
     harness
