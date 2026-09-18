@@ -70,14 +70,15 @@
 //!   optional's default is absence and an absent optional carries no key, so a
 //!   `source` written and then emptied stays present on both sides and is
 //!   compared.
-//! - **An object created into an ordered containment and never written into**,
-//!   criterion I-A1's one named exception (code note 31): `NestedListLog` sits
-//!   on a `UWMapLog`, which keeps a child only while it differs from its
-//!   default, so a freshly created annotation is indistinguishable on the
-//!   generated read-out from a removed one. [`except_unwritten`] removes it
-//!   from both sides, and
+//! - ~~**An object created into an ordered containment and never written
+//!   into**~~, which was criterion I-A1's one named exception (code note 31):
+//!   `NestedListLog` sat on a `UWMapLog`, which keeps a child only while it
+//!   differs from its default, so a freshly created annotation was
+//!   indistinguishable on the generated read-out from a removed one. The list
+//!   asks its ordering for its children now, the exception is gone and nothing
+//!   is pruned off either side;
 //!   [`an_annotation_with_nothing_written_is_invisible_on_the_generated_path`]
-//!   keeps the finding visible rather than letting the workaround erase it.
+//!   records the finding and asserts the agreement that closed it.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -237,15 +238,16 @@ enum Action {
     /// Create an object *and write into it*, in one operation.
     ///
     /// Never a bare creation: `NestedListLog`'s children sit in a `UWMapLog`,
-    /// which keeps a child only while it differs from its default, so an
-    /// object created and left empty is not on the generated read-out at all
+    /// which kept a child only while it differed from its default, so an
+    /// object created and left empty was not on the generated read-out at all
     /// — and a later operation addressing a position past it would then mean
-    /// two different children on the two paths. The divergence is real and is
-    /// criterion I-A1's named exception; what a script must not do is *build*
-    /// on it. So every creation seeds the new object's optional text, exactly
-    /// as the `json.ecore` oracle's seeds bottom out in a character.
-    /// [`Action::AddBareAnnotation`] is the one that does not, and no script
-    /// ever proposes it.
+    /// two different children on the two paths. That divergence is fixed, the
+    /// list asking its ordering for its children, so the seeding is no longer
+    /// load-bearing; it is kept so that these thirty scripts and their counts
+    /// stay comparable with every run recorded before it.
+    /// [`Action::AddBareAnnotation`] is the one action that does not seed, and
+    /// no script proposes it — [`an_annotation_with_nothing_written_is_invisible_on_the_generated_path`]
+    /// drives it on its own.
     AddPart { pos: usize, seed: char },
     DeletePart { pos: usize },
     AddPort { pos: usize, seed: char },
@@ -877,45 +879,6 @@ fn is_default(rule: &MergeRule, value: &Value) -> bool {
     }
 }
 
-/// A canonical model with criterion I-A1's one named exception removed: an
-/// object created into an ordered containment and never written into.
-///
-/// `NestedListLog` keeps its children in a `UWMapLog`, which keeps a child
-/// only while it differs from its default, and it must: `UWMap::Remove` is not
-/// a tombstone, so reading as the default is exactly how the generated path
-/// spells *removed*. A freshly created annotation, part or port is therefore
-/// indistinguishable on the generated read-out from a removed one, while the
-/// interpreted path mints it and shows it. Applied to **both** sides by this
-/// one function, on top of the projection and never inside it, so the two
-/// sides cannot drift.
-fn except_unwritten(meta: &Meta, mut value: Value) -> Value {
-    for _ in 0..16 {
-        let next = without_defaults(meta, drop_empty_children(value.clone()));
-        if next == value {
-            break;
-        }
-        value = next;
-    }
-    value
-}
-
-fn drop_empty_children(value: Value) -> Value {
-    match value {
-        Value::Array(items) => Value::Array(
-            items
-                .into_iter()
-                .map(drop_empty_children)
-                .filter(|item| !only_a_class(item))
-                .collect(),
-        ),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, item)| (key, drop_empty_children(item)))
-                .collect(),
-        ),
-        other => other,
-    }
-}
 
 /// The first place two canonical models differ, as a path and the two values.
 fn difference(left: &Value, right: &Value, at: &str) -> Option<String> {
@@ -1015,18 +978,12 @@ impl Harness {
 
     fn interp_canon(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ia } else { &self.ib };
-        except_unwritten(
-            &self.meta,
-            canon(&self.meta, &replica.query(&Read::<Value>::new())),
-        )
+        canon(&self.meta, &replica.query(&Read::<Value>::new()))
     }
 
     fn gen_doc(&self, writer: char) -> Value {
         let replica = if writer == 'a' { &self.ga } else { &self.gb };
-        except_unwritten(
-            &self.meta,
-            project(&self.meta, &replica.query(&Read::<AnnotatedValue>::new())),
-        )
+        project(&self.meta, &replica.query(&Read::<AnnotatedValue>::new()))
     }
 
     fn compare(&mut self) -> Result<(), String> {
@@ -2058,15 +2015,10 @@ fn conflict_matrix_over_ecore_builtins() {
     moirai_interp::testing::install_fixture(&meta.sem, MODEL);
     let interp_encode = |edit: &Edit, _doc: &Value| interp_op(&meta, edit);
     let gen_encode = |edit: &Edit, _doc: &Value| typed_op(edit);
-    let interp_read = |replica: &InterpReplica| {
-        except_unwritten(&meta, canon(&meta, &replica.query(&Read::<Value>::new())))
-    };
-    let gen_read = |replica: &GenReplica| {
-        except_unwritten(
-            &meta,
-            project(&meta, &replica.query(&Read::<AnnotatedValue>::new())),
-        )
-    };
+    let interp_read =
+        |replica: &InterpReplica| canon(&meta, &replica.query(&Read::<Value>::new()));
+    let gen_read =
+        |replica: &GenReplica| project(&meta, &replica.query(&Read::<AnnotatedValue>::new()));
     let interp = Arm {
         name: "interpreted",
         encode: &interp_encode,

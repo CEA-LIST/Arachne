@@ -114,15 +114,14 @@
 //!   rule carries is not exercised here.
 //!   [`simpleuml_declares_no_optional`] says so from the table.
 //!
-//! - **An object created into an ordered containment and never written
-//!   into**, which the generated read-out cannot distinguish from a removed
-//!   one. Not part of the projection: a named, separate step applied on top of
-//!   it, to both sides, by [`except_unwritten_sequence_children`]. The reason
-//!   and the decision behind it are `ip13`'s, at
-//!   `generated/bt_crdt/tests/support/mod.rs`, and this file re-states neither
-//!   — it inherits the exception and
-//!   [`the_thirty_scripts_find_exactly_one_kind_of_difference`] keeps it the
-//!   only one.
+//! - ~~**An object created into an ordered containment and never written
+//!   into**~~, which the generated read-out could not distinguish from a
+//!   removed one. That was a named, separate step applied on top of the
+//!   projection to both sides, inherited whole from `ip13`, and it is **gone**:
+//!   `NestedListLog` asks its ordering for its children rather than asking
+//!   `UWMapLog` for the map filtered by "differs from its default", so the two
+//!   paths agree outright and [`the_thirty_scripts_find_no_difference_at_all`]
+//!   asserts it with nothing taken off either side.
 //!
 //! - Nothing else.
 //!
@@ -1297,53 +1296,6 @@ fn is_default(rule: MergeRule, value: &Value) -> bool {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 4c. The one named exclusion of the equivalence criterion
-// ---------------------------------------------------------------------------
-
-/// A canonical document with the criterion's one named exception removed: an
-/// object created into an **ordered containment and never written into**.
-///
-/// `ip13`'s exception, inherited whole. `UWMapLog::execute_query`
-/// (`moirai-crdt/src/map/uw_map.rs:199-210`) keeps a child only when its
-/// value differs from the default, which is how the generated path spells
-/// *removed*, and `NestedListLog` sits on that map, so this is every ordered
-/// containment. Every containment `SimpleUML.ecore` declares is one.
-///
-/// Applied to both sides by this one function, on top of the projection and
-/// never inside it. It is the ONLY exclusion of its kind and
-/// [`the_thirty_scripts_find_exactly_one_kind_of_difference`] is what keeps
-/// that honest.
-fn except_unwritten_sequence_children(meta: &Meta, mut value: Value) -> Value {
-    for _ in 0..16 {
-        let next = without_defaults(meta, drop_empty_sequence_children(value.clone()));
-        if next == value {
-            break;
-        }
-        value = next;
-    }
-    value
-}
-
-/// One pass of the rule above: every array element carrying nothing but its
-/// class name, gone.
-fn drop_empty_sequence_children(value: Value) -> Value {
-    match value {
-        Value::Array(items) => Value::Array(
-            items
-                .into_iter()
-                .map(drop_empty_sequence_children)
-                .filter(|item| !only_a_class(item))
-                .collect(),
-        ),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, item)| (key, drop_empty_sequence_children(item)))
-                .collect(),
-        ),
-        other => other,
-    }
-}
 
 /// The interpreted read-out with every non-containment reference dropped and
 /// every default-valued key with it.
@@ -1518,10 +1470,8 @@ impl Harness {
     /// are two equal pairs.
     fn compare(&mut self) -> Result<(), String> {
         for writer in ['a', 'b'] {
-            let interp =
-                except_unwritten_sequence_children(&self.interp_meta, self.interp_doc(writer));
-            let generated =
-                except_unwritten_sequence_children(&self.gen_meta, self.gen_doc(writer));
+            let interp = self.interp_doc(writer);
+            let generated = self.gen_doc(writer);
             self.comparisons += 1;
             if interp != generated {
                 let where_ = difference(&interp, &generated, "")
@@ -2587,14 +2537,19 @@ fn the_only_exclusion_is_the_reference() {
     );
 }
 
-/// Over all thirty scripts, the criterion's one named exception is the only
-/// difference there is: re-pruning both documents by it leaves nothing.
+/// Over all thirty scripts, there is no difference at all.
 ///
-/// This is what keeps [`except_unwritten_sequence_children`] from becoming a
-/// place where a second inequality could hide. A difference of any other kind
-/// would surface here as a residual.
+/// This was `the_thirty_scripts_find_exactly_one_kind_of_difference`, and it
+/// re-pruned both documents by the criterion's one named exception — an object
+/// created into an ordered containment and never written into, which every
+/// containment `SimpleUML.ecore` declares is — and asserted that the residual
+/// was empty, so that the exception could not become a place a second
+/// inequality hid in. The exception is gone: `NestedListLog` asks its ordering
+/// for its children now rather than asking `UWMapLog` for the map filtered by
+/// "differs from its default". So the pruning is gone with it, and what is
+/// asserted is that the sixty end states agree outright.
 #[test]
-fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
+fn the_thirty_scripts_find_no_difference_at_all() {
     let meta = meta();
     let mut residual = Vec::new();
     let mut excepted = 0;
@@ -2607,26 +2562,20 @@ fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
             let generated = harness.gen_doc(writer);
             if interp != generated {
                 excepted += 1;
-                let interp = except_unwritten_sequence_children(&meta, interp);
-                let generated = except_unwritten_sequence_children(&meta, generated);
-                if interp != generated {
-                    residual.push(format!(
-                        "seed {seed}, replica {writer}: {}",
-                        difference(&interp, &generated, "").unwrap_or_default()
-                    ));
-                }
+                residual.push(format!(
+                    "seed {seed}, replica {writer}: {}",
+                    difference(&interp, &generated, "").unwrap_or_default()
+                ));
             }
         }
     }
     assert!(
         residual.is_empty(),
-        "a difference the named exception does not account for:\n{}",
+        "the two paths are supposed to agree everywhere now:\n{}",
         residual.join("\n")
     );
-    println!(
-        "ip14: {excepted} of 60 end states differ before the named exception \
-         is taken off, and none after"
-    );
+    assert_eq!(excepted, 0, "counted separately from the report above");
+    println!("ip14: 0 of 60 end states differ, with nothing taken off either side");
 }
 
 /// Which `LeafLog` arms `SimpleUML.ecore` actually reaches, minted from the
