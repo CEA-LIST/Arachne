@@ -1227,6 +1227,9 @@ fn ip29_the_census_of_what_this_metamodel_reaches() {
                     }
                     LeafRule::Text => {}
                     LeafRule::Enum { .. } => panic!("this metamodel has no enum"),
+                    LeafRule::OptionalRegister { .. } => {
+                        panic!("this metamodel has no keyed collection")
+                    }
                 }
             }
         }

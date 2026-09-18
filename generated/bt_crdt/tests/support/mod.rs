@@ -937,6 +937,12 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
                 // `moirai-interp/src/leaf.rs`'s `many_valued` on no values,
                 // and `Scalar`'s absent case for a single-valued one.
                 LeafRule::Register { .. } | LeafRule::Enum { .. } => value.is_null(),
+                // Only a keyed collection's value is one, so it is never a
+                // `Shape::Single` leaf and `bt.ecore` has no keyed feature at
+                // all. `generated/annotated`'s oracle is what drives it.
+                LeafRule::OptionalRegister { .. } => unreachable!(
+                    "a register over an optional value is a keyed collection's value only"
+                ),
             },
             Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
             // A keyed collection reads as a JSON object, so its default is

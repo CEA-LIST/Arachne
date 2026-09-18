@@ -1231,6 +1231,9 @@ fn ip30_the_census_of_what_this_metamodel_reaches() {
                     }
                     LeafRule::Flag { wins } => flags.push(format!("{wins:?}")),
                     LeafRule::Text => {}
+                    LeafRule::OptionalRegister { .. } => {
+                        panic!("only a keyed collection's value is one, and this metamodel has none")
+                    }
                 }
             }
         }

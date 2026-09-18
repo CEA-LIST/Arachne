@@ -1274,6 +1274,12 @@ fn is_default(rule: MergeRule, value: &Value) -> bool {
                 LeafRule::Counter { .. } => value.as_f64() == Some(0.0),
                 LeafRule::Flag { .. } => value.as_bool() == Some(false),
                 LeafRule::Register { .. } | LeafRule::Enum { .. } => value.is_null(),
+                // Only a keyed collection's value is one, so it is never a
+                // `Shape::Single` leaf and `SimpleUML.ecore` has no keyed
+                // feature at all.
+                LeafRule::OptionalRegister { .. } => unreachable!(
+                    "a register over an optional value is a keyed collection's value only"
+                ),
             },
             Shape::Sequence | Shape::Set { .. } | Shape::Bag | Shape::OrderedSet => {
                 empty_collection(value)
