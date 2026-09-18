@@ -1215,6 +1215,17 @@ mod tests {
     /// construction on both sides and the last two rows are the control — a
     /// real difference in the construction is still a difference, and a class
     /// the metamodel itself calls `EcoreThing` is not Ecore's.
+    ///
+    /// **The `EObject` half of that 187 is no longer reachable**, and the two
+    /// rows that carry it are kept as the rule's own statement rather than as
+    /// a census family. A feature typed by `EObject` carries
+    /// `UnsupportedReason::EObjectContainment` or `EObjectReference` since
+    /// 2026-09-18, so it is compared on neither path and reaches the
+    /// `no-field` column instead; the replay in
+    /// `experiments/ip5-corpus-census/README.md` says what that does to the
+    /// run's numbers. The prefix family itself is alive: `EAnnotation` and
+    /// `EModelElement` are generated, and `pet_metamodels/ecore_builtins.ecore`
+    /// reaches them through `ip2`.
     #[test]
     fn the_two_renamings_are_nominal_and_nothing_else_is() {
         for (expected, emitted) in [
@@ -1224,6 +1235,11 @@ mod tests {
                 "NestedListLog<EcoreEObjectLog>",
             ),
             ("EAnnotationLog", "EcoreEAnnotationLog"),
+            (
+                "NestedListLog<EAnnotationLog>",
+                "NestedListLog<EcoreEAnnotationLog>",
+            ),
+            ("EModelElementLog", "EcoreEModelElementLog"),
             (
                 "VecLog<MVRegister<ArcKind>>",
                 "VecLog<MVRegister<ArcKindModel>>",
