@@ -44,12 +44,13 @@
   over `json.ecore`, and reproducing it here would need a containment and an
   entry class that this file has no other use for.
 
-  THE SET TRAP. A multi-valued attribute reaches `Shape::Set` only when it
-  declares `unique="true"` and `ordered="false"`: `semantics.rs:588` reads a
-  silent `unique` as `false`, which is why `kitchen_sink.ecore`'s attribute
-  named `set` is in fact a bag. `tags` and `invariants` below declare both
-  facets, and are the first two features in the checked-in corpus to reach
-  `Shape::Set` at all.
+  THE SET. A multi-valued attribute reaches `Shape::Set` when it is unique and
+  unordered. `tags` and `invariants` below write both facets, and were the
+  first two features in the checked-in corpus to reach `Shape::Set` at all;
+  a silent `unique` is Ecore's `true` since the facet defaults were
+  reconciled, so `kitchen_sink.ecore`'s attribute named `set`, which writes
+  only `ordered="false"`, is a set as well and no longer the bag its silent
+  facet used to make it.
 -->
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
