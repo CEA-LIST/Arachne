@@ -570,7 +570,7 @@ fn an_emptied_optional_is_not_dropped() {
     assert!(
         matches!(
             meta.rule(meta.slot("Sequence"), "name"),
-            MergeRule::Attribute { shape, leaf: LeafRule::Text } if shape.effective() == Shape::Optional
+            MergeRule::Attribute { shape, leaf: LeafRule::Text } if shape == Shape::Optional
         ),
         "`TreeNode.name` is the optional text this test is about"
     );

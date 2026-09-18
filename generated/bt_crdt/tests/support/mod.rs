@@ -216,7 +216,7 @@ impl Meta {
                 let rule = self.sem.rule(*owner, *slot)?;
                 match rule {
                     MergeRule::Containment { shape, target }
-                        if shape.effective() == Shape::Single && !self.is_union(*target) =>
+                        if *shape == Shape::Single && !self.is_union(*target) =>
                     {
                         Some((name.to_string(), *target))
                     }
@@ -433,7 +433,7 @@ pub fn interp_op(meta: &Meta, edit: &Edit) -> ModelOp {
         let mut step = InstanceOp::variant(meta.slot(&hop.class), op);
         step = match (hop.at, meta.rule(parent, &hop.feature)) {
             (Some(pos), _) => InstanceOp::at(pos, step),
-            (None, MergeRule::Containment { shape, .. }) if shape.effective() == Shape::Optional => {
+            (None, MergeRule::Containment { shape, .. }) if shape == Shape::Optional => {
                 InstanceOp::set(step)
             }
             (None, _) => step,
@@ -465,7 +465,7 @@ pub fn interp_action(meta: &Meta, class: ClassSlot, action: &Action) -> Instance
             let made = meta.slot(made);
             let inner = InstanceOp::variant(made, interp_mint(meta, made));
             let shaped = match meta.rule(class, feature) {
-                MergeRule::Containment { shape, .. } => shape.effective(),
+                MergeRule::Containment { shape, .. } => shape,
                 other => panic!("`{feature}` is not a containment: {other:?}"),
             };
             let step = match (shaped, pos) {
@@ -484,7 +484,7 @@ pub fn interp_action(meta: &Meta, class: ClassSlot, action: &Action) -> Instance
         }
         Action::Text { feature, op } => {
             let (shape, leaf) = match meta.rule(class, feature) {
-                MergeRule::Attribute { shape, leaf } => (shape.effective(), leaf),
+                MergeRule::Attribute { shape, leaf } => (shape, leaf),
                 other => panic!("`{feature}` is not an attribute: {other:?}"),
             };
             // The leaf the *table* names decides the operation, which is what
@@ -537,7 +537,7 @@ pub fn typed_json(meta: &Meta, edit: &Edit) -> Value {
         let mut step = union_wrap(meta, target, meta.slot(&hop.class), op);
         step = match (hop.at, meta.rule(parent, &hop.feature)) {
             (Some(pos), _) => json!({ "Update": { "pos": pos, "op": step } }),
-            (None, MergeRule::Containment { shape, .. }) if shape.effective() == Shape::Optional => {
+            (None, MergeRule::Containment { shape, .. }) if shape == Shape::Optional => {
                 json!({ "Set": step })
             }
             (None, _) => step,
@@ -597,7 +597,7 @@ pub fn typed_action(meta: &Meta, class: ClassSlot, action: &Action) -> Value {
         Action::Create { feature, pos, class: made } => {
             let made = meta.slot(made);
             let (shape, target) = match meta.rule(class, feature) {
-                MergeRule::Containment { shape, target } => (shape.effective(), target),
+                MergeRule::Containment { shape, target } => (shape, target),
                 other => panic!("`{feature}` is not a containment: {other:?}"),
             };
             let inner = union_wrap(meta, target, made, typed_mint(meta, made));
@@ -615,7 +615,7 @@ pub fn typed_action(meta: &Meta, class: ClassSlot, action: &Action) -> Value {
         Action::Unset { feature } => feature_wrap(meta, class, feature, json!("Unset")),
         Action::Text { feature, op } => {
             let shape = match meta.rule(class, feature) {
-                MergeRule::Attribute { shape, .. } => shape.effective(),
+                MergeRule::Attribute { shape, .. } => shape,
                 other => panic!("`{feature}` is not an attribute: {other:?}"),
             };
             let leaf = match op {
@@ -663,7 +663,7 @@ pub fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
             MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => continue,
             MergeRule::Attribute { shape, leaf } => {
                 let found = locate(meta, class, *owner, name, value);
-                let projected = match (shape.effective(), leaf) {
+                let projected = match (*shape, leaf) {
                     (Shape::Single, LeafRule::Text) => Some(chars(found)),
                     (Shape::Optional, LeafRule::Text) => {
                         if found.is_null() {
@@ -684,7 +684,7 @@ pub fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
             }
             MergeRule::Containment { shape, target } => {
                 let found = locate(meta, class, *owner, name, value);
-                match shape.effective() {
+                match *shape {
                     Shape::Single => {
                         if let Some(object) = project_slot(meta, *target, found) {
                             out.insert(name.to_string(), object);
@@ -926,7 +926,7 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
         // Both are dropped from the interpreted side before this runs and
         // never appear on the generated side at all.
         MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => false,
-        MergeRule::Attribute { shape, leaf } => match shape.effective() {
+        MergeRule::Attribute { shape, leaf } => match shape {
             // Present means written. See the note on the exemption above.
             Shape::Optional => false,
             Shape::Single => match leaf {
@@ -947,7 +947,7 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
             Shape::Keyed { .. } => empty_map(value),
             Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
-        MergeRule::Containment { shape, .. } => match shape.effective() {
+        MergeRule::Containment { shape, .. } => match shape {
             Shape::Optional => false,
             Shape::Single => only_a_class(value),
             Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
@@ -1454,7 +1454,7 @@ pub fn collect_candidates(
                 if !matches!(leaf, LeafRule::Text) {
                     continue;
                 }
-                match shape.effective() {
+                match *shape {
                     Shape::Single => {
                         let len = object
                             .get(&**name)
@@ -1479,7 +1479,7 @@ pub fn collect_candidates(
                     _ => {}
                 }
             }
-            MergeRule::Containment { shape, target } => match shape.effective() {
+            MergeRule::Containment { shape, target } => match *shape {
                 Shape::Single | Shape::Optional => {
                     match object.get(&**name) {
                         None => {

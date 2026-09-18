@@ -214,30 +214,61 @@ impl Kind {
     }
 }
 
-/// One feature: its Ecore name and its construction.
+/// One feature: its Ecore name, its construction, and whether the
+/// construction sits under an `OptionLog`.
+///
+/// Every single-valued attribute of this file writes no `lowerBound`, and
+/// Ecore's default for one is `0`, so every one of them is optional: the
+/// generated field is `OptionLog<L>` and the interpreted node is an
+/// `Opt`. The two multi-valued ones are sets and are not wrapped, because a
+/// collection carries its own emptiness.
 #[derive(Clone, Copy, Debug)]
 struct Feature {
     name: &'static str,
     kind: Kind,
+    optional: bool,
 }
 
-const fn feature(name: &'static str, kind: Kind) -> Feature {
-    Feature { name, kind }
+/// A feature whose `lowerBound` the file leaves silent, which Ecore reads as
+/// `0`: zero or one of the construction.
+const fn optional(name: &'static str, kind: Kind) -> Feature {
+    Feature {
+        name,
+        kind,
+        optional: true,
+    }
+}
+
+/// A feature whose construction is the whole collection and takes no `Set`.
+const fn bare(name: &'static str, kind: Kind) -> Feature {
+    Feature {
+        name,
+        kind,
+        optional: false,
+    }
 }
 
 /// `Class`'s features in declaration order, which is also visible-slot order:
 /// `Class` has no supertype, so the two coincide.
 const FEATURES: [Feature; 9] = [
-    feature("name", Kind::Text),
-    feature("qualifiedName", Kind::RegisterUnique),
-    feature("author", Kind::RegisterUnique),
-    feature("stereotype", Kind::RegisterPartial),
-    feature("layer", Kind::RegisterTotal),
-    feature("isAbstract", Kind::FlagDisable),
-    feature("visibility", Kind::Enum),
-    feature("tags", Kind::SetAdd),
-    feature("invariants", Kind::SetRemove),
+    optional("name", Kind::Text),
+    optional("qualifiedName", Kind::RegisterUnique),
+    optional("author", Kind::RegisterUnique),
+    optional("stereotype", Kind::RegisterPartial),
+    optional("layer", Kind::RegisterTotal),
+    optional("isAbstract", Kind::FlagDisable),
+    optional("visibility", Kind::Enum),
+    bare("tags", Kind::SetAdd),
+    bare("invariants", Kind::SetRemove),
 ];
+
+/// The feature of `FEATURES` with this name.
+fn feature_named(name: &str) -> Feature {
+    *FEATURES
+        .iter()
+        .find(|held| held.name == name)
+        .unwrap_or_else(|| panic!("`{name}` is not a feature of `Class`"))
+}
 
 /// The Rust field name `record!` gives a feature: `paste!`'s `:camel` runs
 /// over the snake-cased name the generator writes.
@@ -436,7 +467,13 @@ fn interp_op(meta: &Meta, edit: &Edit) -> InstanceOp {
     let inner = match (&edit.feature, &edit.action) {
         (None, Action::New) => return InstanceOp::variant(meta.root, InstanceOp::New),
         (Some(name), Action::Leaf(elem)) => {
-            InstanceOp::field(meta.slot(name), InstanceOp::Leaf(interp_elem(meta, elem)))
+            let leaf = InstanceOp::Leaf(interp_elem(meta, elem));
+            let step = if feature_named(name).optional {
+                InstanceOp::set(leaf)
+            } else {
+                leaf
+            };
+            InstanceOp::field(meta.slot(name), step)
         }
         (feature, action) => panic!("{action:?} against {feature:?} is not an edit of this file"),
     };
@@ -475,7 +512,15 @@ fn typed_op(meta: &Meta, edit: &Edit) -> Classdiagram {
 fn typed_json(meta: &Meta, edit: &Edit) -> Value {
     let inner = match (&edit.feature, &edit.action) {
         (None, Action::New) => json!("New"),
-        (Some(name), Action::Leaf(elem)) => tagged(variant_of(name), typed_elem(meta, elem)),
+        (Some(name), Action::Leaf(elem)) => {
+            let op = typed_elem(meta, elem);
+            let op = if feature_named(name).optional {
+                tagged("Set", op)
+            } else {
+                op
+            };
+            tagged(variant_of(name), op)
+        }
         (feature, action) => panic!("{action:?} against {feature:?} is not an edit of this file"),
     };
     tagged(ROOT, inner)
@@ -500,11 +545,22 @@ fn project(meta: &Meta, value: &ClassdiagramValue) -> Value {
         .expect("the package value carries `Class` under its field");
     let mut out = Map::new();
     out.insert(ECLASS.to_string(), Value::String(ROOT.to_string()));
-    for Feature { name, kind } in FEATURES {
+    for held in FEATURES {
         let found = class
-            .get(field_of(name))
-            .unwrap_or_else(|| panic!("`ClassValue` has no field for `{name}`"));
-        out.insert(name.to_string(), project_feature(meta, kind, found));
+            .get(field_of(held.name))
+            .unwrap_or_else(|| panic!("`ClassValue` has no field for `{}`", held.name));
+        // An `OptionLog` with no child reads `None`, and the interpreted
+        // `Opt` with no child carries no key at all, so the key is dropped
+        // here rather than compared against a `null` the other side does not
+        // write. An optional that *is* set is kept whatever it holds:
+        // present means written.
+        if held.optional && found.is_null() {
+            continue;
+        }
+        out.insert(
+            held.name.to_string(),
+            project_feature(meta, held.kind, found),
+        );
     }
     Value::Object(out)
 }
@@ -613,9 +669,15 @@ fn without_defaults(value: Value) -> Value {
     let Value::Object(mut map) = value else {
         return value;
     };
-    for Feature { name, kind } in FEATURES {
-        if map.get(name) == Some(&default_of(kind)) {
-            map.remove(name);
+    for held in FEATURES {
+        // An optional is never pruned by its leaf's default: a set optional
+        // holding the empty string is a written one, and an unset optional
+        // has no key on either side already.
+        if held.optional {
+            continue;
+        }
+        if map.get(held.name) == Some(&default_of(held.kind)) {
+            map.remove(held.name);
         }
     }
     if map.len() == 1 && map.contains_key(ECLASS) {
@@ -1083,52 +1145,53 @@ fn the_table_says_what_this_file_says() {
     named.sort_unstable();
     visible.sort_unstable();
     assert_eq!(named, visible, "`Class`'s features, as the table holds them");
-    for Feature { name, kind } in FEATURES.iter() {
+    for held in FEATURES.iter() {
+        let name = held.name;
         let derived = match meta.rule(name) {
             MergeRule::Attribute { shape, leaf } => match (shape, leaf) {
-                (Shape::Single, LeafRule::Text) => Kind::Text,
+                (Shape::Optional, LeafRule::Text) => (Kind::Text, true),
                 (
-                    Shape::Single,
+                    Shape::Optional,
                     LeafRule::Register {
                         tie: TieBreak::LastWriterWins | TieBreak::Fair,
                     },
-                ) => Kind::RegisterUnique,
+                ) => (Kind::RegisterUnique, true),
                 (
-                    Shape::Single,
+                    Shape::Optional,
                     LeafRule::Register {
                         tie: TieBreak::TotalOrder,
                     },
-                ) => Kind::RegisterTotal,
+                ) => (Kind::RegisterTotal, true),
                 (
-                    Shape::Single,
+                    Shape::Optional,
                     LeafRule::Register {
                         tie: TieBreak::PartialOrder,
                     },
-                ) => Kind::RegisterPartial,
-                (Shape::Single, LeafRule::Enum { .. }) => Kind::Enum,
+                ) => (Kind::RegisterPartial, true),
+                (Shape::Optional, LeafRule::Enum { .. }) => (Kind::Enum, true),
                 (
-                    Shape::Single,
+                    Shape::Optional,
                     LeafRule::Flag {
                         wins: FlagWins::Disable,
                     },
-                ) => Kind::FlagDisable,
+                ) => (Kind::FlagDisable, true),
                 (
                     Shape::Set {
                         tie: SetTie::AddWins,
                     },
                     _,
-                ) => Kind::SetAdd,
+                ) => (Kind::SetAdd, false),
                 (
                     Shape::Set {
                         tie: SetTie::RemoveWins,
                     },
                     _,
-                ) => Kind::SetRemove,
+                ) => (Kind::SetRemove, false),
                 other => panic!("`{name}` is {other:?}, which this file does not name"),
             },
             other => panic!("`{name}` is {other:?}, which is not an attribute"),
         };
-        assert_eq!(derived, *kind, "`{name}`");
+        assert_eq!(derived, (held.kind, held.optional), "`{name}`");
     }
     assert_eq!(&*meta.sem.package, "classdiagram");
     assert_eq!(
@@ -1184,8 +1247,9 @@ fn ip30_the_census_of_what_this_metamodel_reaches() {
     assert_eq!(flags, vec!["Disable"], "the disable-wins flag, and no other");
     assert_eq!(
         shapes,
-        vec!["Set { tie: AddWins }", "Set { tie: RemoveWins }", "Single"],
-        "the first two `Shape::Set` features in the checked-in corpus"
+        vec!["Optional", "Set { tie: AddWins }", "Set { tie: RemoveWins }"],
+        "two sets, and every single-valued attribute optional because Ecore defaults a \
+         silent `lowerBound` to zero"
     );
     // Four enum-typed attributes, over three enums: `Class.visibility` and
     // `Feature.typ` at the multi-value house default, and `Feature.visibility`
@@ -1408,9 +1472,10 @@ fn ip30_contended_sets_and_the_disable_wins_flag_settle_the_same_way_on_both_pat
     );
     assert_eq!(
         read.get("isAbstract"),
-        None,
+        Some(&json!(false)),
         "a disable concurrent with an enable wins in a disable-wins flag, so \
-         the flag reads false and the key is pruned"
+         the flag reads false; the key stays, because `Class.isAbstract` is an \
+         optional somebody has written"
     );
 }
 
@@ -2719,7 +2784,10 @@ fn ip32_the_transfer_oracle_notices_when_the_joiner_adopts_the_wrong_state() {
     // event reaching anyone else.
     let stray: Classdiagram = serde_json::from_value(tagged(
         ROOT,
-        tagged(variant_of("qualifiedName"), tagged("Write", json!("stray"))),
+        tagged(
+            variant_of("qualifiedName"),
+            tagged("Set", tagged("Write", json!("stray"))),
+        ),
     ))
     .expect("the shape is right; the asymmetry is the lie");
     transfer
@@ -2851,15 +2919,21 @@ fn ip32_every_script_leaves_the_two_replicas_holding_the_same_document() {
 ///
 /// `a` adds `alpha`. Concurrently `b` removes `alpha` and then clears the set.
 /// The `Clear` is what made it: it is `redundant_itself` for `RWSet`
-/// (`rw_set.rs:88-96`) so it never enters the PO-Log, and it makes every
-/// causally preceding operation redundant, which on `b` retired the `Remove` it
-/// issued. On `a` the `Add` arrived first, so the `Remove` stabilized while
-/// that `Add` was still unstable and was kept in the stable state — and the
-/// `Clear` that followed used to clear only the stable adds, leaving a stable
-/// `Remove` that went on masking the `Add` for good. `a` read the empty set and
-/// `b` read `["alpha"]`, on both paths. Both now read `["alpha"]`, which is
-/// what the PO-Log says with no stabilization at all: the `Clear` retires the
-/// `Remove` that precedes it, and the `Add` it is concurrent with survives it.
+/// (`rw_set.rs:88-96`) so it never enters the PO-Log. On `a` the `Add` arrived
+/// first, so the `Remove` stabilized while that `Add` was still unstable and
+/// was kept in the stable state — and the `Clear` that followed used to clear
+/// only the stable adds, leaving a stable `Remove` that went on masking the
+/// `Add` for good, so `a` read the empty set and `b` read `["alpha"]` on both
+/// paths.
+///
+/// Both read the empty set now. Moirai `v0.7` closes the split the other way
+/// from the way this branch first closed it: a `Clear` does *not* retire the
+/// `Remove` that precedes it, so the `Remove` outlives the `Clear` and goes on
+/// masking the concurrent `Add` on both replicas. The value below is
+/// upstream's, and `moirai-crdt/src/set/rw_set.rs`'s own
+/// `an_add_concurrent_with_a_remove_and_a_clear` is where it is stated. What
+/// this test is for is unchanged: the two replicas agree, and the two paths
+/// agree with them.
 ///
 /// The enumeration itself is kept in `moirai-crdt` as
 /// `set::rw_set::tests::every_concurrent_pair_of_at_most_two_operations_converges`.
@@ -2890,9 +2964,10 @@ fn ip32_an_add_concurrent_with_a_remove_and_a_clear_converges_on_both_paths() {
          agree here"
     );
     assert_eq!(
-        interp_a["invariants"],
-        json!(["alpha"]),
-        "the add is concurrent with the remove the clear retired: {interp_a}"
+        interp_a.get("invariants"),
+        None,
+        "the remove outlives the clear and masks the concurrent add, so the \
+         set is empty and the key is pruned: {interp_a}"
     );
 }
 
@@ -2969,18 +3044,23 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
             .expect("/name", json!("y")),
     );
     cells.push(
+        // Emptied, not absent: `Class.name` sits under an `OptionLog` now,
+        // and an optional somebody has written and then emptied is a present
+        // optional holding `""`, which is what both paths read.
         Cell::new(text, p::DELETE_DELETE_DIFFERENT, xy(), vec![del(0), del(1)], tag_beat())
-            .expect("/name", Null),
+            .expect("/name", json!("")),
     );
 
-    // The disable-wins flag: `Class.isAbstract`. `false` is the default and
-    // the projection drops it, so it is expected as `null`.
+    // The disable-wins flag: `Class.isAbstract`, under an `OptionLog`. A flag
+    // somebody has written reads `false` or `true` and keeps its key either
+    // way: `false` is the flag's own default but not the optional's, and the
+    // optional is what the key answers to.
     let flag = Construction::DisableWinsFlag;
     let f = |elem: Elem| vec![on("isAbstract", elem)];
     let enabled = || setup(vec![on("isAbstract", Elem::Enable)]);
     cells.push(
         Cell::new(flag, p::ENABLE_DISABLE, setup(vec![]), vec![f(Elem::Enable), f(Elem::Disable)], beat())
-            .expect("/isAbstract", Null),
+            .expect("/isAbstract", json!(false)),
     );
     cells.push(
         Cell::new(flag, p::ENABLE_ENABLE, setup(vec![]), vec![f(Elem::Enable), f(Elem::Enable)], beat())
@@ -2988,7 +3068,7 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
     );
     cells.push(
         Cell::new(flag, p::DISABLE_DISABLE, enabled(), vec![f(Elem::Disable), f(Elem::Disable)], beat())
-            .expect("/isAbstract", Null),
+            .expect("/isAbstract", json!(false)),
     );
     cells.push(
         Cell::new(flag, p::ENABLE_CLEAR, enabled(), vec![f(Elem::Enable), f(Elem::Clear)], beat())
@@ -2996,7 +3076,7 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
     );
     cells.push(
         Cell::new(flag, p::DISABLE_CLEAR, enabled(), vec![f(Elem::Disable), f(Elem::Clear)], beat())
-            .expect("/isAbstract", Null),
+            .expect("/isAbstract", json!(false)),
     );
 
     // The two policy registers, whose outcome reads the events.
@@ -3131,6 +3211,14 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
                 .expect(pointer, json!(["alpha"])),
         );
         cells.push(
+            // The two sets part company here since Moirai `v0.7`. In an
+            // add-wins set the `Add` survives the concurrent `Remove` and the
+            // `Clear` that follows it. In a remove-wins one, upstream's
+            // resolution — which `moirai-crdt/src/set/rw_set.rs`'s
+            // `an_add_concurrent_with_a_remove_and_a_clear` states — is that a
+            // `Clear` does not retire the `Remove` before it, so the `Remove`
+            // goes on masking the concurrent `Add` and both replicas read the
+            // empty set, which the projection prunes to `null`.
             Cell::new(
                 row,
                 p::ADD_REMOVE_THEN_CLEAR,
@@ -3138,7 +3226,7 @@ fn class_diagram_cells() -> Vec<Cell<Edit>> {
                 vec![s(Elem::Add("alpha")), vec![on(feature, Elem::Remove("alpha")), on(feature, Elem::Clear)]],
                 beat(),
             )
-            .expect(pointer, json!(["alpha"])),
+            .expect(pointer, if remove_wins { Null } else { json!(["alpha"]) }),
         );
     }
     cells
@@ -3262,7 +3350,10 @@ fn conflict_matrix_reports_a_set_rebound_on_one_path() {
 fn conflict_matrix_reports_a_tie_break_rebound_on_one_path() {
     let mutated = rebound(
         "qualifiedName",
-        json!({"kind": "attribute", "shape": {"kind": "single"}, "leaf": {"kind": "register", "tie": "fair"}}),
+        // The shape stays what the file derives, `optional`; only the
+        // tie-break moves, or the mutation would be two mutations and the
+        // cells that fail would not say which one they caught.
+        json!({"kind": "attribute", "shape": {"kind": "optional"}, "leaf": {"kind": "register", "tie": "fair"}}),
     );
     let failing = failing_cells_under(&mutated);
     for (construction, pattern, reason) in &failing {
@@ -3336,9 +3427,12 @@ impl RelationMeta {
 
     fn rooted(sem: &Arc<MetamodelSemantics>, class: &'static str, feature: &'static str) -> RelationMeta {
         let root = class_slot(sem, class);
+        // `Optional` and not `Single`: neither `Relation.typ` nor
+        // `Feature.visibility` writes a `lowerBound`, and Ecore's default for
+        // one is `0`.
         let (relation_type, literals) = match sem.rule(root, feature_slot(sem, root, feature)) {
             Some(MergeRule::Attribute {
-                shape: Shape::Single,
+                shape: Shape::Optional,
                 leaf:
                     LeafRule::Enum {
                         class,
@@ -3386,7 +3480,12 @@ fn relation_interp_op(meta: &RelationMeta, edit: &Edit) -> InstanceOp {
                 Elem::Clear => LeafOp::Clear,
                 other => panic!("{other:?} is not an edit of a `Relation`"),
             };
-            InstanceOp::field(feature_slot(&meta.sem, meta.root, name), InstanceOp::Leaf(leaf))
+            // Every attribute of `Relation` and of `Feature` is optional,
+            // so every write is a `Set` into the optional that holds it.
+            InstanceOp::field(
+                feature_slot(&meta.sem, meta.root, name),
+                InstanceOp::set(InstanceOp::Leaf(leaf)),
+            )
         }
         (feature, action) => panic!("{action:?} against {feature:?} is not an edit of a `Relation`"),
     };
@@ -3405,7 +3504,7 @@ fn relation_typed_op(meta: &RelationMeta, edit: &Edit) -> Classdiagram {
                 Elem::Clear => json!("Clear"),
                 other => panic!("{other:?} is not an edit of a `Relation`"),
             };
-            tagged(variant_of(name), op)
+            tagged(variant_of(name), tagged("Set", op))
         }
         (feature, action) => panic!("{action:?} against {feature:?} is not an edit of a `Relation`"),
     };
@@ -3428,13 +3527,17 @@ fn project_relation(value: &ClassdiagramValue) -> Value {
         .expect("the package value carries `Relation` under its field");
     let mut out = Map::new();
     out.insert(ECLASS.to_string(), json!(RELATION));
-    out.insert(
-        "label".to_string(),
-        many_valued(relation.get("label").expect("`RelationValue` has `label`"), None),
-    );
+    // Both fields sit under an `OptionLog`, so `null` is "nobody has written
+    // it" and carries no key on the interpreted side either.
+    let label = relation.get("label").expect("`RelationValue` has `label`");
+    if !label.is_null() {
+        out.insert("label".to_string(), many_valued(label, None));
+    }
     let typ = relation.get("typ").expect("`RelationValue` has `typ`");
-    assert!(typ.is_string(), "an enum literal reads as its name: {typ}");
-    out.insert("typ".to_string(), typ.clone());
+    if !typ.is_null() {
+        assert!(typ.is_string(), "an enum literal reads as its name: {typ}");
+        out.insert("typ".to_string(), typ.clone());
+    }
     Value::Object(out)
 }
 
@@ -3445,6 +3548,9 @@ fn project_feature_visibility(value: &ClassdiagramValue) -> Value {
         .get("feature")
         .expect("the package value carries `Feature` under its field");
     let visibility = feature.get("visibility").expect("`FeatureValue` has `visibility`");
+    if visibility.is_null() {
+        return json!({ECLASS: FEATURE});
+    }
     assert!(visibility.is_string(), "an enum literal reads as its name: {visibility}");
     json!({ECLASS: FEATURE, "visibility": visibility})
 }
