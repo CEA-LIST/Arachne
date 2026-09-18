@@ -107,7 +107,7 @@ use log::warn;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::codegen::semantics;
+use crate::codegen::{ecore, semantics};
 use crate::error::{ArachneError, Result};
 
 /// Version of the descriptor layout above. Bump on any breaking change so
@@ -119,38 +119,60 @@ const FORMAT_VERSION: u64 = 2;
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
 /// root class — the same condition under which code generation fails.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
-    // The generator writes Ecore's own classes into the crate when a metamodel extends or is
-    // typed by one (`codegen/ecore.rs`), but nothing below describes them: `EAnnotation`'s
-    // `details` is a keyed map the descriptor has no shape for, and a reference typed by
-    // `EObject` has no single target class to name. A descriptor that quietly left them out
-    // would claim a metamodel the generated crate does not encode, so the whole descriptor is
-    // refused instead. Implementing it is the next step; until then this is the one place that
-    // has to change.
-    if ctx.ecore_pack().is_some() {
-        return Err(ArachneError::EcoreBuiltinsNotDescribed(
-            pack.name().to_string(),
-        ));
-    }
-
+    // The class set is the one code generation reaches, computed the same way
+    // `generate_from_parser` computes it so that the descriptor and the crate
+    // describe one slice: the package's classes, then Ecore's own but
+    // `EObject`, which the generator never emits.
     let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
-    let package_class_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
+    let ecore_classes: Vec<idx::Class> = match ctx.ecore_pack() {
+        Some(ecore_pack) => ctx[ecore_pack]
+            .classes()
+            .iter()
+            .copied()
+            .filter(|class| !ecore::is_eobject(ctx, *class))
+            .collect(),
+        None => Vec::new(),
+    };
+    let generated: Vec<idx::Class> = package_classes
+        .iter()
+        .chain(ecore_classes.iter())
+        .copied()
+        .collect();
+    let generated_set: HashSet<idx::Class> = generated.iter().copied().collect();
 
-    let roots =
-        crate::compute_top_level_roots(ctx, &package_classes, &package_classes, &package_class_set);
+    let roots = crate::compute_top_level_roots(ctx, &package_classes, &generated, &generated_set);
     if roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
     }
 
-    let mut reachable: HashSet<idx::Class> = HashSet::new();
-    for root in &roots {
-        reachable.extend(crate::collect_reachable_classes(
-            ctx,
-            *root,
-            &package_class_set,
-        ));
+    // `EObject` is *listed* although it is not generated. It has no feature,
+    // so listing it adds no rule and no field; what it adds is that every
+    // name the descriptor writes resolves. A metamodel may declare `EObject`
+    // as a supertype (SysON's does, and so does the pet metamodel) and may
+    // type a feature by it, and `moirai-semantics` refuses a supertype or a
+    // target it cannot find. Dropping the supertype silently would also
+    // contradict EMF, where an explicit `EObject` supertype is visible in the
+    // reflective API even though it contributes nothing (spec 05 §2.4).
+    let mut described_set = generated_set.clone();
+    if let Some(eobject) = ecore::eobject(ctx) {
+        described_set.insert(eobject);
     }
 
-    let mut root_names: Vec<&str> = roots.iter().map(|idx| ctx[*idx].name()).collect();
+    let mut reachable: HashSet<idx::Class> = HashSet::new();
+    for root in &roots {
+        reachable.extend(crate::collect_reachable_classes(ctx, *root, &described_set));
+    }
+    // An abstract class of Ecore that nothing generated extends is left out,
+    // exactly as `generate_from_parser` leaves it out.
+    reachable.retain(|class| {
+        !ctx.is_ecore_class(*class)
+            || !crate::codegen::classifier::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
+    });
+
+    let mut root_names: Vec<String> = roots
+        .iter()
+        .map(|idx| semantics::descriptor_class_name(ctx, *idx))
+        .collect();
     root_names.sort_unstable();
 
     // Sorted maps so the emitted descriptor is deterministic.
@@ -162,10 +184,18 @@ pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
         .collect();
     included.sort_unstable_by_key(|class| class.name());
     for class in &included {
-        classes.insert(
-            class.name().to_string(),
-            class_descriptor(ctx, class, &reachable),
-        );
+        let key = semantics::descriptor_class_name(ctx, class.idx);
+        if classes
+            .insert(key.clone(), class_descriptor(ctx, class, &reachable))
+            .is_some()
+        {
+            // Two classifiers on one key would silently become one class with
+            // one of the two feature sets. `ecore::` cannot be spelled in a
+            // well-formed Ecore name, so this is unreachable for a metamodel
+            // EMF would accept; it is checked because the descriptor is
+            // emitted for metamodels EMF has never seen.
+            return Err(ArachneError::DuplicateDescriptorClass(key));
+        }
     }
 
     // Every enum of the package, whether a feature reaches it or not: an enum
@@ -210,12 +240,12 @@ pub fn metamodel_digest(descriptor: &Value) -> String {
 /// Describes one class: declared features partitioned into attributes,
 /// containments and plain references, plus its super types.
 fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) -> Value {
-    let mut super_types: Vec<&str> = class
+    let mut super_types: Vec<String> = class
         .sup()
         .iter()
         .copied()
         .filter(|sup| included.contains(sup))
-        .map(|sup| ctx[sup].name())
+        .map(|sup| semantics::descriptor_class_name(ctx, sup))
         .collect();
     super_types.sort_unstable();
 
@@ -259,7 +289,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                     );
                     continue;
                 };
-                let target = ctx[target].name();
+                let target = semantics::descriptor_class_name(ctx, target);
                 if feature.containment {
                     let mut containment = json!({
                         "name": feature.name,
@@ -631,5 +661,190 @@ mod tests {
     #[test]
     fn the_descriptor_declares_format_version_two() {
         assert_eq!(bt_descriptor()["formatVersion"], json!(2));
+    }
+
+    /* ---------- Ecore's own classes ---------- */
+
+    fn builtins_descriptor() -> Value {
+        descriptor_of("pet_metamodels/ecore_builtins.ecore")
+    }
+
+    /// Ecore's classes are listed under a package-qualified key and a
+    /// metamodel's own are not, which is what lets a metamodel declaring its
+    /// own `EAnnotation` be described beside Ecore's. ModelSet holds 36 that
+    /// do.
+    ///
+    /// `EObject` is listed although it is never generated: it has no feature,
+    /// so it adds no rule, and listing it is what makes every supertype and
+    /// every target the descriptor writes resolve to a class the descriptor
+    /// lists — which `moirai-semantics` requires and which dropping the
+    /// supertype silently would buy at the price of contradicting EMF, where
+    /// an explicit `EObject` supertype is visible in the reflective API.
+    #[test]
+    fn ecore_classes_are_listed_under_a_package_qualified_key() {
+        let descriptor = builtins_descriptor();
+        let mut names: Vec<&str> = descriptor["classes"]
+            .as_object()
+            .expect("classes")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "Element",
+                "Model",
+                "Part",
+                "Port",
+                "ecore::EAnnotation",
+                "ecore::EModelElement",
+                "ecore::ENamedElement",
+                "ecore::EObject",
+                "ecore::EStringToStringMapEntry",
+            ]
+        );
+        assert_eq!(
+            descriptor["classes"]["Model"]["superTypes"],
+            json!(["ecore::EObject"])
+        );
+        assert_eq!(
+            descriptor["classes"]["Port"]["superTypes"],
+            json!(["ecore::ENamedElement"])
+        );
+        assert_eq!(
+            descriptor["classes"]["ecore::EObject"],
+            json!({
+                "abstract": false, "superTypes": [],
+                "attributes": [], "containments": [], "references": []
+            }),
+            "`EObject` is concrete and has no feature, as `Ecore.ecore` declares it"
+        );
+        // A `::` is not a character an Ecore name can hold, so the key cannot
+        // be one a metamodel's own class claims.
+        assert!(names.iter().filter(|name| name.contains("::")).count() == 5);
+    }
+
+    /// The four features of `EAnnotation` that carry a construction and the
+    /// three that do not, as data: the ordered containment of annotations,
+    /// the optional `source`, the `details` map to a register over an
+    /// optional text, and the two `EObject`-typed features and the transient
+    /// back-pointer recorded with their reason rather than dropped.
+    #[test]
+    fn the_annotation_features_carry_their_rules_and_their_refusals() {
+        let descriptor = builtins_descriptor();
+        let annotation = &descriptor["classes"]["ecore::EAnnotation"];
+        let rule = |array: &str, name: &str| -> Value {
+            annotation[array]
+                .as_array()
+                .unwrap_or_else(|| panic!("`{array}`"))
+                .iter()
+                .find(|entry| entry["name"] == json!(name))
+                .unwrap_or_else(|| panic!("`EAnnotation.{name}`"))["merge"]
+                .clone()
+        };
+
+        assert_eq!(
+            descriptor["classes"]["ecore::EModelElement"]["containments"][0],
+            json!({
+                "name": "eAnnotations", "target": "ecore::EAnnotation",
+                "many": true, "required": false, "ordered": true,
+                "facets": {"ordered": null, "unique": null}, "annotation": null,
+                "merge": {"kind": "containment", "shape": {"kind": "sequence"},
+                          "target": "ecore::EAnnotation"},
+                "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
+                               "leaf": "notApplicable", "presence": "declared"}
+            })
+        );
+        assert_eq!(
+            rule("attributes", "source"),
+            json!({"kind": "attribute", "shape": {"kind": "optional"},
+                   "leaf": {"kind": "text"}}),
+            "a silent `lowerBound` is Ecore's 0, so `source` is optional text"
+        );
+        assert_eq!(
+            rule("containments", "details"),
+            json!({"kind": "attribute",
+                   "shape": {"kind": "keyed", "key": {"kind": "str"}},
+                   "leaf": {"kind": "optionalRegister"}}),
+            "EMF's map entry convention makes `details` a map, and its optional \
+             value a register so that a key put with no value is read back"
+        );
+        assert_eq!(
+            rule("containments", "contents"),
+            json!({"kind": "unsupported", "reason": "eObjectContainment"})
+        );
+        assert_eq!(
+            rule("references", "references"),
+            json!({"kind": "unsupported", "reason": "eObjectReference"})
+        );
+        assert_eq!(
+            rule("references", "eModelElement"),
+            json!({"kind": "unsupported", "reason": "transient"}),
+            "the back-pointer of a containment, which `analysis.rs:74` drops"
+        );
+        // The map is Ecore's own convention and not a `urn:arachne:semantics`
+        // annotation, so the two collection facets are sourced to Ecore.
+        let details = descriptor["classes"]["ecore::EAnnotation"]["containments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["name"] == json!("details"))
+            .unwrap();
+        assert_eq!(
+            details["provenance"],
+            json!({"ordered": "ecoreDefault", "unique": "ecoreDefault",
+                   "leaf": "houseDefault", "presence": "declared"})
+        );
+        assert_eq!(details["annotation"], Value::Null);
+    }
+
+    /// The descriptor `arachne describe` emits is one `moirai-semantics`
+    /// parses into a table, which is the whole point of emitting it: the
+    /// supertypes resolve, the targets resolve, the inherited `eAnnotations`
+    /// is visible on every annotated class, and the three refusals cost the
+    /// features they name and nothing else.
+    #[test]
+    fn the_builtins_descriptor_parses_into_a_table() {
+        let descriptor = builtins_descriptor();
+        let table = moirai_semantics::from_descriptor(&descriptor)
+            .expect("the built-ins descriptor is a table");
+        let class = |name: &str| {
+            table
+                .classes
+                .iter()
+                .find(|class| &*class.name == name)
+                .unwrap_or_else(|| panic!("no class `{name}`"))
+        };
+        assert_eq!(table.classes.len(), 9);
+        for name in ["Part", "Port", "ecore::EAnnotation"] {
+            assert!(
+                class(name)
+                    .visible
+                    .iter()
+                    .any(|(feature, _, _)| &**feature == "eAnnotations"),
+                "`{name}` should see the inherited `eAnnotations`"
+            );
+        }
+        assert_eq!(
+            table.roots,
+            vec![class("Model").slot],
+            "`EObject` is listed and is still not a root"
+        );
+        let unsupported = table
+            .classes
+            .iter()
+            .flat_map(|class| class.declared.iter())
+            .filter(|feature| {
+                matches!(
+                    feature.merge,
+                    moirai_semantics::MergeRule::Unsupported { .. }
+                )
+            })
+            .count();
+        assert_eq!(
+            unsupported, 4,
+            "two `EObject` references, one containment, one transient"
+        );
     }
 }

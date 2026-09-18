@@ -91,13 +91,16 @@
 
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Structural, annot::Val, builtin::Typ as BuiltinTyp, idx, structural},
+    repr::{Class, Structural, annot::Val, builtin::Typ as BuiltinTyp, ecore, idx, structural},
 };
 use moirai_semantics::{
     ClassSlot, FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, Provenance, SetTie,
     Shape, TieBreak, UnsupportedReason,
 };
 use serde_json::{Value, json};
+
+use crate::codegen::annotation::map_spec;
+use crate::codegen::ecore::is_eobject;
 
 /// The annotation source a `datatype` override is written under.
 const SEMANTICS_SOURCE: &str = "urn:arachne:semantics";
@@ -109,10 +112,6 @@ const REPRESENTATION_SOURCE: &str = "urn:arachne:representation";
 const KIND_KEY: &str = "kind";
 /// The detail key naming the field a transparent class is represented by.
 const FIELD_KEY: &str = "field";
-/// The detail keys of a `uw-map` annotation.
-const KEY_FEATURE_KEY: &str = "key-feature";
-/// The detail key naming the entry feature the map's values come from.
-const VALUE_FEATURE_KEY: &str = "value-feature";
 
 /// How many values a feature holds, as `feature/bounds.rs` normalises it.
 ///
@@ -138,7 +137,7 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
     // The forms decision D6 and the behavioural flags keep off the interpreted
     // path. A rule with no construction has no facets either, so all four
     // sources are `NotApplicable`.
-    if let Some(reason) = unsupported_reason(feature, class) {
+    if let Some(reason) = unsupported_reason(feature, class, ctx) {
         return (
             MergeRule::Unsupported { reason },
             Provenance {
@@ -286,12 +285,48 @@ pub fn transparent_field<'a>(class: &'a Class) -> Option<&'a str> {
     annot.details().get(FIELD_KEY).map(String::as_str)
 }
 
-/// The classifier a slot produced by this module names.
-pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> &str {
-    ctx.classes()
-        .get(slot.index())
+/// The classifier a slot produced by this module names, under the key the
+/// descriptor lists it by.
+pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
+    let index = idx::Class::from(slot.index());
+    descriptor_class_name(ctx, index)
+}
+
+/// The key the descriptor lists a classifier under.
+///
+/// A metamodel's own classifier keeps its name. One of Ecore's own is
+/// qualified by its package — `ecore::EAnnotation` — and the reason is that
+/// the descriptor keys `classes` by name while EMF keys a classifier by
+/// *(package nsURI, name)*: ModelSet holds 36 metamodels of their own that
+/// declare a class called `EAnnotation`, and EMF lets one of them coexist
+/// with Ecore's without a diagnostic (spec 05 §2.5 and §8f). A bare name
+/// would silently merge the two.
+///
+/// `::` is what makes the key safe rather than merely unlikely. A reserved
+/// prefix is not: `EcoreEAnnotation` is a perfectly good Ecore class name and
+/// a metamodel may declare it, which is why the *generated* path, whose names
+/// are Rust identifiers and cannot hold a `::`, has to carry a clash
+/// resolution beside its prefix (`ident.rs`). A descriptor key is a JSON
+/// string, so it can hold the one character an Ecore name cannot: EMF
+/// requires a classifier name to be a well-formed Java identifier
+/// (`EcoreValidator`'s `WellFormedName`), and `descriptor.rs` refuses a
+/// descriptor whose two classifiers would land on one key anyway, so the
+/// guarantee does not rest on a metamodel being well-formed.
+///
+/// The two spellings therefore differ across the paths — `ecore::EAnnotation`
+/// here and `EcoreEAnnotation` there — and the census's `Agreement::Nominal`
+/// is where that is recorded and checked.
+pub fn descriptor_class_name(ctx: &Ctx, class: idx::Class) -> String {
+    let name = ctx
+        .classes()
+        .get(*class)
         .expect("a slot this module minted indexes the context it was minted from")
-        .name()
+        .name();
+    if ctx.is_ecore_class(class) {
+        format!("{}::{name}", ecore::PACKAGE_NAME)
+    } else {
+        name.to_string()
+    }
 }
 
 /* ---------- derivation ---------- */
@@ -312,52 +347,88 @@ pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> &str {
 /// nothing. Such a feature falls through to the ordinary containment rule,
 /// and `arachne generate` fails on it as it did before.
 fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)> {
-    if !datatype_annotation(feature)
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("uw-map"))
-    {
-        return None;
-    }
+    let spec = map_spec(ctx, feature)?;
     if feature.kind != structural::Typ::EReference
         || !feature.containment
         || presence_of(feature) != Presence::Many
     {
         return None;
     }
-    let annot = feature
-        .annotations()
-        .iter()
-        .find(|annot| annot.source() == SEMANTICS_SOURCE)?;
-    let key_name = annot
-        .details()
-        .get(KEY_FEATURE_KEY)
-        .map_or("key", String::as_str);
-    let value_name = annot
-        .details()
-        .get(VALUE_FEATURE_KEY)
-        .map_or("value", String::as_str);
+    // Which of the two ways this containment became a map, which is what the
+    // two collection facets are sourced to: a `urn:arachne:semantics`
+    // `datatype="uw-map"` annotation, or EMF's own convention that a
+    // many-valued containment of a class whose `instanceClassName` is
+    // `java.util.Map$Entry` *is* a map (spec 05 §3.4). The second is Ecore's
+    // rule and not Arachne's, so it is an `ecoreDefault` and not an
+    // `annotation`.
+    let from_annotation = datatype_annotation(feature)
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("uw-map"));
+    let collection_source = if from_annotation {
+        FacetSource::Annotation
+    } else {
+        FacetSource::EcoreDefault
+    };
 
     let entry = ctx.classes().get(*feature.typ?)?;
-    let key_feature = entry.structural().iter().find(|f| f.name == key_name)?;
-    let value_feature = entry.structural().iter().find(|f| f.name == value_name)?;
+    let key_feature = entry
+        .structural()
+        .iter()
+        .find(|f| f.name == spec.key_feature)?;
+    let value_feature = entry
+        .structural()
+        .iter()
+        .find(|f| f.name == spec.value_feature)?;
     if key_feature.kind != structural::Typ::EAttribute {
         return None;
     }
-    if presence_of(value_feature) != Presence::Single {
+    // `containment.rs:108-116`: single-valued, or an optional *attribute*.
+    let value_presence = presence_of(value_feature);
+    if value_presence != Presence::Single
+        && !(value_presence == Presence::Optional
+            && value_feature.kind == structural::Typ::EAttribute)
+    {
         return None;
     }
     let key = key_kind(key_feature, ctx)?;
     let shape = Shape::Keyed { key };
 
     match value_feature.kind {
+        // An optional attribute value: `containment.rs`'s
+        // `uw_map_optional_value_log_type` compiles
+        // `VecLog<MVRegister<Option<T>>>` for it and refuses a `datatype`
+        // annotation on it, so neither the declared type nor any annotation
+        // picks the family — Arachne does, to keep a key whose value is
+        // absent readable at all.
+        structural::Typ::EAttribute if value_presence == Presence::Optional => {
+            if datatype_annotation(value_feature).is_some() {
+                return None;
+            }
+            let class = value_feature
+                .typ
+                .filter(|typ| ctx.classes().get(**typ).is_some_and(Class::is_enum))
+                .map(slot);
+            Some((
+                MergeRule::Attribute {
+                    shape,
+                    leaf: LeafRule::OptionalRegister { class },
+                },
+                Provenance {
+                    ordered: collection_source,
+                    unique: collection_source,
+                    leaf: FacetSource::HouseDefault,
+                    presence: presence_source(feature),
+                },
+            ))
+        }
         structural::Typ::EAttribute => {
             let (leaf, leaf_source) = leaf_rule(value_feature, ctx);
             Some((
                 MergeRule::Attribute { shape, leaf },
                 Provenance {
-                    // The annotation replaced the collection outright, so
-                    // neither facet the file wrote decided anything.
-                    ordered: FacetSource::Annotation,
-                    unique: FacetSource::Annotation,
+                    // The map replaced the collection outright, so neither
+                    // facet the file wrote decided anything.
+                    ordered: collection_source,
+                    unique: collection_source,
                     leaf: leaf_source,
                     presence: presence_source(feature),
                 },
@@ -369,8 +440,8 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
                 target: target_slot(value_feature),
             },
             Provenance {
-                ordered: FacetSource::Annotation,
-                unique: FacetSource::Annotation,
+                ordered: collection_source,
+                unique: collection_source,
                 leaf: FacetSource::NotApplicable,
                 presence: presence_source(feature),
             },
@@ -411,9 +482,15 @@ fn key_kind(key_feature: &Structural, ctx: &Ctx) -> Option<KeyKind> {
 /// compiles: a `uw-map` is [`keyed_rule`], and a transparent class's feature
 /// is derived exactly as any other feature of any other class, with the
 /// class's own `transparent` key in the descriptor saying that the class is
-/// rendered as that feature. The three behavioural flags below are what is
-/// left.
-fn unsupported_reason(feature: &Structural, class: &Class) -> Option<UnsupportedReason> {
+/// rendered as that feature. The three behavioural flags and the two
+/// `EObject` forms below are what is left.
+///
+/// The three flags come first because they are what the *file* declares, and
+/// the generated path reads them first too: `analysis.rs:74` drops a
+/// transient reference of one of Ecore's own classes — `EAnnotation`'s
+/// back-pointer `eModelElement`, and nothing else in the corpus — before it
+/// ever looks at the target.
+fn unsupported_reason(feature: &Structural, class: &Class, ctx: &Ctx) -> Option<UnsupportedReason> {
     let _ = class;
     if feature.derived == Some(true) {
         return Some(UnsupportedReason::Derived);
@@ -423,6 +500,21 @@ fn unsupported_reason(feature: &Structural, class: &Class) -> Option<Unsupported
     }
     if feature.volatile == Some(true) {
         return Some(UnsupportedReason::Volatile);
+    }
+    // A feature typed by `EObject` holds or refers to an object of *any*
+    // class, and the generator emits nothing for either form:
+    // `classifier/mod.rs:173-181` writes no field for such a containment and
+    // `reference/analysis.rs:82-88` no arc for such a reference, each with a
+    // warning naming the feature. The descriptor says the same thing as data,
+    // so a reader is told what is missing rather than left to notice.
+    if feature.kind == structural::Typ::EReference
+        && feature.typ.is_some_and(|typ| is_eobject(ctx, typ))
+    {
+        return Some(if feature.containment {
+            UnsupportedReason::EObjectContainment
+        } else {
+            UnsupportedReason::EObjectReference
+        });
     }
     None
 }
@@ -653,6 +745,17 @@ fn leaf_json(leaf: &LeafRule, ctx: &Ctx) -> Value {
             "class": class_name(*class, ctx),
             "tie": to_value(tie),
         }),
+        // Written by hand for the same reason the enum leaf is: the slot this
+        // module mints indexes the `Ctx` and the descriptor carries names.
+        // The key is absent when the value is not enum-typed, which is what
+        // `moirai-semantics`'s `#[serde(default)]` reads back as `None`.
+        LeafRule::OptionalRegister { class } => match class {
+            Some(class) => json!({
+                "kind": "optionalRegister",
+                "class": class_name(*class, ctx),
+            }),
+            None => json!({ "kind": "optionalRegister" }),
+        },
         other => to_value(other),
     }
 }
@@ -669,7 +772,7 @@ mod tests {
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
-    use ecore_rs::repr::{Class, Structural, builtin::Typ as BuiltinTyp, structural};
+    use ecore_rs::repr::{Class, Structural, builtin::Typ as BuiltinTyp, idx, structural};
     use heck::ToUpperCamelCase;
     use moirai_semantics::{
         FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, SetTie, Shape, TieBreak,
@@ -679,6 +782,7 @@ mod tests {
     use crate::EcoreParser;
     use crate::codegen::{
         cycles::analyze_cycles,
+        ecore::is_eobject,
         feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
         generate::Generate,
     };
@@ -695,12 +799,17 @@ mod tests {
     /// only one that reaches the four register tie-breaks other than the
     /// multi-value one, the disable-wins flag, both sets and an enum-typed
     /// attribute.
-    const METAMODELS: [&str; 5] = [
+    /// plus `pet_metamodels/ecore_builtins.ecore`, the only checked-in file
+    /// that reaches Ecore's own classes: the ordered containment of
+    /// annotations, the `details` map to a register over an optional value,
+    /// and the three features that carry no construction on either path.
+    const METAMODELS: [&str; 6] = [
         "behavior_tree.ecore",
         "SimpleUML.ecore",
         "json.ecore",
         "pet_metamodels/kitchen_sink.ecore",
         "class_diagram.ecore",
+        "pet_metamodels/ecore_builtins.ecore",
     ];
 
     /// The Rust type the generator writes for a declared Ecore type, stated
@@ -725,6 +834,98 @@ mod tests {
         .to_string()
     }
 
+    /// Every class a generated crate would hold, in the order
+    /// `generate_from_parser` ranges over them: the package's own, then
+    /// Ecore's but `EObject`, which has no feature and is never generated.
+    fn generated_classes(ctx: &ecore_rs::ctx::Ctx, pack: &ecore_rs::repr::Pack) -> Vec<idx::Class> {
+        let ecore_classes = ctx.ecore_pack().into_iter().flat_map(|pack| {
+            ctx[pack]
+                .classes()
+                .iter()
+                .copied()
+                .filter(|class| !is_eobject(ctx, *class))
+                .collect::<Vec<_>>()
+        });
+        pack.classes()
+            .iter()
+            .copied()
+            .chain(ecore_classes)
+            .filter(|class| !ctx[*class].is_enum())
+            .collect()
+    }
+
+    /// The declared type whose Rust type the leaf is over.
+    ///
+    /// The feature's own, for an attribute. For a keyed collection over an
+    /// attribute value the feature is a *containment* and the scalar comes
+    /// from the entry class's value feature, which
+    /// `containment.rs:96-101` finds by the `urn:arachne:semantics`
+    /// `value-feature` detail and, failing that, by the name `value` — EMF's
+    /// own convention for a map entry class (spec 05 §3.4). Restated here
+    /// rather than called, like the rest of this table.
+    fn leaf_rust(feature: &Structural, ctx: &ecore_rs::ctx::Ctx) -> String {
+        let declared = |typ: idx::Class| {
+            rust_type(
+                ctx.classes()
+                    .get(*typ)
+                    .expect("a resolved type is a classifier"),
+            )
+        };
+        if feature.kind == structural::Typ::EAttribute {
+            return declared(
+                feature
+                    .typ
+                    .expect("a generated attribute has a resolved type"),
+            );
+        }
+        let entry = ctx
+            .classes()
+            .get(
+                *feature
+                    .typ
+                    .expect("a generated containment has a resolved target"),
+            )
+            .expect("a classifier");
+        let value_name = datatype_annotation(feature)
+            .is_some()
+            .then(|| {
+                feature
+                    .annotations()
+                    .iter()
+                    .find(|annot| annot.source() == "urn:arachne:semantics")
+                    .and_then(|annot| annot.details().get("value-feature").cloned())
+            })
+            .flatten()
+            .unwrap_or_else(|| "value".to_string());
+        let value = entry
+            .structural()
+            .iter()
+            .find(|f| f.name == value_name)
+            .expect("a keyed collection's entry class declares its value feature");
+        declared(value.typ.expect("a value feature has a resolved type"))
+    }
+
+    /// The construction the generator emits for one feature, chosen by the
+    /// feature's *kind* and never by the rule's: a keyed collection over an
+    /// attribute value carries an `Attribute` rule on a containment, and it
+    /// is `ContainmentGenerator` that writes it.
+    fn emitted_type(
+        feature: &Structural,
+        class: &Class,
+        ctx: &ecore_rs::ctx::Ctx,
+        cycles: &crate::codegen::cycles::CycleAnalysis,
+    ) -> Result<String, String> {
+        let fragment = match feature.kind {
+            structural::Typ::EAttribute => AttributeGenerator::new(feature, ctx).generate(),
+            structural::Typ::EReference => {
+                ContainmentGenerator::new(feature, class.idx, ctx, cycles).generate()
+            }
+        };
+        fragment
+            .map(|fragment| normalize(fragment.tokens()))
+            .map_err(|error| error.to_string())
+    }
+
     /// The log type of one leaf, over the attribute's declared Rust type.
     ///
     /// This is the readable half of the table: a `MergeRule` on the left, the
@@ -742,6 +943,9 @@ mod tests {
             LeafRule::Register { tie } | LeafRule::Enum { tie, .. } => {
                 format!("VecLog<{}<{rust}>>", register_name(*tie))
             }
+            // `containment.rs:242-246`: a multi-value register over the
+            // declared type wrapped in `Option`, at no other tie-break.
+            LeafRule::OptionalRegister { .. } => format!("VecLog<MVRegister<Option<{rust}>>>"),
         }
     }
 
@@ -966,7 +1170,10 @@ mod tests {
         let ident = match ident.strip_prefix(super::super::ident::ECORE_CLASS_PREFIX) {
             Some(rest)
                 if rest.starts_with('E')
-                    && rest.chars().nth(1).is_some_and(|ch| ch.is_ascii_uppercase()) =>
+                    && rest
+                        .chars()
+                        .nth(1)
+                        .is_some_and(|ch| ch.is_ascii_uppercase()) =>
             {
                 rest
             }
@@ -1012,11 +1219,23 @@ mod tests {
     fn the_two_renamings_are_nominal_and_nothing_else_is() {
         for (expected, emitted) in [
             ("OptionLog<EObjectLog>", "OptionLog<EcoreEObjectLog>"),
-            ("NestedListLog<EObjectLog>", "NestedListLog<EcoreEObjectLog>"),
+            (
+                "NestedListLog<EObjectLog>",
+                "NestedListLog<EcoreEObjectLog>",
+            ),
             ("EAnnotationLog", "EcoreEAnnotationLog"),
-            ("VecLog<MVRegister<ArcKind>>", "VecLog<MVRegister<ArcKindModel>>"),
-            ("NestedListLog<ArcKindLog>", "NestedListLog<ArcKindModelLog>"),
-            ("UWMapLog<std::string::String,NodeKindLog>", "UWMapLog<std::string::String,NodeKindModelLog>"),
+            (
+                "VecLog<MVRegister<ArcKind>>",
+                "VecLog<MVRegister<ArcKindModel>>",
+            ),
+            (
+                "NestedListLog<ArcKindLog>",
+                "NestedListLog<ArcKindModelLog>",
+            ),
+            (
+                "UWMapLog<std::string::String,NodeKindLog>",
+                "UWMapLog<std::string::String,NodeKindModelLog>",
+            ),
         ] {
             assert_eq!(
                 agreement(expected, emitted),
@@ -1037,7 +1256,10 @@ mod tests {
                 "VecLog<AWSet<std::string::String>>",
             ),
             // The 5: one width against another.
-            ("OptionLog<VecLog<Counter<u8>>>", "OptionLog<VecLog<Counter<i8>>>"),
+            (
+                "OptionLog<VecLog<Counter<u8>>>",
+                "OptionLog<VecLog<Counter<i8>>>",
+            ),
             // A metamodel's own class whose name happens to start with the
             // prefix is not Ecore's, and is not normalised away.
             ("EcoreThingLog", "ThingLog"),
@@ -1049,7 +1271,10 @@ mod tests {
             );
         }
 
-        assert_eq!(agreement("VecLog<EWFlag>", "VecLog<EWFlag>"), Agreement::Exact);
+        assert_eq!(
+            agreement("VecLog<EWFlag>", "VecLog<EWFlag>"),
+            Agreement::Exact
+        );
     }
 
     /// **ip2** — for every structural feature of every class of the checked-in
@@ -1075,14 +1300,35 @@ mod tests {
             let pack = crate::find_user_package(ctx).expect("a user package");
             let cycles = analyze_cycles(ctx).expect("the cycle analysis");
 
-            for class_idx in pack.classes() {
+            // Ecore's own classes are compared like anyone else's, so a
+            // metamodel that reaches them has its whole generated slice here.
+            for class_idx in &generated_classes(ctx, pack) {
                 let class = &ctx[*class_idx];
-                if class.is_enum() {
-                    continue;
-                }
+                // A spelling, never a construction: `ident.rs` gives Ecore's
+                // own classes a reserved prefix and the rule names them as
+                // the `.ecore` file does, so a construction that mentions one
+                // of them agrees nominally and never exactly. Anything else
+                // must agree exactly, which is what the flag is narrowed for.
+                let names_an_ecore_class = |feature: &Structural| {
+                    ctx.is_ecore_class(*class_idx)
+                        || feature.typ.is_some_and(|typ| ctx.is_ecore_class(typ))
+                };
                 for feature in class.structural() {
                     let (rule, _) = merge_rule(feature, class, ctx);
                     let at = format!("{metamodel} `{}.{}`", class.name(), feature.name);
+                    let agrees = |expected: &str, emitted: &str| {
+                        let agreement = agreement(expected, emitted);
+                        let allowed = if names_an_ecore_class(feature) {
+                            agreement != Agreement::Differ
+                        } else {
+                            agreement == Agreement::Exact
+                        };
+                        assert!(
+                            allowed,
+                            "{at}: {rule:?} names `{expected}` and the generator emits \
+                             `{emitted}` ({agreement:?})"
+                        );
+                    };
 
                     match &rule {
                         MergeRule::Unsupported { .. } => unsupported += 1,
@@ -1105,17 +1351,16 @@ mod tests {
                             );
                             assert_eq!(
                                 super::class_name(*target, ctx),
-                                ctx[feature.typ.expect("a resolved target")].name(),
+                                super::descriptor_class_name(
+                                    ctx,
+                                    feature.typ.expect("a resolved target")
+                                ),
                                 "{at}: target"
                             );
                             references += 1;
                         }
                         MergeRule::Attribute { shape, leaf } => {
-                            let declared = ctx
-                                .classes()
-                                .get(*feature.typ.expect("a resolved type"))
-                                .expect("a classifier");
-                            let rust = rust_type(declared);
+                            let rust = leaf_rust(feature, ctx);
                             if let LeafRule::Counter { num, .. } = leaf {
                                 assert_eq!(
                                     num_rust(*num),
@@ -1124,32 +1369,17 @@ mod tests {
                                 );
                             }
                             let expected = attribute_type(shape, leaf, &rust);
-                            let emitted = AttributeGenerator::new(feature, ctx)
-                                .generate()
+                            let emitted = emitted_type(feature, class, ctx, &cycles)
                                 .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
-                            let emitted = normalize(emitted.tokens());
-                            assert_eq!(
-                                agreement(&expected, &emitted),
-                                Agreement::Exact,
-                                "{at}: {rule:?} names `{expected}` and the generator emits \
-                                 `{emitted}`"
-                            );
+                            agrees(&expected, &emitted);
                             compared += 1;
                         }
                         MergeRule::Containment { shape, target } => {
                             let target = ctx.classes().get(target.index()).expect("a classifier");
                             let expected = containment_type(shape, target);
-                            let emitted =
-                                ContainmentGenerator::new(feature, class.idx, ctx, &cycles)
-                                    .generate()
-                                    .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
-                            let emitted = normalize(emitted.tokens());
-                            assert_eq!(
-                                agreement(&expected, &emitted),
-                                Agreement::Exact,
-                                "{at}: {rule:?} names `{expected}` and the generator emits \
-                                 `{emitted}`"
-                            );
+                            let emitted = emitted_type(feature, class, ctx, &cycles)
+                                .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
+                            agrees(&expected, &emitted);
                             compared += 1;
                         }
                     }
@@ -1173,9 +1403,18 @@ mod tests {
         // the first `Shape::Set`, `DWFlag`, `LwwRegister`, `FairRegister`,
         // `PORegister`, `TORegister` and enum-typed attribute the rule and
         // the generator have ever been compared on.
+        // Seventy-eight, twelve and four on 2026-09-18, when
+        // `ecore_builtins.ecore` joined the list and Ecore's own classes
+        // began to be compared: nine more constructions — the ordered
+        // containment of annotations, the `details` map, the optional
+        // `source` and `name`, the entry class's own `key` and `value`, and
+        // the pet metamodel's three — one more reference, `Port.annotated`,
+        // and the first four features that carry no construction at all: two
+        // typed by `EObject`, one containment of `EObject`, and the transient
+        // back-pointer `EAnnotation.eModelElement`.
         assert_eq!(
             (compared, references, unsupported),
-            (69, 11, 0),
+            (78, 12, 4),
             "the census of what was compared moved"
         );
     }
@@ -1273,11 +1512,8 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{metamodel} should parse: {e}"));
             let ctx = &parser.ctx;
             let pack = crate::find_user_package(ctx).expect("a user package");
-            for class_idx in pack.classes() {
+            for class_idx in &generated_classes(ctx, pack) {
                 let class = &ctx[*class_idx];
-                if class.is_enum() {
-                    continue;
-                }
                 for feature in class.structural() {
                     let (_, provenance) = merge_rule(feature, class, ctx);
                     for source in [
@@ -1292,7 +1528,7 @@ mod tests {
             }
         }
         let total: usize = sources.values().sum();
-        assert_eq!(total, 4 * 80, "four facets on each of eighty features");
+        assert_eq!(total, 4 * 94, "four facets on each of ninety-four features");
         assert!(
             sources.contains_key("Declared")
                 && sources.contains_key("EcoreDefault")
@@ -2025,6 +2261,7 @@ mod tests {
                 LeafRule::Register { tie } | LeafRule::Enum { tie, .. } => {
                     format!("Register{}", tie_arm(*tie))
                 }
+                LeafRule::OptionalRegister { .. } => "RegisterOptional".to_string(),
             },
         }
     }
@@ -2138,18 +2375,9 @@ mod tests {
         // which is also what keeps a metamodel the generator would reject from
         // being counted as a disagreement.
         let emitted = match &rule {
-            MergeRule::Attribute { .. } => Some(
-                AttributeGenerator::new(feature, ctx)
-                    .generate()
-                    .map(|fragment| normalize(fragment.tokens()))
-                    .map_err(|error| error.to_string()),
-            ),
-            MergeRule::Containment { .. } => Some(
-                ContainmentGenerator::new(feature, class.idx, ctx, cycles)
-                    .generate()
-                    .map(|fragment| normalize(fragment.tokens()))
-                    .map_err(|error| error.to_string()),
-            ),
+            MergeRule::Attribute { .. } | MergeRule::Containment { .. } => {
+                Some(emitted_type(feature, class, ctx, cycles))
+            }
             _ => None,
         };
 
@@ -2184,11 +2412,7 @@ mod tests {
                     "generator-refused".to_string(),
                 ),
                 (MergeRule::Attribute { shape, leaf }, Some(Ok(emitted))) => {
-                    let declared = feature
-                        .typ
-                        .and_then(|typ| ctx.classes().get(*typ))
-                        .expect("a generated attribute has a resolved type");
-                    let rust = rust_type(declared);
+                    let rust = leaf_rust(feature, ctx);
                     let expected = attribute_type(shape, leaf, &rust);
                     let agree = agreement(&expected, &emitted);
                     (

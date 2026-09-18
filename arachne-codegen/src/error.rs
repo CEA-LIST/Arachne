@@ -27,13 +27,13 @@ pub enum ArachneError {
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
 
-    /// The generator writes a crate for a package whose classes extend or are typed by Ecore's
-    /// own classes, but the descriptor does not describe them yet, so nothing on the interpreted
-    /// path could read one. Refused here rather than published half-described.
-    #[error(
-        "`{0}` uses Ecore's own classes, which the metamodel descriptor does not describe yet"
-    )]
-    EcoreBuiltinsNotDescribed(String),
+    /// Two classifiers would be listed in the descriptor under one key, so one of the two
+    /// would silently take the other's features. Ecore's own classes are keyed
+    /// `ecore::<Name>`, which no well-formed Ecore name can be, so this is a metamodel EMF
+    /// would itself refuse; it is checked because descriptors are emitted for metamodels EMF
+    /// has never seen.
+    #[error("two classifiers would be described under the one key `{0}`")]
+    DuplicateDescriptorClass(String),
 }
 
 /// Specialized Result type for Arachne
