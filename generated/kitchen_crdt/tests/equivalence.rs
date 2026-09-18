@@ -119,50 +119,75 @@ enum Kind {
     SeqFlag,
     /// `AWBagLog<i16>`.
     Bag,
+    /// `VecLog<AWSet<i16>>`.
+    Set,
+    /// `GraphLog<List<i16>>`: many, ordered, over the values themselves.
+    OrderedSet,
 }
 
-/// One feature: its Ecore name and its construction.
+/// One feature: its Ecore name, its construction, and whether the
+/// construction sits under an `OptionLog`.
+///
+/// Ecore defaults `lowerBound` to `0`, so every single-valued attribute that
+/// does not write one is optional. `Foo.bounds11` is the one that writes
+/// `lowerBound="1"`, and it is the only single-valued feature here that is not.
 #[derive(Clone, Copy, Debug)]
 struct Feature {
     name: &'static str,
     kind: Kind,
+    optional: bool,
 }
 
-const fn feature(name: &'static str, kind: Kind) -> Feature {
-    Feature { name, kind }
+/// A feature whose `lowerBound` the file leaves silent: zero or one.
+const fn optional(name: &'static str, kind: Kind) -> Feature {
+    Feature {
+        name,
+        kind,
+        optional: true,
+    }
+}
+
+/// A feature whose construction is the whole of what the field holds.
+const fn bare(name: &'static str, kind: Kind) -> Feature {
+    Feature {
+        name,
+        kind,
+        optional: false,
+    }
+}
+
+/// The feature of [`FEATURES`] with this name.
+fn feature_named(name: &str) -> Feature {
+    *FEATURES
+        .iter()
+        .find(|held| held.name == name)
+        .unwrap_or_else(|| panic!("`{name}` is not a feature of `Foo`"))
 }
 
 /// `Foo`'s features in declaration order, which is also visible-slot order:
 /// `Foo` has no supertype, so the two coincide and the encoders use the
 /// table's own index rather than this one.
 const FEATURES: [Feature; 19] = [
-    feature("myString", Kind::Text),
-    feature("myInt", Kind::CounterInt),
-    feature("myBoolean", Kind::Flag),
-    feature("myChar", Kind::Register),
-    feature("myLong", Kind::CounterInt),
-    feature("myFloat", Kind::CounterFloat),
-    feature("myDouble", Kind::CounterFloat),
-    feature("myByte", Kind::CounterInt),
-    feature("myShort", Kind::CounterInt),
-    feature("bounds0inf", Kind::SeqCounterInt),
-    feature("bounds1inf", Kind::SeqCounterInt),
-    feature("bounds01", Kind::CounterInt),
-    feature("bounds11", Kind::CounterInt),
-    feature("boundsninf", Kind::SeqCounterInt),
-    feature("boundsnm", Kind::SeqCounterInt),
-    feature("simpleList", Kind::SeqFlag),
-    feature("uniqueList", Kind::SeqCounterInt),
-    feature("bag", Kind::Bag),
-    feature("set", Kind::Bag),
+    optional("myString", Kind::Text),
+    optional("myInt", Kind::CounterInt),
+    optional("myBoolean", Kind::Flag),
+    optional("myChar", Kind::Register),
+    optional("myLong", Kind::CounterInt),
+    optional("myFloat", Kind::CounterFloat),
+    optional("myDouble", Kind::CounterFloat),
+    optional("myByte", Kind::CounterInt),
+    optional("myShort", Kind::CounterInt),
+    bare("bounds0inf", Kind::OrderedSet),
+    bare("bounds1inf", Kind::OrderedSet),
+    optional("bounds01", Kind::CounterInt),
+    bare("bounds11", Kind::CounterInt),
+    bare("boundsninf", Kind::OrderedSet),
+    bare("boundsnm", Kind::OrderedSet),
+    bare("simpleList", Kind::SeqFlag),
+    bare("uniqueList", Kind::OrderedSet),
+    bare("bag", Kind::Bag),
+    bare("set", Kind::Set),
 ];
-
-/// `myByte` is a `Counter<u8>`, and `u8: SubAssign` panics on underflow in a
-/// debug build on both paths alike. The script generator never proposes a
-/// decrement on an unsigned width, so the oracle measures merge and not
-/// arithmetic overflow, which is a property of `Counter<u8>` and not of
-/// either path.
-const UNSIGNED: &str = "myByte";
 
 /// The Rust field name `record!` gives a feature: `paste!`'s `:camel` runs
 /// over the snake-cased name the generator writes, so this is the generator's
@@ -282,11 +307,15 @@ enum Action {
     SeqUpdate { pos: usize, elem: Elem },
     /// Take the element at `pos` out.
     SeqDelete { pos: usize },
-    /// One value into a bag.
+    /// Put a value into an ordered set at `pos`.
+    ListInsert { pos: usize, value: i64 },
+    /// Take the value at `pos` out of an ordered set.
+    ListDelete { pos: usize },
+    /// One value into a bag or a set.
     BagAdd(i64),
-    /// One value out of a bag.
+    /// One value out of a bag or a set.
     BagRemove(i64),
-    /// Everything out of a bag.
+    /// Everything out of a bag or a set.
     BagClear,
 }
 
@@ -360,9 +389,22 @@ fn interp_op(meta: &Meta, edit: &Edit) -> InstanceOp {
                     InstanceOp::at(*pos, InstanceOp::Leaf(interp_elem(elem)))
                 }
                 Action::SeqDelete { pos } => InstanceOp::delete(*pos),
+                // An ordered set is one log over the values themselves, so
+                // the insert carries the value and not an operation on a log
+                // of its own.
+                Action::ListInsert { pos, value } => InstanceOp::Leaf(LeafOp::Insert {
+                    pos: *pos,
+                    value: Scalar::Int(*value),
+                }),
+                Action::ListDelete { pos } => InstanceOp::Leaf(LeafOp::DeleteChar { pos: *pos }),
                 Action::BagAdd(value) => InstanceOp::Leaf(LeafOp::Add(Scalar::Int(*value))),
                 Action::BagRemove(value) => InstanceOp::Leaf(LeafOp::Remove(Scalar::Int(*value))),
                 Action::BagClear => InstanceOp::Leaf(LeafOp::Clear),
+            };
+            let step = if feature_named(name).optional {
+                InstanceOp::set(step)
+            } else {
+                step
             };
             InstanceOp::field(slot, step)
         }
@@ -417,9 +459,18 @@ fn typed_json(edit: &Edit) -> Value {
                     json!({"Update": {"pos": pos, "op": typed_elem(elem)}})
                 }
                 Action::SeqDelete { pos } => json!({"Delete": {"pos": pos}}),
+                Action::ListInsert { pos, value } => {
+                    json!({"Insert": {"content": value, "pos": pos}})
+                }
+                Action::ListDelete { pos } => json!({"Delete": {"pos": pos}}),
                 Action::BagAdd(value) => tagged("Add", json!(value)),
                 Action::BagRemove(value) => tagged("Remove", json!(value)),
                 Action::BagClear => json!("Clear"),
+            };
+            let step = if feature_named(name).optional {
+                tagged("Set", step)
+            } else {
+                step
             };
             tagged(variant_of(name), step)
         }
@@ -446,11 +497,17 @@ fn project(value: &TestValue) -> Value {
         .expect("the package value carries `Foo` under its field");
     let mut out = Map::new();
     out.insert(ECLASS.to_string(), Value::String(ROOT.to_string()));
-    for Feature { name, kind } in FEATURES {
+    for held in FEATURES {
         let found = foo
-            .get(field_of(name))
-            .unwrap_or_else(|| panic!("`FooValue` has no field for `{name}`"));
-        out.insert(name.to_string(), project_feature(kind, found));
+            .get(field_of(held.name))
+            .unwrap_or_else(|| panic!("`FooValue` has no field for `{}`", held.name));
+        // An `OptionLog` with no child reads `None`, and the interpreted `Opt`
+        // with no child carries no key at all, so the key is dropped here.
+        // An optional that *is* set keeps its key whatever it holds.
+        if held.optional && found.is_null() {
+            continue;
+        }
+        out.insert(held.name.to_string(), project_feature(held.kind, found));
     }
     Value::Object(out)
 }
@@ -461,8 +518,29 @@ fn project_feature(kind: Kind, value: &Value) -> Value {
         Kind::CounterInt | Kind::CounterFloat | Kind::Flag => value.clone(),
         Kind::Register => register(value),
         Kind::SeqCounterInt | Kind::SeqFlag => value.clone(),
+        // `GraphLog<List<i16>>` reads as a `Vec<i16>` in list order, which is
+        // what `LeafLog::OrderedSet` renders too.
+        Kind::OrderedSet => value.clone(),
+        // `VecLog<AWSet<i16>>` reads as a `HashSet<i16>`; `LeafLog::SetAw`
+        // renders the same values sorted.
+        Kind::Set => sorted_numbers(value),
         Kind::Bag => bag(value),
     }
+}
+
+/// A `HashSet<i16>` as `leaf.rs`'s `sorted_array` renders one.
+fn sorted_numbers(value: &Value) -> Value {
+    let mut held: Vec<i64> = value
+        .as_array()
+        .unwrap_or_else(|| panic!("a set reads as an array: {value}"))
+        .iter()
+        .map(|item| {
+            item.as_i64()
+                .unwrap_or_else(|| panic!("a set of `EShort` holds numbers: {item}"))
+        })
+        .collect();
+    held.sort_unstable();
+    Value::Array(held.into_iter().map(Value::from).collect())
 }
 
 /// A `Vec<char>` as a string.
@@ -559,9 +637,15 @@ fn without_defaults(value: Value) -> Value {
     let Value::Object(mut map) = value else {
         return value;
     };
-    for Feature { name, kind } in FEATURES {
-        if map.get(name) == Some(&default_of(kind)) {
-            map.remove(name);
+    for held in FEATURES {
+        // An optional is never pruned by its leaf's default: a set optional
+        // holding zero is a written one, and an unset optional carries no key
+        // on either side already.
+        if held.optional {
+            continue;
+        }
+        if map.get(held.name) == Some(&default_of(held.kind)) {
+            map.remove(held.name);
         }
     }
     if map.len() == 1 && map.contains_key(ECLASS) {
@@ -578,7 +662,9 @@ fn default_of(kind: Kind) -> Value {
         Kind::CounterFloat => json!(0.0),
         Kind::Flag => json!(false),
         Kind::Register => Value::Null,
-        Kind::SeqCounterInt | Kind::SeqFlag | Kind::Bag => json!([]),
+        Kind::SeqCounterInt | Kind::SeqFlag | Kind::Bag | Kind::Set | Kind::OrderedSet => {
+            json!([])
+        }
     }
 }
 
@@ -858,13 +944,15 @@ fn propose_elem(kind: Kind, seen: &Value, rng: &mut Rng) -> Elem {
             1..=2 => Elem::Dec(1 + rng.below(3) as i64),
             _ => Elem::Inc(1 + rng.below(4) as i64),
         },
-        Kind::Bag => unreachable!("a bag takes no element write"),
+        Kind::Bag | Kind::Set | Kind::OrderedSet => {
+            unreachable!("a bag, a set and an ordered set take no element write")
+        }
     }
 }
 
 /// One edit a writer looking at `seen` could make.
 fn propose(seen: &Value, rng: &mut Rng, writer: char, guard: bool) -> Edit {
-    let Feature { name, kind } = FEATURES[rng.below(FEATURES.len())];
+    let Feature { name, kind, .. } = FEATURES[rng.below(FEATURES.len())];
     // A pruned read-out carries no key for a feature at its default, and a
     // model that has just been minted is pruned to `null` entirely; either
     // way the writer is looking at the default, which is what it proposes
@@ -872,6 +960,32 @@ fn propose(seen: &Value, rng: &mut Rng, writer: char, guard: bool) -> Edit {
     let here = seen.get(name).cloned().unwrap_or_else(|| default_of(kind));
     let here = &here;
     let action = match kind {
+        Kind::OrderedSet => {
+            let len = here.as_array().map_or(0, Vec::len);
+            if len > 0 && rng.below(4) == 0 {
+                Action::ListDelete {
+                    pos: rng.below(len),
+                }
+            } else {
+                Action::ListInsert {
+                    pos: rng.below(len + 1),
+                    value: BAG_VALUES[rng.below(BAG_VALUES.len())],
+                }
+            }
+        }
+        Kind::Set => {
+            // A set takes a remove of a value it does not hold without
+            // complaint, unlike a bag, so this one is free to propose it.
+            let held: Vec<i64> = here
+                .as_array()
+                .map(|items| items.iter().filter_map(Value::as_i64).collect())
+                .unwrap_or_default();
+            match rng.below(8) {
+                0 => Action::BagClear,
+                1..=3 if !held.is_empty() => Action::BagRemove(held[rng.below(held.len())]),
+                _ => Action::BagAdd(BAG_VALUES[rng.below(BAG_VALUES.len())]),
+            }
+        }
         Kind::Bag => {
             // A removal is proposed only for a value the writer can see.
             // `AWBag::Remove` is `Counter<usize>::Dec(1)`
@@ -927,17 +1041,9 @@ fn propose(seen: &Value, rng: &mut Rng, writer: char, guard: bool) -> Edit {
                 }
             }
         }
-        _ => {
-            let mut elem = propose_elem(kind, here, rng);
-            // `Counter<u8>` underflows on both paths alike; see `UNSIGNED`.
-            if name == UNSIGNED {
-                elem = match elem {
-                    Elem::Dec(by) => Elem::Inc(by),
-                    other => other,
-                };
-            }
-            Action::Leaf(elem)
-        }
+        // Every numeric width Ecore has is signed, `EByte` included since it
+        // is `i8`, so no width is held back from a decrement any more.
+        _ => Action::Leaf(propose_elem(kind, here, rng)),
     };
     Edit {
         writer,
@@ -1044,28 +1150,47 @@ fn the_table_says_what_this_file_says() {
     named.sort_unstable();
     visible.sort_unstable();
     assert_eq!(named, visible, "`Foo`'s features, as the table holds them");
-    for Feature { name, kind } in FEATURES.iter() {
+    for held in FEATURES.iter() {
+        let name = held.name;
         let derived = match meta.rule(name) {
             MergeRule::Attribute { shape, leaf } => match (shape, leaf) {
-                (Shape::Single, LeafRule::Text) => Kind::Text,
+                (Shape::Single | Shape::Optional, LeafRule::Text) => Kind::Text,
                 (
-                    Shape::Single,
+                    Shape::Single | Shape::Optional,
                     LeafRule::Counter {
                         num: NumKind::F32 | NumKind::F64,
                         ..
                     },
                 ) => Kind::CounterFloat,
-                (Shape::Single, LeafRule::Counter { .. }) => Kind::CounterInt,
-                (Shape::Single, LeafRule::Flag { .. }) => Kind::Flag,
-                (Shape::Single, LeafRule::Register { .. }) => Kind::Register,
+                (Shape::Single | Shape::Optional, LeafRule::Counter { .. }) => Kind::CounterInt,
+                (Shape::Single | Shape::Optional, LeafRule::Flag { .. }) => Kind::Flag,
+                (Shape::Single | Shape::Optional, LeafRule::Register { .. }) => Kind::Register,
                 (Shape::Sequence, LeafRule::Counter { .. }) => Kind::SeqCounterInt,
                 (Shape::Sequence, LeafRule::Flag { .. }) => Kind::SeqFlag,
+                (Shape::OrderedSet, _) => Kind::OrderedSet,
+                (
+                    Shape::Set {
+                        tie: moirai_semantics::SetTie::AddWins,
+                    },
+                    _,
+                ) => Kind::Set,
                 (Shape::Bag, _) => Kind::Bag,
                 other => panic!("`{name}` is {other:?}, which this file does not name"),
             },
             other => panic!("`{name}` is {other:?}, which is not an attribute"),
         };
-        assert_eq!(derived, *kind, "`{name}`");
+        assert_eq!(derived, held.kind, "`{name}`");
+        assert_eq!(
+            matches!(
+                meta.rule(name),
+                MergeRule::Attribute {
+                    shape: Shape::Optional,
+                    ..
+                }
+            ),
+            held.optional,
+            "`{name}`: this file and the table disagree on whether it is optional"
+        );
     }
     assert_eq!(&*meta.sem.package, "test");
     assert_eq!(meta.sem.roots.len(), 3, "`Bar`, `Baz` and `Foo` are roots");
@@ -1114,7 +1239,7 @@ fn ip29_the_census_of_what_this_metamodel_reaches() {
     shapes.dedup();
     assert_eq!(
         widths,
-        vec!["F32", "F64", "I16", "I32", "I64", "U8"],
+        vec!["F32", "F64", "I16", "I32", "I64", "I8"],
         "all six counter widths, which is the whole of what this metamodel adds"
     );
     assert!(resettable_only, "every counter here is resettable");
@@ -1126,8 +1251,19 @@ fn ip29_the_census_of_what_this_metamodel_reaches() {
     );
     assert_eq!(
         shapes,
-        vec!["Bag", "Sequence", "Single"],
-        "`set` derives `Bag` too, because `unique` unspecified reads as false"
+        vec![
+            "Bag",
+            "Optional",
+            "OrderedSet",
+            "Sequence",
+            "Set { tie: AddWins }",
+            "Single"
+        ],
+        "every shape of the vocabulary but the keyed one: `set` is a set now \
+         that a silent `unique` is Ecore's `true`, the four bounded many-valued \
+         attributes and `uniqueList` are ordered sets, `simpleList` is the one \
+         sequence because it writes `unique=\"false\"`, and `bounds11` is the one \
+         single because it writes `lowerBound=\"1\"`"
     );
     assert!(
         meta.sem.enums.is_empty(),
@@ -1158,10 +1294,17 @@ fn ip29_one_write_of_every_construction_reads_the_same_on_both_paths() {
         Edit {
             writer: 'b',
             feature: Some("bounds0inf"),
-            action: Action::SeqInsert {
-                pos: 0,
-                elem: Elem::Inc(5),
-            },
+            action: Action::ListInsert { pos: 0, value: 5 },
+        },
+        Edit {
+            writer: 'a',
+            feature: Some("uniqueList"),
+            action: Action::ListInsert { pos: 0, value: 9 },
+        },
+        Edit {
+            writer: 'b',
+            feature: Some("bounds11"),
+            action: Action::Leaf(Elem::Inc(6)),
         },
         Edit {
             writer: 'a',
@@ -1209,6 +1352,8 @@ fn ip29_one_write_of_every_construction_reads_the_same_on_both_paths() {
     assert_eq!(read["myBoolean"], json!(true));
     assert_eq!(read["myChar"], json!("q"));
     assert_eq!(read["bounds0inf"], json!([5]));
+    assert_eq!(read["uniqueList"], json!([9]));
+    assert_eq!(read["bounds11"], json!(6));
     assert_eq!(read["simpleList"], json!([true]));
     assert_eq!(read["bag"], json!([3, 3]), "a bag keeps the count");
     assert_eq!(read["set"], json!([-2]));
@@ -1424,21 +1569,14 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     assert_eq!(interp, harness.interp_doc('b'), "each path is self-consistent");
     assert_eq!(generated, harness.gen_doc('b'));
 
-    // The same on a counter element: `Reset` leaves it at 0, which is
-    // `Counter<i16>`'s default, and the generated read-out loses it.
-    let reset = Edit {
-        writer: 'b',
-        feature: Some("uniqueList"),
-        action: Action::SeqInsert {
-            pos: 0,
-            elem: Elem::Reset,
-        },
-    };
-    assert!(harness.carry(&reset).expect("both intakes agree on it"));
-    harness.cross();
-    assert_eq!(harness.interp_doc('a')["uniqueList"], json!([0]));
-    assert_eq!(harness.gen_doc('a')["uniqueList"], Value::Null);
-
+    // It used to be shown on a counter element too, through `Foo.uniqueList`
+    // and a `Reset` that leaves the element at `Counter<i16>`'s default. That
+    // feature is an ordered set since a silent `unique` became Ecore's `true`,
+    // and an ordered set holds its values under one log rather than a log per
+    // element, so it has no element that can sit at a default. `simpleList` is
+    // the one `NestedListLog` over attribute values the corpus has left and it
+    // is what the rest of this pin is written on.
+    //
     // And the generated log counts what it does not show: an insert at
     // position 1 is enabled, though the read-out offers only position 0.
     let second = Edit {
@@ -1492,7 +1630,10 @@ fn ip29_the_oracle_notices_when_the_two_encoders_disagree() {
     // The mutation: a `myShort` increment on the generated arm alone.
     let stray: Test = serde_json::from_value(tagged(
         "Foo",
-        tagged(variant_of("myShort"), tagged("Inc", json!(11))),
+        tagged(
+            variant_of("myShort"),
+            tagged("Set", tagged("Inc", json!(11))),
+        ),
     ))
     .expect("the shape is right; the asymmetry is the lie");
     let event = harness.ga.send(stray).expect("the generated log takes it");
@@ -1511,10 +1652,11 @@ fn ip29_the_oracle_notices_when_the_two_encoders_disagree() {
 //
 // `moirai_interp::matrix` holds the whole matrix and assigns this crate the
 // six resettable counter widths, the enable-wins flag, the multi-value
-// register, the bag and the sequence of attribute values. What is here is the
-// cell table for those rows, driven through this file's own encoders and its
-// own projection, unchanged. Every cell opens with `New` and acknowledges with
-// one character into `Foo.myString`, which no cell here contends.
+// register, the bag, the ordered set and the sequence of attribute values.
+// What is here is the cell table for those rows, driven through this file's
+// own encoders and its own projection, unchanged. Every cell opens with `New`
+// and acknowledges with one character into `Foo.myString`, which no cell here
+// contends.
 //
 // The sequence cells keep every element away from its own default at every
 // point of every schedule, because an element at its default is the named
@@ -1550,7 +1692,7 @@ fn kitchen_cells() -> Vec<Cell<Edit>> {
 
     // The six resettable counter widths.
     for (feature, num, float) in [
-        ("myByte", NumKind::U8, false),
+        ("myByte", NumKind::I8, false),
         ("myShort", NumKind::I16, false),
         ("myInt", NumKind::I32, false),
         ("myLong", NumKind::I64, false),
@@ -1690,38 +1832,89 @@ fn kitchen_cells() -> Vec<Cell<Edit>> {
         .expect("/bag", json!([7])),
     );
 
-    // The sequence of attribute values: `Foo.bounds0inf`, seeded [1, 2].
+    // The sequence of attribute values: `Foo.simpleList`, seeded [true, true].
+    //
+    // `Foo.bounds0inf` drove this row until a silent `unique` became Ecore's
+    // `true`, which made it an ordered set; `simpleList` writes
+    // `unique="false"` and is the one `NestedListLog` over attribute values
+    // the checked-in corpus has left. What that costs is stated rather than
+    // hidden: its elements are `EWFlag`s and every one of them has to stay
+    // enabled — a flag at `false` is the element the generated read-out drops,
+    // which `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+    // pins — so the cells below tell one ordering from another by the *length*
+    // of the list and by which positions survive, and not by the values at
+    // them, which a counter element could carry and a flag cannot.
     let row = Construction::SequenceOfValues;
     let seeded = || {
         opened(vec![
-            act("bounds0inf", Action::SeqInsert { pos: 0, elem: Elem::Inc(1) }),
-            act("bounds0inf", Action::SeqInsert { pos: 1, elem: Elem::Inc(2) }),
+            act("simpleList", Action::SeqInsert { pos: 0, elem: Elem::Enable }),
+            act("simpleList", Action::SeqInsert { pos: 1, elem: Elem::Enable }),
         ])
     };
-    let insert = |pos, by| vec![act("bounds0inf", Action::SeqInsert { pos, elem: Elem::Inc(by) })];
-    let update = |pos, by| vec![act("bounds0inf", Action::SeqUpdate { pos, elem: Elem::Inc(by) })];
-    let delete = |pos| vec![act("bounds0inf", Action::SeqDelete { pos })];
-    cells.push(Cell::new(row, p::INSERT_INSERT_SAME_POS, seeded(), vec![insert(1, 5), insert(1, 6)], beat()));
+    let insert = |pos| vec![act("simpleList", Action::SeqInsert { pos, elem: Elem::Enable })];
+    let update = |pos| vec![act("simpleList", Action::SeqUpdate { pos, elem: Elem::Enable })];
+    let delete = |pos| vec![act("simpleList", Action::SeqDelete { pos })];
     cells.push(
-        Cell::new(row, p::INSERT_DELETE, seeded(), vec![insert(1, 5), delete(0)], beat())
-            .expect("/bounds0inf", json!([5, 2])),
+        Cell::new(row, p::INSERT_INSERT_SAME_POS, seeded(), vec![insert(1), insert(1)], beat())
+            .expect("/simpleList", json!([true, true, true, true])),
     );
-    cells.push(Cell::new(row, p::DELETE_UPDATE_SAME, seeded(), vec![delete(0), update(0, 3)], beat()));
+    cells.push(
+        Cell::new(row, p::INSERT_DELETE, seeded(), vec![insert(1), delete(0)], beat())
+            .expect("/simpleList", json!([true, true])),
+    );
+    cells.push(
+        Cell::new(row, p::DELETE_UPDATE_SAME, seeded(), vec![delete(0), update(0)], beat())
+            .expect("/simpleList", json!([true, true])),
+    );
     cells.push(
         Cell::new(row, p::DELETE_DELETE_SAME, seeded(), vec![delete(0), delete(0)], beat())
-            .expect("/bounds0inf", json!([2])),
+            .expect("/simpleList", json!([true])),
     );
     cells.push(
-        Cell::new(row, p::UPDATE_UPDATE_SAME, seeded(), vec![update(0, 3), update(0, 4)], beat())
-            .expect("/bounds0inf", json!([8, 2])),
+        Cell::new(row, p::UPDATE_UPDATE_SAME, seeded(), vec![update(0), update(0)], beat())
+            .expect("/simpleList", json!([true, true])),
     );
-    cells.push(Cell::new(
-        row,
-        p::THREE_INSERTS_SAME_POS,
-        seeded(),
-        vec![insert(1, 5), insert(1, 6), insert(1, 7)],
-        beat(),
-    ));
+    cells.push(
+        Cell::new(
+            row,
+            p::THREE_INSERTS_SAME_POS,
+            seeded(),
+            vec![insert(1), insert(1), insert(1)],
+            beat(),
+        )
+        .expect("/simpleList", json!([true, true, true, true, true])),
+    );
+
+    // The ordered set: `Foo.uniqueList`, seeded [1, 2]. The same
+    // `GraphLog<List<_>>` the text leaf is, over the attribute's own values
+    // rather than over characters, so the five patterns are the text row's
+    // five with a value where a character stands.
+    let row = Construction::OrderedSet;
+    let seeded = || {
+        opened(vec![
+            act("uniqueList", Action::ListInsert { pos: 0, value: 1 }),
+            act("uniqueList", Action::ListInsert { pos: 1, value: 2 }),
+        ])
+    };
+    let insert = |pos, value| vec![act("uniqueList", Action::ListInsert { pos, value })];
+    let delete = |pos| vec![act("uniqueList", Action::ListDelete { pos })];
+    cells.push(Cell::new(row, p::INSERT_INSERT_SAME_POS, seeded(), vec![insert(1, 5), insert(1, 6)], beat()));
+    cells.push(
+        Cell::new(row, p::INSERT_INSERT_SAME_VALUE, seeded(), vec![insert(1, 5), insert(1, 5)], beat())
+            .expect("/uniqueList", json!([1, 5, 5, 2])),
+    );
+    cells.push(
+        Cell::new(row, p::INSERT_DELETE_SAME_VALUE, seeded(), vec![insert(1, 5), delete(0)], beat())
+            .expect("/uniqueList", json!([5, 2])),
+    );
+    cells.push(
+        Cell::new(row, p::DELETE_DELETE_SAME, seeded(), vec![delete(0), delete(0)], beat())
+            .expect("/uniqueList", json!([2])),
+    );
+    cells.push(
+        Cell::new(row, p::DELETE_DELETE_DIFFERENT, seeded(), vec![delete(0), delete(1)], beat())
+            .expect("/uniqueList", Null),
+    );
     cells
 }
 
