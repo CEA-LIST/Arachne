@@ -963,90 +963,6 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 4c. The one named exclusion of the equivalence criterion
-// ---------------------------------------------------------------------------
-
-/// A canonical document with the criterion's one named exception removed: an
-/// object created into an **ordered containment and never written into**.
-///
-/// # What it drops
-///
-/// A sequence element carrying nothing but its `eClass` once
-/// [`without_defaults`] has run over it, and then, to a fixed point, whatever
-/// collapses upward from that — dropping the element can empty the array that
-/// held it, which can empty the object that held that array, which the
-/// default rule then drops in turn. Applied to *both* sides by this one
-/// function, on top of the projection and never inside it, so the two sides
-/// cannot drift and [`without_defaults`] is not widened to cover a case it
-/// has no business covering.
-///
-/// # Why the generated path cannot render it
-///
-/// `UWMapLog::execute_query` (`moirai-crdt/src/map/uw_map.rs:199-210`) keeps a
-/// child only when its value differs from the default, and it must:
-/// `UWMap::Remove` is not a tombstone, it leaves the child in the map, so
-/// reading as the default is exactly how the generated path spells *removed*.
-/// `NestedListLog` sits on that map, so this is every ordered containment.
-/// An object created there and not yet written into reads as its default and
-/// is therefore indistinguishable, on the generated read-out, from one that
-/// was removed. The interpreted path mints the object and shows it.
-///
-/// # Why the exception rather than a change to the interpreted read-out
-///
-/// Cam took this decision on 2026-09-08. Filtering the interpreted read-out
-/// the way the generated one filters would make it inherit the defect rather
-/// than agree with it: an `OutFlowPort`, whose only feature is a
-/// non-containment reference and which therefore has no writable feature at
-/// all, could then never be rendered on either path. So `I-A1` reads: the two
-/// paths agree on every state reachable by a write, with one named exception,
-/// this one.
-///
-/// # It heals, and it is the only one
-///
-/// The divergence lasts exactly from an object's creation to its first write
-/// and does not compound — one character into the new object and the two
-/// paths agree again, at the same index, which
-/// [`a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path`]
-/// asserts on the *unexcluded* projections so that the finding stays visible
-/// in the suite rather than being erased by the thing that works around it.
-/// This is the ONLY exclusion of its kind, and
-/// [`the_thirty_scripts_find_exactly_one_kind_of_difference`] is the test that
-/// keeps that honest: it re-prunes both documents by this rule over all thirty
-/// scripts and asserts the residual is empty, so a second inequality of any
-/// kind would surface there as an unexplained difference rather than hide
-/// behind this one.
-pub fn except_unwritten_sequence_children(meta: &Meta, mut value: Value) -> Value {
-    for _ in 0..16 {
-        let next = without_defaults(meta, drop_empty_sequence_children(value.clone()));
-        if next == value {
-            break;
-        }
-        value = next;
-    }
-    value
-}
-
-/// One pass of the rule above: every array element carrying nothing but its
-/// class name, gone.
-pub fn drop_empty_sequence_children(value: Value) -> Value {
-    match value {
-        Value::Array(items) => Value::Array(
-            items
-                .into_iter()
-                .map(drop_empty_sequence_children)
-                .filter(|item| !only_a_class(item))
-                .collect(),
-        ),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, item)| (key, drop_empty_sequence_children(item)))
-                .collect(),
-        ),
-        other => other,
-    }
-}
-
 /// The interpreted read-out with every non-containment reference dropped and
 /// every default-valued key with it: the two edits this oracle makes to the
 /// canonical form the interpreter already produces.
@@ -1231,16 +1147,16 @@ impl Harness {
     /// Both replicas of both paths, compared. `Ok` when the four read-outs
     /// are two equal pairs.
     ///
-    /// The criterion's one named exception is taken off both sides first, by
-    /// [`except_unwritten_sequence_children`], as a step on top of the
-    /// projection. The raw projections stay reachable through [`interp_doc`]
-    /// and [`gen_doc`], which is what the divergence test asserts on.
+    /// The canonical projections themselves, with nothing taken off either
+    /// side. The criterion's one named exception used to be pruned here first,
+    /// by `except_unwritten_sequence_children`, as a step on top of the
+    /// projection; there is no exception left to prune, so the comparison is
+    /// the projections as [`Harness::interp_doc`] and [`Harness::gen_doc`]
+    /// give them.
     pub fn compare(&self) -> Result<(), String> {
         for writer in ['a', 'b'] {
-            let interp =
-                except_unwritten_sequence_children(&self.interp_meta, self.interp_doc(writer));
-            let generated =
-                except_unwritten_sequence_children(&self.gen_meta, self.gen_doc(writer));
+            let interp = self.interp_doc(writer);
+            let generated = self.gen_doc(writer);
             if interp != generated {
                 let where_ = difference(&interp, &generated, "")
                     .unwrap_or_else(|| "the documents differ but no key does".to_string());

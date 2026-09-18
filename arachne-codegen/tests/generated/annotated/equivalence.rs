@@ -1507,14 +1507,17 @@ fn an_eobject_feature_has_no_operation_on_either_path() {
     }
 }
 
-/// The exclusion, shown rather than hidden: an annotation created into
-/// `eAnnotations` and never written into is on the interpreted read-out and
-/// not on the generated one, and one character into its `source` brings the
-/// two back together at the same index.
+/// The exclusion that used to be shown here, on a third metamodel, and is
+/// gone: an annotation created into `eAnnotations` and never written into was
+/// on the interpreted read-out and not on the generated one, and one character
+/// into its `source` brought the two back together at the same index.
 ///
-/// Asserted on the *unexcluded* projections, so that the finding of code
-/// note 31 stays visible in the suite instead of being erased by the pruning
-/// that works around it.
+/// `NestedListLog` asks its ordering for its children now rather than asking
+/// `UWMapLog` for the map filtered by "differs from its default", so a created
+/// annotation is an annotation on both paths. The name is kept, and so is the
+/// second half, which is a plain regression check now: the finding of code
+/// note 31 stays visible in the suite as the thing this test records rather
+/// than being deleted with it.
 #[test]
 fn an_annotation_with_nothing_written_is_invisible_on_the_generated_path() {
     let mut harness = Harness::opened();
@@ -1545,8 +1548,9 @@ fn an_annotation_with_nothing_written_is_invisible_on_the_generated_path() {
     );
     assert_eq!(
         annotations(&generated),
-        json!([{ECLASS: ANNOTATION, "source": "x"}]),
-        "and the generated path cannot render it"
+        json!([{ECLASS: ANNOTATION, "source": "x"}, {ECLASS: ANNOTATION}]),
+        "and the generated path shows it too, where it used to render only the \
+         written one"
     );
     // One character in, and the two agree at the same index with nothing
     // excluded at all.

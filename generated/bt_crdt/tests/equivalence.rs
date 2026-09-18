@@ -78,16 +78,15 @@
 //!   paths leave present and empty) stays present on both sides and is
 //!   compared. [`an_emptied_optional_is_not_dropped`] is the test that keeps
 //!   that honest.
-//! - **An object created into an ordered containment and never written
-//!   into**, which the generated read-out cannot distinguish from a removed
-//!   one and so cannot render. This is not part of the projection: it is a
-//!   named, separate step applied on top of it, to both sides, by
-//!   [`except_unwritten_sequence_children`], whose doc comment carries the
-//!   decision Cam took on 2026-09-08 and the reason the interpreted read-out
-//!   was not changed to match instead. I-A1 now reads: the two paths agree on
-//!   every state reachable by a write, with that one named exception. It is
-//!   the only exclusion of its kind and
-//!   [`the_thirty_scripts_find_exactly_one_kind_of_difference`] is what keeps
+//! - ~~**An object created into an ordered containment and never written
+//!   into**~~, which the generated read-out could not distinguish from a
+//!   removed one and so could not render. That was I-A1's one named
+//!   exception, applied on top of the projection to both sides, and it is
+//!   **gone**: `NestedListLog` asks its ordering for its children now instead
+//!   of asking `UWMapLog` for the filtered map, so existence and value are
+//!   separate questions again and the generated path renders the object. I-A1
+//!   reads, with no exception: the two paths agree on every state reachable by
+//!   a write. [`the_thirty_scripts_find_no_difference_at_all`] is what keeps
 //!   that true.
 //! - Nothing else. In particular the other structural difference — the
 //!   generated path materialising a single-valued containment whose target
@@ -451,14 +450,17 @@ fn the_typed_encoder_walks_the_super_hops_and_the_union_variants() {
 /// is what removes it.
 ///
 /// The claim is about the projection, so the script is carried and not
-/// compared. It cannot be compared: an `OutFlowPort` has no feature but
-/// `entry`, so once the projection has taken `entry` out there is nothing
-/// left in it, and an object with nothing left in it is one the generated
-/// path cannot render at all — which is
+/// compared. It used not to be comparable at all: an `OutFlowPort` has no
+/// feature but `entry`, so once the projection has taken `entry` out there is
+/// nothing left in it, and an object with nothing left in it was one the
+/// generated path could not render — which was
 /// [`a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path`],
-/// the one inequality this oracle has found. That test owns the finding;
-/// this one owns the exclusion. The assertion at the end pins the two
-/// together rather than letting either hide the other.
+/// the one inequality this oracle ever found. That inequality is gone,
+/// `NestedListLog` reading its children by the ordering rather than by their
+/// values, so the two paths are compared here as well: an `OutFlowPort` is
+/// `{"eClass": "OutFlowPort"}` on both. That test owns the finding; this one
+/// owns the exclusion, and the assertions at the end pin the two together
+/// rather than letting either hide the other.
 #[test]
 fn the_only_exclusion_is_the_non_containment_reference() {
     let meta = Meta::new(Arc::new(
@@ -546,9 +548,16 @@ fn the_only_exclusion_is_the_non_containment_reference() {
     );
     assert_eq!(
         harness.gen_doc('a'),
-        Value::Null,
-        "and with `entry` gone an `OutFlowPort` holds nothing, which is the \
-         one thing the generated path cannot render"
+        stripped,
+        "and with `entry` gone an `OutFlowPort` holds nothing, which the \
+         generated path renders as the object it is: its existence is the \
+         ordering's and no longer a function of whether it has a value"
+    );
+    assert_eq!(
+        harness.gen_doc('a')["main"]["child"]["outflowports"][0],
+        json!({"eClass": "OutFlowPort"}),
+        "a class with no writable feature anywhere in the classifier tree is \
+         showable on the generated path, which it never was"
     );
 }
 
@@ -653,58 +662,64 @@ fn an_emptied_optional_is_not_dropped() {
     );
 }
 
-/// **The one inequality this oracle has found, and it is a real one.**
+/// **The one inequality this oracle used to find, and it is gone.**
 ///
-/// An object created into an ordered containment and not yet written into is
-/// on the interpreted read-out and is *not* on the generated one. It is not
-/// a projection artefact: the projection is applied to both sides by the same
-/// function and drops keys, never elements, and the two logs hold the same
-/// object at the same position — only the read-outs differ.
+/// An object created into an ordered containment and not yet written into was
+/// on the interpreted read-out and was *not* on the generated one. It was
+/// never a projection artefact: the projection is applied to both sides by the
+/// same function and drops keys, never elements, and the two logs held the
+/// same object at the same position — only the read-outs differed. They do not
+/// differ now, and this test asserts the agreement where it used to assert the
+/// gap. The name is kept because it is what the vault, the validation plan and
+/// the manuscript call this finding.
 ///
-/// # Where it comes from
+/// # Where it came from
 ///
-/// The generated path's ordered containment is
-/// `NestedListLog<L>` (`moirai-crdt/src/list/nested_list.rs`), an ordering
-/// half over `EventGraph<List<EventId>>` and a mapping half that is a
-/// `UWMapLog`. `UWMapLog`'s read (`moirai-crdt/src/map/uw_map.rs:199-210`)
-/// keeps a child only when its value differs from `Value::default()`, and it
-/// has to: `UWMap::Remove` is not a tombstone, it calls
-/// `redundant_by_parent` on the child and leaves it in the map, so *reading
-/// as the default is how the generated path spells removed*. A child that
-/// was created and never written into reads as the default too, and the
-/// generated path cannot tell the two apart.
+/// The generated path's ordered containment is `NestedListLog<L>`
+/// (`moirai-crdt/src/list/nested_list.rs`), an ordering half over
+/// `EventGraph<List<EventId>>` and a mapping half that is a `UWMapLog`.
+/// `UWMapLog`'s read keeps a child only when its value differs from
+/// `Value::default()`, and it has to: `UWMap::Remove` is not a tombstone, it
+/// calls `redundant_by_parent` on the child and leaves it in the map, so
+/// *reading as the default is how a map spells removed*. A child created and
+/// never written into read as the default too, and the generated path could
+/// not tell the two apart.
 ///
-/// `moirai-interp`'s `eval::read_node` (`moirai-interp/src/eval.rs:77-88`)
-/// copied `NestedListLog`'s ordering half and not `UWMapLog`'s filter: its
-/// sequence arm drops a *hole*, an id in the ordering with no child behind
-/// it, and nothing else. Its own comment shows the pattern was known for
-/// slots — "`union.rs`'s `Value` branch reads whatever is there, default or
-/// not; only its `Conflicts` branch drops the empty ones. Copied" — and the
-/// sequence arm is where it was not.
+/// # What changed, and why it is not `UWMapLog`
 ///
-/// # Which path is wrong
+/// `NestedListLog`'s read asks the **ordering** for its children now, one at a
+/// time, instead of asking `UWMapLog` for the filtered map. A list never
+/// needed the value-based reading: `NestedList::Delete` takes the position out
+/// of the ordering as well as resetting the child, and a concurrent update
+/// keeps the position alive through the eg-walker's own life dots, so the
+/// ordering already recorded removal and the map's filter was doing that work
+/// a second time — with the side effect this test was written for. Existence
+/// is the ordering; value is the child's log; they are separate questions
+/// again. `UWMapLog` is untouched, so a keyed map keeps the value-based rule
+/// it does need.
 ///
-/// For I-A1, the interpreted one: it set out to carry the generated path's
-/// merge semantics and this is one rule of them it does not carry. The fix
-/// is in `eval::read_node`'s `Shaped::Sequence` arm, which must drop a child
-/// whose read-out is what `read_absent` gives for the same rule, exactly as
-/// `UWMapLog` compares against `Value::default()`. Moirai is not this
-/// commit's to change, so the oracle reports it and `ip13` fails on it.
+/// `moirai-interp`'s `eval::read_node` always did it this way — its sequence
+/// arm drops a *hole*, an id in the ordering with no child behind it, and
+/// nothing else — so it is the generated path that moved, onto the answer the
+/// interpreted path already gave. Nothing was weakened to meet it.
 ///
-/// Semantically the generated path is the lossy one — it conflates *removed*
-/// with *empty*, and there is no read-out of a `bt_crdt` model in which an
-/// `OutFlowPort`, whose only feature is a reference, can ever be seen at all
-/// — but that is a finding about the generated path and not a licence for
-/// the interpreted one to differ from it.
+/// # What it buys, beyond this one object
 ///
-/// # It heals the moment anything is written
+/// An `OutFlowPort`, whose only feature is a non-containment reference and
+/// which therefore has no writable feature anywhere in the classifier tree,
+/// could never be rendered on the generated path at all — it was in the log,
+/// took part in convergence, was reachable by reference operations and was
+/// invisible in every document. It renders now, as `{"eClass":
+/// "OutFlowPort"}`, and
+/// [`the_only_exclusion_is_the_non_containment_reference`] is where that is
+/// asserted.
 ///
-/// The second half of this test is the important half: one character into
-/// the new object's `key` and the two paths agree again, with the object at
-/// the same index. So the divergence is confined to the window between an
-/// object's creation and its first write, and it does not compound: the
-/// positions the script addresses are the log's, and both logs hold every
-/// element.
+/// # It used to heal, and now there is nothing to heal
+///
+/// The second half of this test still writes one character into the new
+/// object and still checks that the two paths agree with the object at the
+/// same index. It was the important half while the divergence lasted from an
+/// object's creation to its first write; it is a plain regression check now.
 #[test]
 fn a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path() {
     let meta = Meta::new(Arc::new(
@@ -753,12 +768,11 @@ fn a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path() {
         "the interpreted path holds the object it was told to make"
     );
     assert_eq!(
-        generated,
-        Value::Null,
-        "the generated path holds it too and cannot render it, so the whole \
-         model projects as still-unwritten"
+        generated, interpreted,
+        "the generated path holds it too and renders it now: the ordering says \
+         the element is there and the map is no longer asked whether its value \
+         is worth showing"
     );
-    assert_ne!(interpreted, generated, "and that is an inequality, not a nicety");
 
     // One character, and they agree again.
     harness
@@ -779,26 +793,33 @@ fn a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path() {
     );
 }
 
-/// And it is the *only* one. Thirty scripts, every read-out after every
-/// operation, and every difference between the two paths is the empty
-/// sequence child of
+/// And now there is none at all. Thirty scripts, every read-out after every
+/// operation and after every delivery, both replicas of both paths, and the
+/// two paths agree everywhere.
+///
+/// This test was `the_thirty_scripts_find_exactly_one_kind_of_difference`, and
+/// it is where the manuscript's **one named exception** was kept honest. It
+/// re-pruned both canonical documents by `except_unwritten_sequence_children`
+/// — which dropped a sequence element carrying nothing but its class and
+/// re-ran [`without_defaults`] to a fixed point, since dropping the element
+/// could empty the array that held it and so empty the object that held
+/// *that* — and asserted that the residual was empty, so that the whole of
+/// I-A1 rested on one rule in one function and nothing else could hide behind
+/// it.
+///
+/// The exception is gone, so the pruning is gone with it and what is asserted
+/// is the stronger thing: not that every difference is explained by the
+/// exception, but that there is no difference to explain. `differing` is
+/// counted and asserted to be zero, so a re-appearance shows up as a count and
+/// not as a silence.
+///
+/// What closed it was `NestedListLog` asking its ordering for its children
+/// instead of asking `UWMapLog` for the filtered map; see
 /// [`a_sequence_child_with_nothing_written_is_invisible_on_the_generated_path`]
-/// or something that collapses upward from it.
-///
-/// The check is mechanical rather than by eye: both canonical documents are
-/// re-pruned by [`except_unwritten_sequence_children`], the criterion's one
-/// named exception, which drops a sequence element that carries nothing but
-/// its class and re-runs [`without_defaults`] to a fixed point, since dropping
-/// the element can empty the array that held it and so empty the object that
-/// held *that*. What is left over after that is a difference the exception
-/// does not explain, and there must be none.
-///
-/// This test is what keeps the exception honest: it says the whole of I-A1
-/// rests on one rule in one function, and that nothing else is hiding behind
-/// it. A second inequality of any kind surfaces here as an unexplained
-/// difference instead of being absorbed.
+/// for the whole of it. Neither side was weakened to meet the other: the
+/// generated path moved onto the answer the interpreted path already gave.
 #[test]
-fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
+fn the_thirty_scripts_find_no_difference_at_all() {
     let meta = Meta::new(Arc::new(
         from_descriptor(&bt_descriptor()).expect("the descriptor parses"),
     ));
@@ -833,15 +854,11 @@ fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
                     continue;
                 }
                 *differing += 1;
-                let left = except_unwritten_sequence_children(&harness.interp_meta, interpreted);
-                let right = except_unwritten_sequence_children(&harness.gen_meta, generated);
-                if left != right {
-                    unexplained.push(format!(
-                        "{} seed {seed} {at} replica {writer}: {}",
-                        script.label,
-                        difference(&left, &right, "").unwrap_or_default()
-                    ));
-                }
+                unexplained.push(format!(
+                    "{} seed {seed} {at} replica {writer}: {}",
+                    script.label,
+                    difference(&interpreted, &generated, "").unwrap_or_default()
+                ));
             }
         };
         for (index, step) in script.steps.iter().enumerate() {
@@ -868,16 +885,16 @@ fn the_thirty_scripts_find_exactly_one_kind_of_difference() {
     );
     assert!(
         unexplained.is_empty(),
-        "{} of {comparisons} comparisons differ for a reason the empty sequence \
-         child does not explain, which would be a second inequality:\n\n{}",
+        "{} of {comparisons} comparisons differ, and the two paths are supposed \
+         to agree everywhere now:\n\n{}",
         unexplained.len(),
         unexplained.join("\n")
     );
+    assert_eq!(differing, 0, "counted separately from the report above");
     println!(
         "30 scripts, {edits} edits ({sequential} over the ten sequential, \
          {concurrent} over the twenty concurrent), {comparisons} comparisons, \
-         {differing} of them differing, and every one of those is the empty \
-         sequence child"
+         {differing} of them differing"
     );
 }
 
@@ -974,8 +991,8 @@ fn a_generated_log_with_a_non_empty_ordered_containment_cannot_be_serialized() {
 // with eight concrete subtypes (`BehaviorTree.child`) and the ordered
 // containment onto that union (`ControlNode.children`). The cells run on
 // `support`'s encoders and on exactly the comparison `Harness::compare` makes,
-// the canonical projection with I-A1's one named exception taken off both
-// sides by `except_unwritten_sequence_children`, and nothing else.
+// the canonical projection and nothing else. They used to take I-A1's one
+// named exception off both sides first; there is no exception to take off.
 //
 // The interpreted arm here is `moirai_interp::testing::Harness` rooted at
 // `Root` rather than a `ModelLog`: with no `Install` in front of it, the
@@ -1215,14 +1232,10 @@ fn conflict_matrix_over_bt_ecore() {
         other => panic!("an edit encodes as an instance operation, not {other:?}"),
     };
     let gen_encode = |edit: &Edit, _: &Value| typed_op(&meta, edit);
-    let interp_read = |replica: &MatrixInterp| {
-        except_unwritten_sequence_children(&meta, canon(&meta, replica.query(&Read::<Value>::new())))
-    };
+    let interp_read =
+        |replica: &MatrixInterp| canon(&meta, replica.query(&Read::<Value>::new()));
     let gen_read = |replica: &MatrixGen| {
-        except_unwritten_sequence_children(
-            &meta,
-            project(&meta, &replica.query(&Read::<bt_crdt::package::BehaviortreeValue>::new())),
-        )
+        project(&meta, &replica.query(&Read::<bt_crdt::package::BehaviortreeValue>::new()))
     };
     let interp = Arm {
         name: "interpreted",

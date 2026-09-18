@@ -1012,7 +1012,7 @@ fn propose(seen: &Value, rng: &mut Rng, writer: char, guard: bool) -> Edit {
             // reading its own type's default is replaced by one that cannot.
             // That is the one construction `ip29` found the two paths
             // disagreeing on, and it is pinned by
-            // `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+            // `ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths`
             // rather than hidden here: this guard is what lets the other
             // eighteen features be measured over thirty scripts instead of
             // every script stopping at the first flag turned off.
@@ -1500,52 +1500,60 @@ fn run_thirty(guard: bool, label: &str) {
 /// from the *generator*: a write to an element of an ordered attribute that
 /// leaves that element reading its own type's default. That construction is
 /// the divergence `ip29` found, and it is asserted in full by
-/// `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+/// `ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths`
 /// below. Every other construction of the metamodel is proposed freely.
 #[test]
 fn ip29_thirty_scripts_over_kitchen_sink_ecore_agree_everywhere() {
     run_thirty(true, "ip29");
 }
 
-/// The same thirty scripts with nothing held back. **Red**, and ignored for
-/// that reason rather than deleted or narrowed: it is the record of the
-/// divergence, and it goes green the day
-/// `NestedListLog::execute_query` stops filtering its children through
-/// `UWMapLog`'s "differs from its default" rule. Run it with
-/// `cargo test --test equivalence -- --ignored --nocapture`.
+/// The same thirty scripts with nothing held back, and **green**.
+///
+/// It was red and ignored rather than deleted or narrowed, as the record of
+/// the divergence, and it said it would go green the day
+/// `NestedListLog::execute_query` stopped filtering its children through
+/// `UWMapLog`'s "differs from its default" rule. That is the day: the read
+/// asks the ordering for its children now, so an element that reads as its own
+/// type's default is still an element. It is a gate.
+///
+/// The guarded run above is kept beside it rather than folded into it, so the
+/// thirty scripts and their counts stay comparable with every run recorded
+/// before this one.
 #[test]
-#[ignore = "records the NestedListLog default-element divergence; see ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out"]
 fn ip29_thirty_unguarded_scripts_over_kitchen_sink_ecore() {
     run_thirty(false, "ip29 unguarded");
 }
 
-/// The divergence, pinned.
+/// The divergence that was pinned here, and is fixed.
 ///
-/// `simpleList` is `NestedListLog<VecLog<EWFlag>>` on the generated path and
-/// `Shaped::Sequence(LeafSite::Scalar(Flag))` on the interpreted one. One
-/// element is inserted and disabled, which leaves it reading `false`, the
-/// default of `EWFlag`. Both intakes accept the operation and both orderings
-/// hold one element. The read-outs do not agree: the interpreted path renders
-/// `[false]` and the generated path renders `[]`.
+/// This test was
+/// `ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths`
+/// and it asserted the gap: `simpleList` is `NestedListLog<VecLog<EWFlag>>` on
+/// the generated path and `Shaped::Sequence(LeafSite::Scalar(Flag))` on the
+/// interpreted one, one element is inserted and disabled, which leaves it
+/// reading `false`, the default of `EWFlag`, both intakes accept the operation
+/// and both orderings hold one element — and the read-outs did not agree, the
+/// interpreted path rendering `[false]` and the generated path `[]`.
 ///
-/// **Which path is right.** The interpreted one.
-/// `NestedListLog::execute_query` (`nested_list.rs:239-268`) walks its
-/// `positions` and looks each id up in `self.children.execute_query(..)`,
-/// and `children` is a `UWMapLog`, whose read renders a child only when its
-/// value differs from that child's default (`uw_map.rs:199-210`). That rule
-/// is right for a keyed map, where reading as the default *is* how a removal
-/// is spelled, and wrong for an ordered list, where the ordering says whether
-/// an element is there and `NestedList::Delete` is what takes it out. The
-/// generated log is inconsistent with itself about it:
-/// `NestedListLog::is_enabled` (`nested_list.rs:214-231`) bounds-checks
-/// against `positions.len()`, which counts the hidden element, so a writer
-/// who reads `[]` and inserts at position 0 lands *before* an element it
-/// cannot see.
+/// **Which path was right.** The interpreted one, and the generated one moved
+/// onto it. `NestedListLog::execute_query` walked its `positions` and looked
+/// each id up in the map's own `Read`, and `children` is a `UWMapLog`, whose
+/// read renders a child only when its value differs from that child's default.
+/// That rule is right for a keyed map, where reading as the default *is* how a
+/// removal is spelled, and wrong for an ordered list, where the ordering says
+/// whether an element is there and `NestedList::Delete` is what takes it out.
+/// The read asks the map for one child at a time now and never for the
+/// filtered map, so the ordering decides existence and the child's log decides
+/// value.
 ///
-/// Not fixed here, and deliberately: a fix to `moirai-crdt` and its own
-/// oracle in one pass is how a wrong fix gets green.
+/// The second half of this test was the sharpest evidence that the generated
+/// log was inconsistent with *itself*: `NestedListLog::is_enabled`
+/// bounds-checks against `positions.len()`, which counted the hidden element,
+/// so a writer who read `[]` and inserted at position 1 was accepted and
+/// landed after an element it could not see. Both halves now read the same on
+/// both paths, and that is what they assert.
 #[test]
-fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out() {
+fn ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths() {
     let mut harness = Harness::new();
     harness.apply(&open()).unwrap_or_else(|r| panic!("{r}"));
     harness.deliver().unwrap_or_else(|r| panic!("{r}"));
@@ -1567,8 +1575,12 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     let interp = harness.interp_doc('a');
     let generated = harness.gen_doc('a');
     assert_eq!(interp["simpleList"], json!([false]), "the interpreted path");
-    assert_eq!(generated["simpleList"], Value::Null, "the generated path");
-    assert_ne!(interp, generated, "this is the divergence, not agreement");
+    assert_eq!(
+        generated["simpleList"],
+        json!([false]),
+        "and the generated path, which used to render `[]` here"
+    );
+    assert_eq!(interp, generated, "this is agreement, not a divergence");
     assert_eq!(interp, harness.interp_doc('b'), "each path is self-consistent");
     assert_eq!(generated, harness.gen_doc('b'));
 
@@ -1580,8 +1592,8 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     // the one `NestedListLog` over attribute values the corpus has left and it
     // is what the rest of this pin is written on.
     //
-    // And the generated log counts what it does not show: an insert at
-    // position 1 is enabled, though the read-out offers only position 0.
+    // And the generated log no longer counts what it does not show: an insert
+    // at position 1 is enabled and the read-out offers position 1 too.
     let second = Edit {
         writer: 'a',
         feature: Some("simpleList"),
@@ -1592,16 +1604,18 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     };
     assert!(
         harness.carry(&second).expect("both intakes agree on it"),
-        "the generated ordering holds the element its read-out hides"
+        "the generated ordering holds the element its read-out now shows"
     );
     harness.cross();
     assert_eq!(harness.interp_doc('a')["simpleList"], json!([false, true]));
-    assert_eq!(harness.gen_doc('a')["simpleList"], json!([true]));
+    assert_eq!(harness.gen_doc('a')["simpleList"], json!([false, true]));
 
-    // And it does not heal irreversibly, which is the half `I-A1`'s
-    // exception does not cover: the element at position 1 is visible on both
-    // paths above, and disabling it takes it back out of the generated
-    // read-out while the interpreted one keeps it.
+    // And it stays: this was the half `I-A1`'s exception did not cover. The
+    // element at position 1 is visible on both paths above, and disabling it
+    // used to take it back out of the generated read-out while the interpreted
+    // one kept it — a divergence a write could re-open after it had healed.
+    // Existence is the ordering now, so writing an element back to its own
+    // default leaves it where it is on both paths.
     let hide = Edit {
         writer: 'b',
         feature: Some("simpleList"),
@@ -1615,8 +1629,8 @@ fn ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_o
     assert_eq!(harness.interp_doc('a')["simpleList"], json!([false, false]));
     assert_eq!(
         harness.gen_doc('a')["simpleList"],
-        Value::Null,
-        "a visible element written back to its default goes away again"
+        json!([false, false]),
+        "a visible element written back to its default stays where it is"
     );
 }
 
@@ -1663,7 +1677,7 @@ fn ip29_the_oracle_notices_when_the_two_encoders_disagree() {
 //
 // The sequence cells keep every element away from its own default at every
 // point of every schedule, because an element at its default is the named
-// divergence `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+// divergence `ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths`
 // pins, and this file's projection carries no exception for it: seeding the
 // elements at 1 and 2 and only ever incrementing them is what keeps each cell
 // about the ordering and not about that divergence.
@@ -1843,7 +1857,7 @@ fn kitchen_cells() -> Vec<Cell<Edit>> {
     // the checked-in corpus has left. What that costs is stated rather than
     // hidden: its elements are `EWFlag`s and every one of them has to stay
     // enabled — a flag at `false` is the element the generated read-out drops,
-    // which `ip29_a_sequence_element_at_its_own_default_is_dropped_by_the_generated_read_out`
+    // which `ip29_a_sequence_element_at_its_own_default_is_rendered_by_both_paths`
     // pins — so the cells below tell one ordering from another by the *length*
     // of the list and by which positions survive, and not by the values at
     // them, which a counter element could carry and a flag cannot.
