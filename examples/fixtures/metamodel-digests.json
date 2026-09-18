@@ -5,7 +5,7 @@
   },
   "uml.metamodel.json": {
     "nsURI": "http:///SimpleUML.ecore",
-    "digest": "fe72e2f61c75fddee74e6f07f1160a364130b2b08501b53d2b416be906b352f3"
+    "digest": "12d1a371fd995bce2c44e696e3714d59dae58fe04ff6450382a1e02b0a8a27dd"
   },
   "json.metamodel.json": {
     "nsURI": "http://www.example.org/json",

@@ -7,7 +7,7 @@
 //! a Rust width, `annotation.rs`'s `datatype_override` lets a
 //! `urn:arachne:semantics` `datatype` replace that family from a closed set of
 //! spellings, and `feature/attribute.rs` combines the result with the triple
-//! `(bound_kind, unique.unwrap_or(false), ordered.unwrap_or(true))` to pick the
+//! `(bound_kind, unique.unwrap_or(true), ordered.unwrap_or(true))` to pick the
 //! wrapper — `feature/containment.rs` doing the same for a containment over
 //! its target's family log. The outcome is a Rust type, which is exactly the
 //! form a running node cannot read.
@@ -40,9 +40,11 @@
 //! - [`FacetSource::EcoreDefault`] — the file is silent and Ecore's own
 //!   default supplies the value Arachne then uses.
 //! - [`FacetSource::HouseDefault`] — the file is silent, or Ecore has nothing
-//!   to say, and Arachne's own rule supplies the value. `unique.unwrap_or(false)`
-//!   is the sharp case: EMF's default is `true`, so a silent `unique` on a
-//!   multi-valued attribute is a house rule and never an Ecore default.
+//!   to say, and Arachne's own rule supplies the value. Every leaf but
+//!   `EString`'s is the sharp case: Ecore names the type and Arachne picks the
+//!   CRDT family, a counter's resettability or a register's tie-break on top of
+//!   it. A silent `unique` used to be the sharpest case of all and is not one
+//!   any more: Ecore defaults it to `true` and the rule reads it as `true`.
 //! - [`FacetSource::Annotation`] — a `urn:arachne:semantics` `datatype`
 //!   annotation chose it.
 //! - [`FacetSource::NotApplicable`] — the facet carries no information for
@@ -385,7 +387,7 @@ fn key_kind(key_feature: &Structural, ctx: &Ctx) -> Option<KeyKind> {
         return Some(KeyKind::Enum { class: slot(typ) });
     }
     Some(match declared.name().parse::<BuiltinTyp>() {
-        Ok(BuiltinTyp::EByte) => KeyKind::Num { num: NumKind::U8 },
+        Ok(BuiltinTyp::EByte) => KeyKind::Num { num: NumKind::I8 },
         Ok(BuiltinTyp::EShort) => KeyKind::Num { num: NumKind::I16 },
         Ok(BuiltinTyp::EInt) => KeyKind::Num { num: NumKind::I32 },
         Ok(BuiltinTyp::ELong) => KeyKind::Num { num: NumKind::I64 },
@@ -496,7 +498,7 @@ fn leaf_rule(feature: &Structural, ctx: &Ctx) -> (LeafRule, FacetSource) {
         )
     } else {
         match declared.name().parse::<BuiltinTyp>() {
-            Ok(BuiltinTyp::EByte) => (counter(NumKind::U8), FacetSource::HouseDefault),
+            Ok(BuiltinTyp::EByte) => (counter(NumKind::I8), FacetSource::HouseDefault),
             Ok(BuiltinTyp::EShort) => (counter(NumKind::I16), FacetSource::HouseDefault),
             Ok(BuiltinTyp::EInt) => (counter(NumKind::I32), FacetSource::HouseDefault),
             Ok(BuiltinTyp::ELong) => (counter(NumKind::I64), FacetSource::HouseDefault),
@@ -602,11 +604,12 @@ fn attribute_shape(feature: &Structural, presence: Presence) -> (Shape, FacetSou
         );
     };
 
-    let unique = feature.unique.unwrap_or(false);
+    let unique = feature.unique.unwrap_or(true);
     let ordered = feature.ordered.unwrap_or(true);
     let shape = match (unique, ordered) {
         (false, true) => Shape::Sequence,
-        // No construction exists; the generator warns and compiles a list.
+        // `GraphLog<List<T>>`, a construction of its own and not a sequence:
+        // `attribute.rs:152-162`.
         (true, true) => Shape::OrderedSet,
         (false, false) => Shape::Bag,
         (true, false) => Shape::Set {
@@ -622,9 +625,11 @@ fn attribute_shape(feature: &Structural, presence: Presence) -> (Shape, FacetSou
     let unique_source = if feature.unique.is_some() {
         FacetSource::Declared
     } else {
-        // EMF's default is `true`; `unique.unwrap_or(false)` is Arachne's own
-        // rule and the one divergence this whole facet exists to make visible.
-        FacetSource::HouseDefault
+        // Ecore's own default is `true` — `ecore.ecore` gives
+        // `ETypedElement.unique` the `defaultValueLiteral` `true` — and
+        // Arachne takes it unchanged, which is what makes this an Ecore
+        // default and no longer the house rule it was.
+        FacetSource::EcoreDefault
     };
     (shape, ordered_source, unique_source)
 }
@@ -706,7 +711,7 @@ mod tests {
             return class.name().to_upper_camel_case();
         }
         match class.name().parse::<BuiltinTyp>() {
-            Ok(BuiltinTyp::EByte) => "u8",
+            Ok(BuiltinTyp::EByte) => "i8",
             Ok(BuiltinTyp::EShort) => "i16",
             Ok(BuiltinTyp::EInt) => "i32",
             Ok(BuiltinTyp::ELong) => "i64",
@@ -759,7 +764,10 @@ mod tests {
             Shape::Single => leaf_log(leaf, rust),
             Shape::Optional => format!("OptionLog<{}>", leaf_log(leaf, rust)),
             Shape::Sequence => format!("NestedListLog<{}>", leaf_log(leaf, rust)),
-            Shape::OrderedSet => format!("ListLog<{}>", leaf_log(leaf, rust)),
+            // An ordered set holds the bare Rust value under one graph log,
+            // the way a set and a bag hold it, and not one log per element:
+            // `attribute.rs:152-162`.
+            Shape::OrderedSet => format!("GraphLog<List<{rust}>>"),
             Shape::Set {
                 tie: SetTie::AddWins,
             } => format!("VecLog<AWSet<{rust}>>"),
@@ -867,6 +875,183 @@ mod tests {
         out
     }
 
+    /// How an expected construction and an emitted one compare.
+    ///
+    /// The rule names a *construction*, and a construction is a tree of log
+    /// and value types; what a classifier inside it is spelled is `ident.rs`'s
+    /// business and not the rule's. Two of `ident.rs`'s spellings are pure
+    /// renamings that carry no meaning:
+    ///
+    /// - the reserved `Ecore` prefix, which exists so a metamodel class called
+    ///   `EObject` keeps its own name and Ecore's becomes `EcoreEObject`;
+    /// - the `Model` clash suffix, which `classifier_type_name` appends when a
+    ///   class's name would collide with a macro-generated one, so a class
+    ///   called `ArcKind` beside a class called `Arc` becomes `ArcKindModel`.
+    ///
+    /// Neither changes one log, one merge or one read-out. [`Agreement::Nominal`]
+    /// is the bucket for a pair the two sides build identically and spell
+    /// apart, and it is its own answer and never folded into
+    /// [`Agreement::Exact`]: the census writes it into the `agree` column, so
+    /// every such pair is listed with both spellings beside it and a reader
+    /// can check for himself that nothing but a name moved.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Agreement {
+        /// The same string.
+        Exact,
+        /// The same construction, one classifier spelled two ways.
+        Nominal,
+        /// A real disagreement.
+        Differ,
+    }
+
+    impl Agreement {
+        /// The word the `agree` column carries.
+        const fn as_str(self) -> &'static str {
+            match self {
+                Agreement::Exact => "yes",
+                Agreement::Nominal => "nominal",
+                Agreement::Differ => "NO",
+            }
+        }
+    }
+
+    /// The suffixes `ident.rs` reserves for macro-generated type names, which
+    /// is what a clash is a clash with.
+    const MACRO_SUFFIXES: [&str; 17] = [
+        "KindChildValueRank",
+        "ChildValueRank",
+        "KindChildValue",
+        "KindRejection",
+        "KindContainer",
+        "KindVariant",
+        "ChildValue",
+        "Rejection",
+        "Container",
+        "KindChild",
+        "KindValue",
+        "Variant",
+        "KindLog",
+        "Child",
+        "Value",
+        "Kind",
+        "Log",
+    ];
+
+    /// One emitted or expected type with the two nominal renamings undone.
+    ///
+    /// Written over the string rather than looked up in the [`Ctx`] on
+    /// purpose: asking `classifier_type_name` what it spelled a class would be
+    /// the comparison quoting one of its two sides.
+    fn nominal(typ: &str) -> String {
+        let mut out = String::with_capacity(typ.len());
+        let mut ident = String::new();
+        for ch in typ.chars() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ident.push(ch);
+            } else {
+                out.push_str(&strip_renamings(&ident));
+                ident.clear();
+                out.push(ch);
+            }
+        }
+        out.push_str(&strip_renamings(&ident));
+        out
+    }
+
+    /// The two renamings, undone on one identifier.
+    fn strip_renamings(ident: &str) -> String {
+        // The reserved prefix, and only in front of a name that still looks
+        // like one of Ecore's own: every class the branch builds in is
+        // `E` + an upper-camel word.
+        let ident = match ident.strip_prefix(super::super::ident::ECORE_CLASS_PREFIX) {
+            Some(rest)
+                if rest.starts_with('E')
+                    && rest.chars().nth(1).is_some_and(|ch| ch.is_ascii_uppercase()) =>
+            {
+                rest
+            }
+            _ => ident,
+        };
+        // The clash suffix, before the macro suffix it was inserted in front
+        // of, or at the very end. `attempt` past the first appends a digit.
+        for suffix in std::iter::once("").chain(MACRO_SUFFIXES) {
+            let Some(head) = ident.strip_suffix(suffix) else {
+                continue;
+            };
+            let head = head.trim_end_matches(|ch: char| ch.is_ascii_digit());
+            if let Some(base) = head.strip_suffix("Model")
+                && !base.is_empty()
+            {
+                return format!("{base}{suffix}");
+            }
+        }
+        ident.to_string()
+    }
+
+    /// Whether the rule's construction and the generator's are the same one,
+    /// and if so whether they are spelled the same way.
+    fn agreement(expected: &str, emitted: &str) -> Agreement {
+        if expected == emitted {
+            Agreement::Exact
+        } else if nominal(expected) == nominal(emitted) {
+            Agreement::Nominal
+        } else {
+            Agreement::Differ
+        }
+    }
+
+    /// The nominal normalisation does exactly two things and stops.
+    ///
+    /// The pairs below are the two families the ModelSet run of 2026-09-18
+    /// reported as 295 disagreements over 152 files: 187 of the reserved
+    /// `Ecore` prefix and 108 of the `Model` clash suffix. They are the same
+    /// construction on both sides and the last two rows are the control — a
+    /// real difference in the construction is still a difference, and a class
+    /// the metamodel itself calls `EcoreThing` is not Ecore's.
+    #[test]
+    fn the_two_renamings_are_nominal_and_nothing_else_is() {
+        for (expected, emitted) in [
+            ("OptionLog<EObjectLog>", "OptionLog<EcoreEObjectLog>"),
+            ("NestedListLog<EObjectLog>", "NestedListLog<EcoreEObjectLog>"),
+            ("EAnnotationLog", "EcoreEAnnotationLog"),
+            ("VecLog<MVRegister<ArcKind>>", "VecLog<MVRegister<ArcKindModel>>"),
+            ("NestedListLog<ArcKindLog>", "NestedListLog<ArcKindModelLog>"),
+            ("UWMapLog<std::string::String,NodeKindLog>", "UWMapLog<std::string::String,NodeKindModelLog>"),
+        ] {
+            assert_eq!(
+                agreement(expected, emitted),
+                Agreement::Nominal,
+                "`{expected}` against `{emitted}`"
+            );
+        }
+
+        for (expected, emitted) in [
+            // The 259: two constructions, not two spellings.
+            (
+                "NestedListLog<GraphLog<List<char>>>",
+                "GraphLog<List<std::string::String>>",
+            ),
+            // The 6: a bag against a set.
+            (
+                "AWBagLog<std::string::String>",
+                "VecLog<AWSet<std::string::String>>",
+            ),
+            // The 5: one width against another.
+            ("OptionLog<VecLog<Counter<u8>>>", "OptionLog<VecLog<Counter<i8>>>"),
+            // A metamodel's own class whose name happens to start with the
+            // prefix is not Ecore's, and is not normalised away.
+            ("EcoreThingLog", "ThingLog"),
+        ] {
+            assert_eq!(
+                agreement(expected, emitted),
+                Agreement::Differ,
+                "`{expected}` against `{emitted}`"
+            );
+        }
+
+        assert_eq!(agreement("VecLog<EWFlag>", "VecLog<EWFlag>"), Agreement::Exact);
+    }
+
     /// **ip2** — for every structural feature of every class of the checked-in
     /// metamodels, the rule `merge_rule` derives names the construction
     /// `AttributeGenerator` or `ContainmentGenerator` emits for that feature.
@@ -942,10 +1127,12 @@ mod tests {
                             let emitted = AttributeGenerator::new(feature, ctx)
                                 .generate()
                                 .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
+                            let emitted = normalize(emitted.tokens());
                             assert_eq!(
-                                normalize(emitted.tokens()),
-                                expected,
-                                "{at}: {rule:?} does not name what the generator emits"
+                                agreement(&expected, &emitted),
+                                Agreement::Exact,
+                                "{at}: {rule:?} names `{expected}` and the generator emits \
+                                 `{emitted}`"
                             );
                             compared += 1;
                         }
@@ -956,10 +1143,12 @@ mod tests {
                                 ContainmentGenerator::new(feature, class.idx, ctx, &cycles)
                                     .generate()
                                     .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
+                            let emitted = normalize(emitted.tokens());
                             assert_eq!(
-                                normalize(emitted.tokens()),
-                                expected,
-                                "{at}: {rule:?} does not name what the generator emits"
+                                agreement(&expected, &emitted),
+                                Agreement::Exact,
+                                "{at}: {rule:?} names `{expected}` and the generator emits \
+                                 `{emitted}`"
                             );
                             compared += 1;
                         }
@@ -993,7 +1182,7 @@ mod tests {
 
     fn num_rust(num: NumKind) -> &'static str {
         match num {
-            NumKind::U8 => "u8",
+            NumKind::I8 => "i8",
             NumKind::I16 => "i16",
             NumKind::I32 => "i32",
             NumKind::I64 => "i64",
@@ -1542,12 +1731,13 @@ mod tests {
         );
     }
 
-    /// The house default that costs, spelled out: a multi-valued attribute
-    /// with no `unique` is a bag or a list because Arachne says so, and EMF
-    /// says the opposite. `kitchen_sink.ecore`'s `set` is the sharp case — the
-    /// name says set, the silent facet makes it a bag.
+    /// The house default that used to cost, and what it costs now that it is
+    /// gone: a multi-valued attribute with no `unique` is unique, because
+    /// Ecore says so. `kitchen_sink.ecore`'s `set` is the sharp case — the
+    /// name says set, the silent facet used to make it a bag, and now it is
+    /// the set it is called.
     #[test]
-    fn a_silent_unique_on_a_multi_valued_attribute_is_a_house_default() {
+    fn a_silent_unique_on_a_multi_valued_attribute_is_an_ecore_default() {
         let parser = EcoreParser::from_file(example("pet_metamodels/kitchen_sink.ecore"))
             .expect("kitchen_sink.ecore should parse");
         let ctx = &parser.ctx;
@@ -1570,16 +1760,55 @@ mod tests {
             (rule, provenance.unique, provenance.ordered),
             (
                 MergeRule::Attribute {
-                    shape: Shape::Bag,
+                    shape: Shape::Set {
+                        tie: SetTie::AddWins,
+                    },
                     leaf: LeafRule::Counter {
                         num: NumKind::I16,
                         resettable: true,
                     },
                 },
-                FacetSource::HouseDefault,
+                FacetSource::EcoreDefault,
                 FacetSource::Declared,
             ),
-            "`Foo.set` is a bag, because `unique` is silent and Arachne reads that as false"
+            "`Foo.set` is a set, because `unique` is silent and Ecore reads that as true"
+        );
+
+        // Both facets silent on a multi-valued attribute is an ordered set,
+        // which is the case the corpus meets 259 times and the one that used
+        // to be read as a sequence.
+        let (rule, provenance) = merge_rule(feature("bounds0inf"), foo, ctx);
+        assert_eq!(
+            (rule, provenance.unique, provenance.ordered),
+            (
+                MergeRule::Attribute {
+                    shape: Shape::OrderedSet,
+                    leaf: LeafRule::Counter {
+                        num: NumKind::I16,
+                        resettable: true,
+                    },
+                },
+                FacetSource::EcoreDefault,
+                FacetSource::EcoreDefault,
+            ),
+            "`Foo.bounds0inf` is an ordered set, because both facets default to true"
+        );
+
+        // `unique="false"` written down is the one way left to a sequence.
+        let (rule, provenance) = merge_rule(feature("simpleList"), foo, ctx);
+        assert_eq!(
+            (rule, provenance.unique, provenance.ordered),
+            (
+                MergeRule::Attribute {
+                    shape: Shape::Sequence,
+                    leaf: LeafRule::Flag {
+                        wins: FlagWins::Enable,
+                    },
+                },
+                FacetSource::Declared,
+                FacetSource::EcoreDefault,
+            ),
+            "`Foo.simpleList` is a sequence, because the file writes `unique=\"false\"`"
         );
 
         // `myChar` writes no `lowerBound`, and since upstream's parser fixes that is Ecore's
@@ -1775,6 +2004,7 @@ mod tests {
                 tie: SetTie::RemoveWins,
             } => "SetRw".to_string(),
             Shape::Bag => "Bag".to_string(),
+            Shape::OrderedSet => "OrderedSet".to_string(),
             _ => match leaf {
                 LeafRule::Text => "Text".to_string(),
                 LeafRule::Counter { num, resettable } => format!(
@@ -1801,7 +2031,7 @@ mod tests {
 
     fn num_arm(num: NumKind) -> &'static str {
         match num {
-            NumKind::U8 => "U8",
+            NumKind::I8 => "I8",
             NumKind::I16 => "I16",
             NumKind::I32 => "I32",
             NumKind::I64 => "I64",
@@ -1851,22 +2081,19 @@ mod tests {
     /// Whether this feature sits inside the constructions the oracles have
     /// proven two-path equal, and when it does not, which way it falls out.
     ///
-    /// `ordered-set` is the cell with no construction: the generator warns and
-    /// compiles a list, and `Shape::effective` degrades it the same way, so the
-    /// two paths agree by both dropping the declaration rather than by
-    /// honouring it. `reference` is the capability the interpreted path does
-    /// not implement at all. `unsupported` is a behavioural flag, which carries
-    /// no construction on either path.
+    /// `reference` is the capability the interpreted path does not implement
+    /// at all. `unsupported` is a behavioural flag, which carries no
+    /// construction on either path. The ordered set used to be a third cell
+    /// with no construction of its own; it is `GraphLog<List<T>>` on the
+    /// generated path and `LeafLog::OrderedSet` on the interpreted one now,
+    /// driven by the matrix through `Foo.uniqueList`, so it is proven like the
+    /// rest.
     fn proof_standing(rule: &MergeRule) -> &'static str {
         match rule {
-            MergeRule::Attribute { shape, leaf } => match (shape, leaf) {
-                (Shape::OrderedSet, _) => "ordered-set",
-                (
-                    _,
-                    LeafRule::Counter {
-                        resettable: false, ..
-                    },
-                ) => "unreachable-arm",
+            MergeRule::Attribute { leaf, .. } => match leaf {
+                LeafRule::Counter {
+                    resettable: false, ..
+                } => "unreachable-arm",
                 _ => "proven",
             },
             MergeRule::Containment { shape, .. } => match shape {
@@ -1963,14 +2190,14 @@ mod tests {
                         .expect("a generated attribute has a resolved type");
                     let rust = rust_type(declared);
                     let expected = attribute_type(shape, leaf, &rust);
-                    let agree = if expected == emitted { "yes" } else { "NO" };
+                    let agree = agreement(&expected, &emitted);
                     (
                         shape_name(shape),
                         format!("{leaf:?}"),
                         leaf_arm(shape, leaf),
                         expected,
                         emitted,
-                        agree.to_string(),
+                        agree.as_str().to_string(),
                     )
                 }
                 (MergeRule::Containment { shape, target }, Some(Ok(emitted))) => {
@@ -1979,14 +2206,14 @@ mod tests {
                         .get(target.index())
                         .expect("a containment target is a classifier");
                     let expected = containment_type(shape, target);
-                    let agree = if expected == emitted { "yes" } else { "NO" };
+                    let agree = agreement(&expected, &emitted);
                     (
                         shape_name(shape),
                         String::new(),
                         String::new(),
                         expected,
                         emitted,
-                        agree.to_string(),
+                        agree.as_str().to_string(),
                     )
                 }
                 (_, None) => {
