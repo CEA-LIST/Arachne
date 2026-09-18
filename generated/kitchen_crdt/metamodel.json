@@ -342,7 +342,7 @@
             "kind": "attribute",
             "leaf": {
               "kind": "counter",
-              "num": "u8",
+              "num": "i8",
               "resettable": true
             },
             "shape": {
@@ -404,7 +404,7 @@
               "resettable": true
             },
             "shape": {
-              "kind": "sequence"
+              "kind": "orderedSet"
             }
           },
           "name": "bounds0inf",
@@ -412,7 +412,7 @@
             "leaf": "houseDefault",
             "ordered": "ecoreDefault",
             "presence": "declared",
-            "unique": "houseDefault"
+            "unique": "ecoreDefault"
           },
           "required": false
         },
@@ -433,7 +433,7 @@
               "resettable": true
             },
             "shape": {
-              "kind": "sequence"
+              "kind": "orderedSet"
             }
           },
           "name": "bounds1inf",
@@ -441,7 +441,7 @@
             "leaf": "houseDefault",
             "ordered": "ecoreDefault",
             "presence": "declared",
-            "unique": "houseDefault"
+            "unique": "ecoreDefault"
           },
           "required": true
         },
@@ -520,7 +520,7 @@
               "resettable": true
             },
             "shape": {
-              "kind": "sequence"
+              "kind": "orderedSet"
             }
           },
           "name": "boundsninf",
@@ -528,7 +528,7 @@
             "leaf": "houseDefault",
             "ordered": "ecoreDefault",
             "presence": "declared",
-            "unique": "houseDefault"
+            "unique": "ecoreDefault"
           },
           "required": true
         },
@@ -549,7 +549,7 @@
               "resettable": true
             },
             "shape": {
-              "kind": "sequence"
+              "kind": "orderedSet"
             }
           },
           "name": "boundsnm",
@@ -557,7 +557,7 @@
             "leaf": "houseDefault",
             "ordered": "ecoreDefault",
             "presence": "declared",
-            "unique": "houseDefault"
+            "unique": "ecoreDefault"
           },
           "required": true
         },
@@ -664,7 +664,8 @@
               "resettable": true
             },
             "shape": {
-              "kind": "bag"
+              "kind": "set",
+              "tie": "aw"
             }
           },
           "name": "set",
@@ -672,7 +673,7 @@
             "leaf": "houseDefault",
             "ordered": "declared",
             "presence": "declared",
-            "unique": "houseDefault"
+            "unique": "ecoreDefault"
           },
           "required": false
         }
