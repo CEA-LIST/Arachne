@@ -25,18 +25,36 @@ fn generate_build_and_test(metamodel: &str, project: &str) {
         fs::remove_dir_all(&output).expect("removing the previous generated crate failed");
     }
 
+    // The model-plane Moirai checkout, which is the one `arachne-codegen`'s own manifest depends
+    // on: the generator and what it generates cannot be allowed to see two versions of the
+    // interface, and `Config`'s default `../moirai` is a sibling of the *working directory* and
+    // so names whichever checkout happens to sit there.
+    let moirai = fs::canonicalize(manifest_dir.join("../../moirai-model-plane"))
+        .expect("the model-plane Moirai checkout sits beside this one");
+
     let config = Config::new(manifest_dir.join(metamodel))
         .with_output_dir(&output)
-        .with_project_name(project);
+        .with_project_name(project)
+        .with_moirai_root(&moirai);
     if let Err(error) = generate_with_report(config) {
         panic!("generating `{metamodel}` failed: {error:#}");
     }
 
     // The crate is written inside this workspace's target directory; an empty workspace table
-    // keeps Cargo from taking it for a member of this workspace.
+    // keeps Cargo from taking it for a member of this workspace. The dev-dependencies are the
+    // ones the five checked-in crates carry by hand: the equivalence oracle drives the
+    // interpreted `ModelLog` beside the generated log, and `heck` spells a field the way the
+    // generator spelled it.
     let manifest = output.join("Cargo.toml");
     let mut cargo_toml = fs::read_to_string(&manifest).expect("reading the generated manifest");
-    cargo_toml.push_str("\n[workspace]\n");
+    let moirai = moirai.display();
+    cargo_toml.push_str(&format!(
+        "\n[dev-dependencies]\n\
+         moirai-interp = {{ path = \"{moirai}/moirai-interp\", features = [\"sink\"] }}\n\
+         moirai-semantics = {{ path = \"{moirai}/moirai-semantics\" }}\n\
+         heck = \"0.5.0\"\n\
+         \n[workspace]\n"
+    ));
     fs::write(&manifest, cargo_toml).expect("writing the generated manifest");
 
     let tests = manifest_dir.join("tests").join("generated").join(project);

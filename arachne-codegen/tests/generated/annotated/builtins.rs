@@ -28,7 +28,11 @@ use moirai_protocol::{crdt::query::Read, replica::IsReplica, state::object_path:
 use petgraph::visit::EdgeRef;
 
 /// Sends `op` from `from` and delivers it to `to`.
-fn deliver<R: IsReplica<AnnotatedLog>>(from: &mut R, to: &mut R, op: Annotated) {
+fn deliver<R: IsReplica<AnnotatedLog, Command = Annotated>>(
+    from: &mut R,
+    to: &mut R,
+    op: Annotated,
+) {
     let event = from
         .send(op)
         .unwrap_or_else(|rejection| panic!("operation rejected: {rejection:?}"));
@@ -36,7 +40,7 @@ fn deliver<R: IsReplica<AnnotatedLog>>(from: &mut R, to: &mut R, op: Annotated) 
 }
 
 fn read<R: IsReplica<AnnotatedLog>>(replica: &R) -> AnnotatedValue {
-    replica.query(Read::new())
+    replica.query(&Read::new())
 }
 
 /// An operation on the first part of the model.
@@ -69,7 +73,7 @@ fn remove(key: &str) -> Annotated {
 }
 
 /// Two replicas holding a model with one part, which holds one port and one annotation.
-fn replicas<R: IsReplica<AnnotatedLog>>(a: &mut R, b: &mut R) {
+fn replicas<R: IsReplica<AnnotatedLog, Command = Annotated>>(a: &mut R, b: &mut R) {
     deliver(
         a,
         b,
