@@ -145,7 +145,7 @@ use std::sync::Arc;
 
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use moirai_crdt::utils::membership::twins_log;
-use moirai_interp::testing::{install, opened};
+use moirai_interp::testing::opened;
 use moirai_interp::{InstanceOp, LeafOp, ModelLog, ModelOp, Scalar};
 use moirai_protocol::broadcast::message::EventMessage;
 use moirai_protocol::broadcast::tcsb::Tcsb;
@@ -385,7 +385,7 @@ impl Meta {
                 let rule = self.sem.rule(*owner, *slot)?;
                 match rule {
                     MergeRule::Containment { shape, target }
-                        if shape.effective() == Shape::Single && !self.is_union(*target) =>
+                        if *shape == Shape::Single && !self.is_union(*target) =>
                     {
                         Some((name.to_string(), *target))
                     }
@@ -406,11 +406,31 @@ fn tagged(variant: impl Into<String>, payload: Value) -> Value {
 
 /// The Rust field name the generator gives a feature.
 fn field_of(feature: &str) -> String {
-    feature.to_snake_case()
+    let name = feature.to_snake_case();
+    // `ident.rs`'s `value_ident` gives a feature whose snake-cased name is a
+    // Rust keyword a `_field` suffix rather than making it a raw identifier,
+    // so `SimpleUML.ecore`'s `Class.abstract` is the field `abstract_field`
+    // and, through `paste!`'s `:camel`, the variant `AbstractField`.
+    if RUST_KEYWORDS.contains(&name.as_str()) {
+        format!("{name}_field")
+    } else {
+        name
+    }
 }
 
-/// The `record!` variant a feature becomes. `paste!`'s `:camel` strips the
-/// `r#` of a raw identifier, so `r#abstract` is `Abstract`.
+/// The Rust keywords `ident.rs` renames a feature away from. Only `abstract`
+/// is reached here; the rest are carried so a metamodel that declares one is a
+/// passing test and not a missing field.
+const RUST_KEYWORDS: [&str; 52] = [
+    "as", "async", "await", "abstract", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "Self", "static", "struct", "super", "trait", "true", "try", "type",
+    "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+];
+
+/// The `record!` variant a feature becomes: `paste!`'s `:camel` over the field
+/// name the generator wrote.
 fn variant_of(feature: &str) -> String {
     field_of(feature).to_upper_camel_case()
 }
@@ -494,8 +514,10 @@ enum Action {
     /// Write an enable-wins flag: `Class.abstract`,
     /// `Generalization.isSubstitutable`.
     Flag { feature: String, op: FlagOp },
-    /// Write the bag of strings that is `ModelElement.stereotype`.
-    Bag { feature: String, op: BagOp },
+    /// Write the collection of strings that is `ModelElement.stereotype`: an
+    /// add-wins set, because the file writes `ordered="false"` and leaves
+    /// `unique` silent, which Ecore reads as `true`.
+    Collection { feature: String, op: CollectionOp },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -522,7 +544,7 @@ enum FlagOp {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum BagOp {
+enum CollectionOp {
     Add(String),
     Remove(String),
     Clear,
@@ -560,7 +582,7 @@ impl Edit {
             } => format!("DeleteChar {feature}[{pos}]"),
             Action::Unset { feature } => format!("Unset {feature}"),
             Action::Flag { feature, op } => format!("{op:?} {feature}"),
-            Action::Bag { feature, op } => format!("{op:?} into {feature}"),
+            Action::Collection { feature, op } => format!("{op:?} into {feature}"),
         };
         format!(
             "#{} on {} at {} — {what}",
@@ -614,7 +636,7 @@ fn interp_op(meta: &Meta, edit: &Edit) -> ModelOp {
         let mut step = InstanceOp::variant(meta.slot(&hop.class), op);
         step = match (hop.at, meta.rule(parent, &hop.feature)) {
             (Some(pos), _) => InstanceOp::at(pos, step),
-            (None, MergeRule::Containment { shape, .. }) if shape.effective() == Shape::Optional => {
+            (None, MergeRule::Containment { shape, .. }) if shape == Shape::Optional => {
                 InstanceOp::set(step)
             }
             (None, _) => step,
@@ -673,7 +695,7 @@ fn interp_action(meta: &Meta, class: ClassSlot, action: &Action) -> InstanceOp {
             let made = meta.slot(made);
             let inner = InstanceOp::variant(made, interp_mint(meta, made));
             let shaped = match meta.rule(class, feature) {
-                MergeRule::Containment { shape, .. } => shape.effective(),
+                MergeRule::Containment { shape, .. } => shape,
                 other => panic!("`{feature}` is not a containment: {other:?}"),
             };
             let step = match (shaped, pos) {
@@ -696,16 +718,23 @@ fn interp_action(meta: &Meta, class: ClassSlot, action: &Action) -> InstanceOp {
                 FlagOp::Disable => LeafOp::Disable,
                 FlagOp::Clear => LeafOp::Clear,
             };
-            InstanceOp::field(
-                meta.visible_slot(class, feature),
-                InstanceOp::Leaf(leaf),
-            )
+            // `Class.abstract` and `Generalization.isSubstitutable` write no
+            // `lowerBound`, which Ecore reads as `0`, so both sit under an
+            // optional and every write is a `Set` into it.
+            let step = match meta.rule(class, feature) {
+                MergeRule::Attribute {
+                    shape: Shape::Optional,
+                    ..
+                } => InstanceOp::set(InstanceOp::Leaf(leaf)),
+                _ => InstanceOp::Leaf(leaf),
+            };
+            InstanceOp::field(meta.visible_slot(class, feature), step)
         }
-        Action::Bag { feature, op } => {
+        Action::Collection { feature, op } => {
             let leaf = match op {
-                BagOp::Add(value) => LeafOp::Add(Scalar::text(value.clone())),
-                BagOp::Remove(value) => LeafOp::Remove(Scalar::text(value.clone())),
-                BagOp::Clear => LeafOp::Clear,
+                CollectionOp::Add(value) => LeafOp::Add(Scalar::text(value.clone())),
+                CollectionOp::Remove(value) => LeafOp::Remove(Scalar::text(value.clone())),
+                CollectionOp::Clear => LeafOp::Clear,
             };
             InstanceOp::field(
                 meta.visible_slot(class, feature),
@@ -714,7 +743,7 @@ fn interp_action(meta: &Meta, class: ClassSlot, action: &Action) -> InstanceOp {
         }
         Action::Text { feature, op } => {
             let (shape, leaf) = match meta.rule(class, feature) {
-                MergeRule::Attribute { shape, leaf } => (shape.effective(), leaf),
+                MergeRule::Attribute { shape, leaf } => (shape, leaf),
                 other => panic!("`{feature}` is not an attribute: {other:?}"),
             };
             // The leaf the *table* names decides the operation, exactly as in
@@ -766,7 +795,7 @@ fn typed_json(meta: &Meta, edit: &Edit) -> Value {
         let mut step = union_wrap(meta, target, meta.slot(&hop.class), op);
         step = match (hop.at, meta.rule(parent, &hop.feature)) {
             (Some(pos), _) => json!({ "Update": { "pos": pos, "op": step } }),
-            (None, MergeRule::Containment { shape, .. }) if shape.effective() == Shape::Optional => {
+            (None, MergeRule::Containment { shape, .. }) if shape == Shape::Optional => {
                 json!({ "Set": step })
             }
             (None, _) => step,
@@ -830,7 +859,7 @@ fn typed_action(meta: &Meta, class: ClassSlot, action: &Action) -> Value {
         Action::Create { feature, pos, class: made } => {
             let made = meta.slot(made);
             let (shape, target) = match meta.rule(class, feature) {
-                MergeRule::Containment { shape, target } => (shape.effective(), target),
+                MergeRule::Containment { shape, target } => (shape, target),
                 other => panic!("`{feature}` is not a containment: {other:?}"),
             };
             let inner = union_wrap(meta, target, made, typed_mint(meta, made));
@@ -852,19 +881,26 @@ fn typed_action(meta: &Meta, class: ClassSlot, action: &Action) -> Value {
                 FlagOp::Disable => json!("Disable"),
                 FlagOp::Clear => json!("Clear"),
             };
-            feature_wrap(meta, class, feature, leaf)
+            let step = match meta.rule(class, feature) {
+                MergeRule::Attribute {
+                    shape: Shape::Optional,
+                    ..
+                } => json!({ "Set": leaf }),
+                _ => leaf,
+            };
+            feature_wrap(meta, class, feature, step)
         }
-        Action::Bag { feature, op } => {
+        Action::Collection { feature, op } => {
             let leaf = match op {
-                BagOp::Add(value) => tagged("Add", Value::String(value.clone())),
-                BagOp::Remove(value) => tagged("Remove", Value::String(value.clone())),
-                BagOp::Clear => json!("Clear"),
+                CollectionOp::Add(value) => tagged("Add", Value::String(value.clone())),
+                CollectionOp::Remove(value) => tagged("Remove", Value::String(value.clone())),
+                CollectionOp::Clear => json!("Clear"),
             };
             feature_wrap(meta, class, feature, leaf)
         }
         Action::Text { feature, op } => {
             let shape = match meta.rule(class, feature) {
-                MergeRule::Attribute { shape, .. } => shape.effective(),
+                MergeRule::Attribute { shape, .. } => shape,
                 other => panic!("`{feature}` is not an attribute: {other:?}"),
             };
             let leaf = match op {
@@ -938,7 +974,7 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
             MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => continue,
             MergeRule::Attribute { shape, leaf } => {
                 let found = locate(meta, class, *owner, name, value);
-                let projected = match (shape.effective(), leaf) {
+                let projected = match (shape, leaf) {
                     (Shape::Single, LeafRule::Text) => Some(chars(found)),
                     (Shape::Optional, LeafRule::Text) => {
                         if found.is_null() {
@@ -950,9 +986,25 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
                     // `VecLog<EWFlag>` reads as a bare `bool`, which is what
                     // `LeafLog::FlagEw` renders too.
                     (Shape::Single, LeafRule::Flag { .. }) => Some(found.clone()),
+                    // Under an `OptionLog` the same flag reads `Option<bool>`,
+                    // and `None` is the unwritten optional the interpreted
+                    // path carries no key for.
+                    (Shape::Optional, LeafRule::Flag { .. }) => {
+                        if found.is_null() {
+                            None
+                        } else {
+                            Some(found.clone())
+                        }
+                    }
+                    // `VecLog<AWSet<String>>` reads as a `HashSet<String>`;
+                    // `LeafLog::SetAw` renders the same values sorted.
+                    (Shape::Set { .. }, LeafRule::Text) => Some(sorted_strings(found)),
                     // `AWBagLog<String>` reads as a map of value to count;
                     // `LeafLog::Bag` renders the same counts as a sorted
-                    // array with repeats.
+                    // array with repeats. `SimpleUML.ecore` reaches no bag
+                    // since a silent `unique` became Ecore's `true`, and the
+                    // arm stays so a metamodel that does is a projection and
+                    // not a panic.
                     (Shape::Bag, LeafRule::Text) => Some(bag(found)),
                     (shape, leaf) => panic!(
                         "no projection for {shape:?} of {leaf:?} on `{}.{name}`; \
@@ -966,7 +1018,7 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
             }
             MergeRule::Containment { shape, target } => {
                 let found = locate(meta, class, *owner, name, value);
-                match shape.effective() {
+                match shape {
                     Shape::Single => {
                         if let Some(object) = project_slot(meta, *target, found) {
                             out.insert(name.to_string(), object);
@@ -1111,6 +1163,22 @@ fn chars(value: &Value) -> Value {
     Value::String(text)
 }
 
+/// A `HashSet<String>` as `leaf.rs`'s `sorted_array` renders one.
+fn sorted_strings(value: &Value) -> Value {
+    let mut held: Vec<String> = value
+        .as_array()
+        .unwrap_or_else(|| panic!("a set reads as an array: {value}"))
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .unwrap_or_else(|| panic!("a set of strings holds strings: {item}"))
+                .to_string()
+        })
+        .collect();
+    held.sort();
+    Value::Array(held.into_iter().map(Value::String).collect())
+}
+
 /// A `HashMap<String, usize>` as `leaf.rs`'s bag arm renders one: every value
 /// repeated as many times as its count, sorted the way `Scalar`'s own `Ord`
 /// sorts `Scalar::Str`, which is `String`'s.
@@ -1141,8 +1209,9 @@ fn bag(value: &Value) -> Value {
 /// *only* place either side is pruned, so the two sides cannot drift. The
 /// whole argument for it is in
 /// `generated/bt_crdt/tests/support/mod.rs`; what matters here is that the
-/// rule is the same one and that `SimpleUML.ecore` declares no optional, so
-/// the exemption it carries for optionals is inert.
+/// rule is the same one, the exemption it carries for an optional included —
+/// every single-valued attribute of `SimpleUML.ecore` is one, because the file
+/// writes no `lowerBound` and Ecore's default for one is `0`.
 fn without_defaults(meta: &Meta, value: Value) -> Value {
     let value = drop_defaults(meta, value);
     if only_a_class(&value) {
@@ -1198,7 +1267,7 @@ fn is_default(rule: MergeRule, value: &Value) -> bool {
         // Both are dropped from the interpreted side before this runs and
         // never appear on the generated side at all.
         MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => false,
-        MergeRule::Attribute { shape, leaf } => match shape.effective() {
+        MergeRule::Attribute { shape, leaf } => match shape {
             Shape::Optional => false,
             Shape::Single => match leaf {
                 LeafRule::Text => value.as_str() == Some(""),
@@ -1206,16 +1275,18 @@ fn is_default(rule: MergeRule, value: &Value) -> bool {
                 LeafRule::Flag { .. } => value.as_bool() == Some(false),
                 LeafRule::Register { .. } | LeafRule::Enum { .. } => value.is_null(),
             },
-            Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
+            Shape::Sequence | Shape::Set { .. } | Shape::Bag | Shape::OrderedSet => {
+                empty_collection(value)
+            }
             Shape::Keyed { .. } => empty_map(value),
-            Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
-        MergeRule::Containment { shape, .. } => match shape.effective() {
+        MergeRule::Containment { shape, .. } => match shape {
             Shape::Optional => false,
             Shape::Single => only_a_class(value),
-            Shape::Sequence | Shape::Set { .. } | Shape::Bag => empty_collection(value),
+            Shape::Sequence | Shape::Set { .. } | Shape::Bag | Shape::OrderedSet => {
+                empty_collection(value)
+            }
             Shape::Keyed { .. } => empty_map(value),
-            Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
     }
 }
@@ -1623,7 +1694,7 @@ enum Kind {
     /// Write an enable-wins flag.
     WriteFlag,
     /// Write the bag, which currently holds these values.
-    WriteBag(Vec<String>),
+    WriteCollection(Vec<String>),
 }
 
 /// Everything the writer looking at `doc` could do, in a deterministic order.
@@ -1660,7 +1731,7 @@ fn collect_candidates(
         };
         match rule {
             MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => {}
-            MergeRule::Attribute { shape, leaf } => match (shape.effective(), leaf) {
+            MergeRule::Attribute { shape, leaf } => match (shape, leaf) {
                 (Shape::Single, LeafRule::Text) => {
                     let len = object
                         .get(&**name)
@@ -1684,8 +1755,10 @@ fn collect_candidates(
                         }
                     }
                 }
-                (Shape::Single, LeafRule::Flag { .. }) => out.push(here(Kind::WriteFlag)),
-                (Shape::Bag, LeafRule::Text) => {
+                (Shape::Single | Shape::Optional, LeafRule::Flag { .. }) => {
+                    out.push(here(Kind::WriteFlag))
+                }
+                (Shape::Set { .. }, LeafRule::Text) => {
                     let held: Vec<String> = object
                         .get(&**name)
                         .and_then(Value::as_array)
@@ -1697,11 +1770,11 @@ fn collect_candidates(
                                 .collect()
                         })
                         .unwrap_or_default();
-                    out.push(here(Kind::WriteBag(held)));
+                    out.push(here(Kind::WriteCollection(held)));
                 }
                 _ => {}
             },
-            MergeRule::Containment { shape, target } => match shape.effective() {
+            MergeRule::Containment { shape, target } => match shape {
                 Shape::Single | Shape::Optional => {
                     match object.get(&**name) {
                         None => {
@@ -1869,21 +1942,23 @@ fn propose(meta: &Meta, doc: &Value, rng: &mut Rng, writer: char, id: &mut u32) 
                 _ => FlagOp::Disable,
             },
         },
-        Kind::WriteBag(held) => {
-            // A removal is proposed only for a value the writer can see.
-            // `AWBag::Remove` is `Counter<usize>::Dec(1)` (`aw_bag.rs:84`),
-            // so removing what is not there underflows a `usize` in a debug
-            // build — identically on both paths, since the interpreted bag is
-            // composed out of the same two logs (`leaf.rs:336`). That is a
-            // hazard in `moirai-crdt` and not a difference between the paths,
-            // and an oracle that tripped it would be measuring the panic and
-            // not the merge. `ip29` states the same thing about the same log.
+        Kind::WriteCollection(held) => {
+            // A removal is proposed only for a value the writer can see. That
+            // was a hard requirement while `ModelElement.stereotype` was a bag
+            // — `AWBag::Remove` is `Counter<usize>::Dec(1)` (`aw_bag.rs:84`)
+            // and removing what is not there underflows a `usize` in a debug
+            // build, identically on both paths — and it is kept now that it is
+            // an add-wins set, because a remove of an absent value is the
+            // concurrent case the matrix drives on purpose and not something a
+            // seeded script should stumble into at random.
             let op = match rng.below(8) {
-                0 => BagOp::Clear,
-                1..=3 if !held.is_empty() => BagOp::Remove(held[rng.below(held.len())].clone()),
-                _ => BagOp::Add((*rng.pick(&STEREOTYPES)).to_string()),
+                0 => CollectionOp::Clear,
+                1..=3 if !held.is_empty() => {
+                    CollectionOp::Remove(held[rng.below(held.len())].clone())
+                }
+                _ => CollectionOp::Add((*rng.pick(&STEREOTYPES)).to_string()),
             };
-            Action::Bag {
+            Action::Collection {
                 feature: candidate.feature.clone(),
                 op,
             }
@@ -2055,31 +2130,57 @@ fn the_descriptor_and_the_generated_crate_name_the_same_roots() {
     }
 }
 
-/// `SimpleUML.ecore` declares no optional feature, so the exemption
-/// [`without_defaults`] carries for optionals is inert here and `ip13` is
-/// what exercises it.
+/// Every shape `SimpleUML.ecore` reaches, named from the table: six
+/// optionals, one add-wins set and five sequence containments, and nothing
+/// else.
+///
+/// The file writes a `lowerBound` on four references and nowhere else, so
+/// every attribute it declares and every single-valued containment is
+/// optional, which is Ecore's `0` and not a house rule. It used to reach one
+/// bag, `ModelElement.stereotype`, which declares `ordered="false"` and leaves
+/// `unique` silent; a silent `unique` is Ecore's `true`, so that feature is an
+/// add-wins set and no bag is left here.
 #[test]
-fn simpleuml_declares_no_optional() {
+fn simpleuml_reaches_six_optionals_one_set_and_five_sequences() {
     let meta = meta();
+    let mut shapes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for class in &meta.sem.classes {
         for (name, owner, slot) in &class.visible {
             let Some(rule) = meta.sem.rule(*owner, *slot) else {
                 continue;
             };
+            // `visible` repeats an inherited feature on every subclass; the
+            // declaring class is what makes each one count once.
             let shape = match rule {
                 MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } => {
-                    shape.effective()
+                    shape
                 }
                 _ => continue,
             };
-            assert_ne!(
-                shape,
-                Shape::Optional,
-                "`{}.{name}` is optional after all",
-                class.name
-            );
+            let at = format!("{}.{name}", meta.name(*owner));
+            let held = shapes.entry(format!("{shape:?}")).or_default();
+            if !held.contains(&at) {
+                held.push(at);
+            }
         }
     }
+    for held in shapes.values_mut() {
+        held.sort();
+    }
+    let counts: Vec<(&str, usize)> = shapes
+        .iter()
+        .map(|(shape, held)| (shape.as_str(), held.len()))
+        .collect();
+    assert_eq!(
+        counts,
+        vec![("Optional", 6), ("Sequence", 5), ("Set { tie: AddWins }", 1)],
+        "the shapes `SimpleUML.ecore` reaches: {shapes:?}"
+    );
+    assert_eq!(
+        shapes["Set { tie: AddWins }"],
+        vec!["ModelElement.stereotype"],
+        "the one set, which used to be the one bag"
+    );
 }
 
 /// No class has a single-valued containment onto a record, so a mint is one
@@ -2115,9 +2216,10 @@ fn the_typed_encoder_walks_the_super_hops_and_the_union_variants() {
         class: "Class".to_string(),
     });
 
-    // `Class.abstract` is declared on `Class`, so no super hop; but the
-    // generated field is the raw identifier `r#abstract` and its `record!`
-    // variant is `Abstract`.
+    // `Class.abstract` is declared on `Class`, so no super hop; but `abstract`
+    // is a Rust keyword, so the generated field is `abstract_field` and its
+    // `record!` variant `AbstractField`. It is optional, like every attribute
+    // of this file, so the write is a `Set` into the optional that holds it.
     let flag = Edit {
         id: 2,
         writer: 'a',
@@ -2131,7 +2233,7 @@ fn the_typed_encoder_walks_the_super_hops_and_the_union_variants() {
         typed_json(&meta, &flag),
         json!({"ModelElementKind": {"Classifier": {"Package": {"Model": {
             "PackageSuper": {"OwnedElements": {"Update": {"pos": 0, "op":
-                {"TType": {"DataType": {"Class": {"Abstract": "Enable"}}}}
+                {"TType": {"DataType": {"Class": {"AbstractField": {"Set": "Enable"}}}}}
             }}}
         }}}}}),
         "the root descends `ModelElementKind -> Classifier -> Package -> Model` \
@@ -2159,7 +2261,7 @@ fn the_typed_encoder_walks_the_super_hops_and_the_union_variants() {
             "PackageSuper": {"OwnedElements": {"Update": {"pos": 0, "op":
                 {"TType": {"DataType": {"Class": {"DataTypeSuper": {"TTypeSuper":
                     {"ClassifierSuper": {"ModelElementSuper": {"Name":
-                        {"Insert": {"content": "a", "pos": 0}}}}}}}}}}
+                        {"Set": {"Insert": {"content": "a", "pos": 0}}}}}}}}}}}
             }}}
         }}}}}),
         "`Class` sees `name` four `<Super>Super` hops away"
@@ -2538,9 +2640,10 @@ fn the_leaf_arms_simpleuml_reaches_are_all_already_proven() {
             let Some(MergeRule::Attribute { shape, leaf }) = meta.sem.rule(*owner, *slot) else {
                 continue;
             };
-            let arm = match shape.effective() {
+            let arm = match shape {
                 Shape::Bag => moirai_interp::LeafLog::for_bag(),
-                Shape::Set { tie } => moirai_interp::LeafLog::for_set(tie),
+                Shape::Set { tie } => moirai_interp::LeafLog::for_set(*tie),
+                Shape::OrderedSet => moirai_interp::LeafLog::for_ordered_set(),
                 _ => moirai_interp::LeafLog::for_rule(*leaf),
             };
             arms.insert(arm.kind());
@@ -2549,7 +2652,7 @@ fn the_leaf_arms_simpleuml_reaches_are_all_already_proven() {
     let found: Vec<&str> = arms.iter().copied().collect();
     assert_eq!(
         found,
-        vec!["bag", "enable-wins flag", "text"],
+        vec!["add-wins set", "enable-wins flag", "text"],
         "the arms `SimpleUML.ecore` reaches changed"
     );
     println!("ip14 reaches the `LeafLog` arms {found:?}, all three already proven");
@@ -2635,4 +2738,117 @@ fn register_name_descriptor() -> Value {
         "leaf": {"kind": "register", "tie": "mv"}
     });
     descriptor
+}
+
+/// **The one difference `ip14` reports that is not a merge**, pinned here as
+/// the smallest script that shows it: the generated read-out of a nested list
+/// depends on whether anyone read it while the events were arriving.
+///
+/// `a` creates a `DataType` at `Model.ownedElements[0]` and everyone sees it.
+/// Then `a` writes one character into its `name`, `b` concurrently writes one
+/// into the same `name`, and `a` deletes the element. `b` takes `a`'s three
+/// events. Update-wins says `b`'s write survives the delete it is concurrent
+/// with and the element stays, holding `b`'s character, which is what the
+/// interpreted path reads either way and what the generated path reads when
+/// nothing is read in between. Read the generated log once after each of the
+/// three deliveries and it reads the empty document instead — the element is
+/// gone.
+///
+/// It is not the facet defaults and not the interpreted path. It is
+/// `moirai-protocol`'s `CachedLog`, which `NestedListLog` holds its positions
+/// list in (`nested_list.rs:58`): its `effect` replays one operation onto the
+/// materialised value rather than recomputing whenever the incoming event's
+/// version compares `Greater` to the *previous event's*, and `Version`'s
+/// `partial_cmp` answers `Greater` for two events of one origin from the
+/// origin's own sequence without looking at what else each has seen. A
+/// concurrent event therefore takes the replay path, and the replay is only
+/// valid for an event that is causally after everything the log holds. The
+/// cache is populated by a read, which is why the state depends on whether
+/// anyone looked.
+///
+/// Ignored, not deleted: it is a defect of the merge layer this oracle sits
+/// on, it has a fix that is not this task's to make, and `ip14`,
+/// `only_one_root_arm_is_ever_written` and
+/// `the_thirty_scripts_find_exactly_one_kind_of_difference` fail on it.
+#[test]
+#[ignore = "a reproducer for a `CachedLog` defect in moirai-protocol, not a gate"]
+fn a_read_between_deliveries_changes_what_the_generated_nested_list_holds() {
+    let root = Path::default();
+    let child = root.clone().child(Hop {
+        feature: "ownedElements".to_string(),
+        at: Some(0),
+        class: "DataType".to_string(),
+    });
+    let mk = |id: u32, writer: char, path: Path, action: Action| Edit {
+        id,
+        writer,
+        path,
+        action,
+    };
+    let insert = |ch: char| Action::Text {
+        feature: "name".to_string(),
+        op: TextOp::Insert {
+            pos: 0,
+            ch,
+            after: ch.to_string(),
+        },
+    };
+
+    let run = |read_between: bool| -> Value {
+        let mut h = Harness::new(&simpleuml_descriptor(), &simpleuml_descriptor());
+        h.carry(&mk(1, 'a', root.clone(), Action::New))
+            .expect("the root mints");
+        h.cross();
+        h.carry(&mk(
+            2,
+            'a',
+            root.clone(),
+            Action::Create {
+                feature: "ownedElements".to_string(),
+                pos: Some(0),
+                class: "DataType".to_string(),
+            },
+        ))
+        .expect("the child is created");
+        h.cross();
+        h.carry(&mk(3, 'a', child.clone(), insert('e')))
+            .expect("`a` writes");
+        h.carry(&mk(3, 'b', child.clone(), insert('b')))
+            .expect("`b` writes");
+        h.carry(&mk(
+            3,
+            'a',
+            root.clone(),
+            Action::Delete {
+                feature: "ownedElements".to_string(),
+                pos: 0,
+            },
+        ))
+        .expect("`a` deletes");
+        for (interp_event, gen_event) in std::mem::take(&mut h.pending_a) {
+            h.ib.receive(interp_event);
+            h.gb.receive(gen_event);
+            if read_between {
+                let _ = h.gen_doc('b');
+            }
+        }
+        h.gen_doc('b')
+    };
+
+    let unread = run(false);
+    let read = run(true);
+    assert_ne!(
+        unread, read,
+        "the defect this pins is gone; make both `ip14` and this one a gate again"
+    );
+    assert_eq!(
+        unread["ownedElements"],
+        json!([{ECLASS: "DataType", "name": "b"}]),
+        "with nothing read in between, update-wins keeps the element"
+    );
+    assert_eq!(
+        read.get("ownedElements"),
+        None,
+        "with a read after each delivery, the element is gone"
+    );
 }
