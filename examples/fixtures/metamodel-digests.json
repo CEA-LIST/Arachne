@@ -10,5 +10,9 @@
   "json.metamodel.json": {
     "nsURI": "http://www.example.org/json",
     "digest": "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30"
+  },
+  "notation.metamodel.json": {
+    "nsURI": "http://cea.fr/crdt/notation/0.1",
+    "digest": "9d551713bd2d1b1cfd8c38e591ed33a454706305278f0d1c1dc7d3589167506c"
   }
 }
