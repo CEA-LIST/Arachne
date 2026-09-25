@@ -18,6 +18,16 @@ use arachne_codegen::{Config, generate_with_report};
 /// Generates `metamodel` as the crate `project`, copies the tests of `tests/generated/<project>/`
 /// into it, and runs `cargo test` on it.
 fn generate_build_and_test(metamodel: &str, project: &str) {
+    generate_build_and_test_with(metamodel, project, &[]);
+}
+
+/// [`generate_build_and_test`], with `test_args` passed to `cargo test` after the manifest path
+/// (`["--", "--nocapture"]`, say), answering with what `cargo test` printed.
+fn generate_build_and_test_with(
+    metamodel: &str,
+    project: &str,
+    test_args: &[&str],
+) -> std::process::Output {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let output = tmp.join("generated").join(project);
@@ -75,6 +85,7 @@ fn generate_build_and_test(metamodel: &str, project: &str) {
         .arg("test")
         .arg("--manifest-path")
         .arg(&manifest)
+        .args(test_args)
         .env("CARGO_TARGET_DIR", tmp.join("generated-target"))
         .output()
         .expect("running cargo on the generated crate");
@@ -84,6 +95,7 @@ fn generate_build_and_test(metamodel: &str, project: &str) {
         String::from_utf8_lossy(&result.stdout),
         String::from_utf8_lossy(&result.stderr),
     );
+    result
 }
 
 /// A metamodel whose classes extend `EObject`, `EModelElement` and `ENamedElement`, and whose
@@ -95,4 +107,48 @@ fn ecore_builtins() {
         "../examples/pet_metamodels/ecore_builtins.ecore",
         "annotated",
     );
+}
+
+/// ST.01 (`cea-cdrt-knowledge/spec/items/ST.01.md`), oracle O5: the runtime this generator writes
+/// for `tests/generated/st01/st01.ecore`, an optional containment of an abstract class, against
+/// the interpreted runtime, on every schedule of an unset raced by a write to one member of a
+/// conflict. The tests are `tests/generated/st01/twin.rs`; each prints its counts on lines
+/// starting `ST01-`, repeated here.
+///
+/// First, the descriptor this generator writes for `st01.ecore` must be, value for value, the
+/// fixture the interpreted half of the oracle reads in the model-plane Moirai checkout
+/// (`moirai-interp/tests/fixtures/st01.metamodel.json`), so that both halves of ST.01 are about
+/// one metamodel.
+#[test]
+fn st01_optional_conflict_twin() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ecore = manifest_dir.join("tests/generated/st01/st01.ecore");
+    let parser = arachne_codegen::EcoreParser::from_file(&ecore)
+        .unwrap_or_else(|error| panic!("parsing `{}` failed: {error}", ecore.display()));
+    let pack = arachne_codegen::find_user_package(&parser.ctx).expect("st01.ecore has a package");
+    let described =
+        arachne_codegen::descriptor_json(&parser.ctx, pack).expect("st01.ecore is described");
+    let fixture_path = manifest_dir
+        .join("../../moirai-model-plane/moirai-interp/tests/fixtures/st01.metamodel.json");
+    let fixture: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|error| panic!("reading `{}`: {error}", fixture_path.display())),
+    )
+    .expect("the fixture is JSON");
+    assert_eq!(
+        described, fixture,
+        "the descriptor of st01.ecore is not the fixture the interpreted half of ST.01 reads"
+    );
+
+    let output = generate_build_and_test_with(
+        "tests/generated/st01/st01.ecore",
+        "st01",
+        &["--", "--nocapture", "--test-threads=1"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| line.starts_with("ST01-"))
+    {
+        eprintln!("{line}");
+    }
 }
