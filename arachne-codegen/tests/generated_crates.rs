@@ -152,3 +152,48 @@ fn st01_optional_conflict_twin() {
         eprintln!("{line}");
     }
 }
+
+/// ST.02 (`cea-cdrt-knowledge/spec/items/ST.02.md`), oracle A5: the runtime this generator writes
+/// for `tests/generated/st02/st02.ecore`, an optional containment of a concrete class reached by
+/// a removal above it while a concurrent write keeps its owner alive, against the interpreted
+/// runtime, on every schedule of the claim and of its guard. The tests are
+/// `tests/generated/st02/twin.rs`; each prints its counts on lines carrying `ST02-`, repeated
+/// here from wherever they sit on the line (under `--nocapture` a test's first line follows
+/// libtest's `test <name> ... ` on the same line).
+///
+/// First, the descriptor this generator writes for `st02.ecore` must be, value for value, the
+/// fixture the interpreted half of the oracle reads in the model-plane Moirai checkout
+/// (`moirai-interp/tests/fixtures/st02.metamodel.json`), so that both halves of ST.02 are about
+/// one metamodel.
+#[test]
+fn st02_emptied_optional_object_twin() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ecore = manifest_dir.join("tests/generated/st02/st02.ecore");
+    let parser = arachne_codegen::EcoreParser::from_file(&ecore)
+        .unwrap_or_else(|error| panic!("parsing `{}` failed: {error}", ecore.display()));
+    let pack = arachne_codegen::find_user_package(&parser.ctx).expect("st02.ecore has a package");
+    let described =
+        arachne_codegen::descriptor_json(&parser.ctx, pack).expect("st02.ecore is described");
+    let fixture_path = manifest_dir
+        .join("../../moirai-model-plane/moirai-interp/tests/fixtures/st02.metamodel.json");
+    let fixture: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|error| panic!("reading `{}`: {error}", fixture_path.display())),
+    )
+    .expect("the fixture is JSON");
+    assert_eq!(
+        described, fixture,
+        "the descriptor of st02.ecore is not the fixture the interpreted half of ST.02 reads"
+    );
+
+    let output = generate_build_and_test_with(
+        "tests/generated/st02/st02.ecore",
+        "st02",
+        &["--", "--nocapture", "--test-threads=1"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(at) = line.find("ST02-") {
+            eprintln!("{}", &line[at..]);
+        }
+    }
+}
