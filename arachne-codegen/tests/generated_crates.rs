@@ -197,3 +197,48 @@ fn st02_emptied_optional_object_twin() {
         }
     }
 }
+
+/// ST.04 (`cea-cdrt-knowledge/spec/items/ST.04.md`), oracle B5: the runtime this generator writes
+/// for `tests/generated/st04/st04.ecore`, an optional attribute of each leaf kind the derivation
+/// can put under an optional, reached by a removal above it while a concurrent write keeps its
+/// owner alive, against the interpreted runtime, on every schedule of the claim and of its guards.
+/// The tests are `tests/generated/st04/twin.rs`; each prints its counts on lines carrying
+/// `ST04-`, repeated here from wherever they sit on the line. The generated crate's tests run on
+/// two test threads, and each runs the leaf kinds on two threads of its own.
+///
+/// First, the descriptor this generator writes for `st04.ecore` must be, value for value, the
+/// fixture the interpreted half of the oracle reads in the model-plane Moirai checkout
+/// (`moirai-interp/tests/fixtures/st04.metamodel.json`), so that both halves of ST.04 are about
+/// one metamodel.
+#[test]
+fn st04_emptied_optional_attribute_twin() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ecore = manifest_dir.join("tests/generated/st04/st04.ecore");
+    let parser = arachne_codegen::EcoreParser::from_file(&ecore)
+        .unwrap_or_else(|error| panic!("parsing `{}` failed: {error}", ecore.display()));
+    let pack = arachne_codegen::find_user_package(&parser.ctx).expect("st04.ecore has a package");
+    let described =
+        arachne_codegen::descriptor_json(&parser.ctx, pack).expect("st04.ecore is described");
+    let fixture_path = manifest_dir
+        .join("../../moirai-model-plane/moirai-interp/tests/fixtures/st04.metamodel.json");
+    let fixture: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|error| panic!("reading `{}`: {error}", fixture_path.display())),
+    )
+    .expect("the fixture is JSON");
+    assert_eq!(
+        described, fixture,
+        "the descriptor of st04.ecore is not the fixture the interpreted half of ST.04 reads"
+    );
+
+    let output = generate_build_and_test_with(
+        "tests/generated/st04/st04.ecore",
+        "st04",
+        &["--", "--nocapture", "--test-threads=2"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(at) = line.find("ST04-") {
+            eprintln!("{}", &line[at..]);
+        }
+    }
+}
