@@ -242,3 +242,48 @@ fn st04_emptied_optional_attribute_twin() {
         }
     }
 }
+
+/// ST.05 (`cea-cdrt-knowledge/spec/items/ST.05.md`), oracle K6: the runtime this generator writes
+/// for `tests/generated/st05/st05.ecore`, keyed collections whose values are objects (of a class
+/// with no subclass, composed as `record!`, and of classes with subclasses, composed as `union!`)
+/// from which a key is removed, alone or raced by a write into the removed key's object, against
+/// the interpreted runtime, on every schedule. The tests are `tests/generated/st05/twin.rs`; each
+/// prints its counts on lines carrying `ST05-`, repeated here from wherever they sit on the line.
+/// The generated crate's tests run on two test threads.
+///
+/// First, the descriptor this generator writes for `st05.ecore` must be, value for value, the
+/// fixture the interpreted half of the oracle reads in the model-plane Moirai checkout
+/// (`moirai-interp/tests/fixtures/st05.metamodel.json`), so that both halves of ST.05 are about
+/// one metamodel.
+#[test]
+fn st05_removed_key_twin() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ecore = manifest_dir.join("tests/generated/st05/st05.ecore");
+    let parser = arachne_codegen::EcoreParser::from_file(&ecore)
+        .unwrap_or_else(|error| panic!("parsing `{}` failed: {error}", ecore.display()));
+    let pack = arachne_codegen::find_user_package(&parser.ctx).expect("st05.ecore has a package");
+    let described =
+        arachne_codegen::descriptor_json(&parser.ctx, pack).expect("st05.ecore is described");
+    let fixture_path = manifest_dir
+        .join("../../moirai-model-plane/moirai-interp/tests/fixtures/st05.metamodel.json");
+    let fixture: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|error| panic!("reading `{}`: {error}", fixture_path.display())),
+    )
+    .expect("the fixture is JSON");
+    assert_eq!(
+        described, fixture,
+        "the descriptor of st05.ecore is not the fixture the interpreted half of ST.05 reads"
+    );
+
+    let output = generate_build_and_test_with(
+        "tests/generated/st05/st05.ecore",
+        "st05",
+        &["--", "--nocapture", "--test-threads=2"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(at) = line.find("ST05-") {
+            eprintln!("{}", &line[at..]);
+        }
+    }
+}
