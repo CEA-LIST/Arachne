@@ -71,6 +71,13 @@ impl Value {
         if boxed { self.boxed() } else { self }
     }
 
+    /// The read-out of a `BoxedLog` over this one, with the standard `Box`
+    /// named in full, so that a class of the metamodel named `Box`, which the
+    /// generated module declares, cannot shadow it.
+    pub fn boxed_in_full(self) -> Self {
+        self.wrap(|inner| quote! { ::std::boxed::Box<#inner> })
+    }
+
     /// The read-out of a `UWMapLog<K, L>` whose value log reads as this one.
     pub fn keyed_by(mut self, key: &TokenStream, path: &syn::Path) -> Self {
         let inner = self.tokens;

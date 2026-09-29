@@ -135,7 +135,12 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 if matches!(value_bound, BoundKind::Optional) {
                     self.uw_map_optional_value_log_type(value_feature, &path)?
                 } else {
-                    self.uw_map_value_log_type(target_class.idx, value_feature, &path)?
+                    self.uw_map_value_log_type(
+                        target_class.idx,
+                        value_feature,
+                        boxing_strategy != BoxingStrategy::NoBox,
+                        &path,
+                    )?
                 };
             imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
 
@@ -253,10 +258,18 @@ impl<'a> ContainmentGenerator<'a> {
         ))
     }
 
+    /// The log of a map entry's single value, and its read-out.
+    ///
+    /// A cycle through a keyed containment holds the containment's own edge,
+    /// owner to entry class, and the cycle analysis marks that edge
+    /// (`owner_boxed`) rather than the entry's value edge unless the latter
+    /// is a union edge. Either mark boxes the value log, the one place on this
+    /// path where an indirection can break the cycle.
     fn uw_map_value_log_type(
         &self,
         entry_class: idx::Class,
         value_feature: &Structural,
+        owner_boxed: bool,
         path: &syn::Path,
     ) -> anyhow::Result<(TokenStream, Value, Vec<Import>)> {
         match value_feature.kind {
@@ -347,7 +360,7 @@ impl<'a> ContainmentGenerator<'a> {
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);
-                let boxed = boxing_strategy != BoxingStrategy::NoBox;
+                let boxed = owner_boxed || boxing_strategy != BoxingStrategy::NoBox;
                 let log_ty = if boxed {
                     quote! { #path::BoxedLog<#value_log> }
                 } else {
@@ -358,9 +371,10 @@ impl<'a> ContainmentGenerator<'a> {
                 } else {
                     Vec::new()
                 };
+                let value = Value::plain(quote! { #value_value });
                 Ok((
                     log_ty,
-                    Value::plain(quote! { #value_value }).boxed_if(boxed),
+                    if boxed { value.boxed_in_full() } else { value },
                     imports,
                 ))
             }
