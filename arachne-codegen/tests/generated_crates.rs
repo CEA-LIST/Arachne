@@ -287,3 +287,117 @@ fn st05_removed_key_twin() {
         }
     }
 }
+
+/// AR.01 (`cea-cdrt-knowledge/spec/items/AR.01.md`), oracle A1: the crate this generator writes
+/// for `tests/generated/<project>/<project>.ecore`, one of the three metamodels of ST.05's OB4
+/// (`cea-cdrt-knowledge/spec/items/ST.05.md`, R3.10, byte for byte), builds against the
+/// model-plane Moirai checkout, and a model written through its cycles reads back what was
+/// written (`tests/generated/<project>/readback.rs`). Its lines carrying `AR01-` are repeated
+/// here.
+fn ar01_recursive_keyed_crate(project: &str) {
+    let output = generate_build_and_test_with(
+        &format!("tests/generated/{project}/{project}.ecore"),
+        project,
+        &["--", "--nocapture"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(at) = line.find("AR01-") {
+            eprintln!("{}", &line[at..]);
+        }
+    }
+}
+
+/// AR.01, A1: `Holder.bag` holds `Dir`, `Dir.sub` holds `Mid`, `Mid.sub` holds `Mid` (the
+/// direct cycle) and `Mid.dirs` holds `Dir` (the indirect one), all keyed.
+#[test]
+fn ar01_st05rec_both_cycles_generate_a_crate_that_builds_and_reads_back() {
+    ar01_recursive_keyed_crate("st05rec");
+}
+
+/// AR.01, A1: `st05rec.ecore` without `Mid.dirs`, the direct cycle alone.
+#[test]
+fn ar01_st05recdirect_the_direct_cycle_generates_a_crate_that_builds_and_reads_back() {
+    ar01_recursive_keyed_crate("st05recdirect");
+}
+
+/// AR.01, A1: `st05rec.ecore` without `Mid.sub`, the indirect cycle alone.
+#[test]
+fn ar01_st05recindirect_the_indirect_cycle_generates_a_crate_that_builds_and_reads_back() {
+    ar01_recursive_keyed_crate("st05recindirect");
+}
+
+/// The metamodels of ST.05's K7 to K9, which `moirai-interp/tests/st05_recursive_keyed_class.rs`
+/// builds in code from `st05.metamodel.json` (`probe_descriptor`, and `cycles_descriptor` when
+/// `boxes`), derived here the same way, with the package's name and nsURI set to `package`'s:
+/// `Box.sub`, a keyed containment of `Mid`, copied onto `Mid`; and, when `boxes`, `Holder.bag`,
+/// a keyed containment of `Box`, copied onto `Mid` as `boxes`.
+fn st05_recursive_descriptor(package: &str, boxes: bool) -> serde_json::Value {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let fixture_path = manifest_dir
+        .join("../../moirai-model-plane/moirai-interp/tests/fixtures/st05.metamodel.json");
+    let mut d: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|error| panic!("reading `{}`: {error}", fixture_path.display())),
+    )
+    .expect("the fixture is JSON");
+    let sub = d["classes"]["Box"]["containments"][1].clone();
+    assert_eq!(sub["name"], "sub", "Box's second containment is sub");
+    d["classes"]["Mid"]["containments"] = serde_json::Value::Array(vec![sub]);
+    if boxes {
+        let mut bag = d["classes"]["Holder"]["containments"][1].clone();
+        assert_eq!(bag["name"], "bag", "Holder's second containment is bag");
+        bag["name"] = serde_json::json!("boxes");
+        d["classes"]["Mid"]["containments"]
+            .as_array_mut()
+            .expect("Mid's containments are an array")
+            .push(bag);
+    }
+    d["package"] = serde_json::json!(package);
+    d["nsURI"] = serde_json::json!(format!("http://www.example.org/{package}"));
+    d
+}
+
+/// AR.01, oracle A3: the runtime this generator writes for `tests/generated/<project>/
+/// <project>.ecore`, one of ST.05's K7 to K9 metamodels, against the interpreted runtime, on
+/// every schedule of those scenarios (`tests/generated/<project>/twin.rs`). First, the
+/// descriptor this generator writes for the metamodel must be, value for value, the one K7 to K9
+/// build in code, but for the package's name and nsURI, so that the twin runs K7 to K9's
+/// metamodel. The generated crate's lines carrying `AR01-` are repeated here.
+fn ar01_twin(project: &str, boxes: bool) {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ecore = manifest_dir.join(format!("tests/generated/{project}/{project}.ecore"));
+    let parser = arachne_codegen::EcoreParser::from_file(&ecore)
+        .unwrap_or_else(|error| panic!("parsing `{}` failed: {error}", ecore.display()));
+    let pack = arachne_codegen::find_user_package(&parser.ctx).expect("the ecore has a package");
+    let described =
+        arachne_codegen::descriptor_json(&parser.ctx, pack).expect("the ecore is described");
+    assert_eq!(
+        described,
+        st05_recursive_descriptor(project, boxes),
+        "the descriptor of {project}.ecore is not the metamodel ST.05's K7 to K9 build in code"
+    );
+
+    let output = generate_build_and_test_with(
+        &format!("tests/generated/{project}/{project}.ecore"),
+        project,
+        &["--", "--nocapture", "--test-threads=1"],
+    );
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(at) = line.find("AR01-") {
+            eprintln!("{}", &line[at..]);
+        }
+    }
+}
+
+/// AR.01, A3, ST.05's K7: `Mid.sub` holds `Mid` (the round-2 probe's metamodel).
+#[test]
+fn ar01_k7_twin_a_class_whose_keyed_collection_holds_its_own_class() {
+    ar01_twin("st05probe", false);
+}
+
+/// AR.01, A3, ST.05's K8 and K9: `Mid.sub` holds `Mid`, and `Box.sub` holds `Mid` while
+/// `Mid.boxes` holds `Box`.
+#[test]
+fn ar01_k8_k9_twin_classes_that_reach_themselves_through_keyed_collections() {
+    ar01_twin("st05cycles", true);
+}
