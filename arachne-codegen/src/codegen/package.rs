@@ -545,7 +545,6 @@ impl<'a> PackageGenerator<'a> {
             }
         }
     }
-
 }
 
 impl<'a> Generate for PackageGenerator<'a> {

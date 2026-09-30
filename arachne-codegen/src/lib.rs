@@ -716,7 +716,10 @@ mod tests {
         );
 
         assert!(classifiers.contains("__classifiers::record!(A{"));
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(B,BLog=>BValue));"));
+        assert!(
+            classifiers
+                .contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(B,BLog=>BValue));")
+        );
     }
 
     #[test]
@@ -759,9 +762,17 @@ mod tests {
             "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
         );
 
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(BKind,BKindLog=>BKindValue));"));
-        assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog=>BValue)|C(C,CLog=>CValue));"));
-        assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>=>Option<AKindValue>,}"));
+        assert!(classifiers.contains(
+            "__classifiers::union!(AKind=A(A,ALog=>AValue)|B(BKind,BKindLog=>BKindValue));"
+        ));
+        assert!(
+            classifiers
+                .contains("__classifiers::union!(BKind=B(B,BLog=>BValue)|C(C,CLog=>CValue));")
+        );
+        assert!(
+            classifiers
+                .contains("D{child:__classifiers::OptionLog<AKindLog>=>Option<AKindValue>,}")
+        );
     }
 
     #[test]
@@ -875,7 +886,9 @@ mod tests {
 
         let (classifiers, references) = generate_modules_from_str(&ecore);
 
-        assert!(classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog=>BazValue));"));
+        assert!(
+            classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog=>BazValue));")
+        );
         assert!(classifiers.contains("__classifiers::record!(Abstract{"));
         assert!(classifiers.contains(
             "name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>"

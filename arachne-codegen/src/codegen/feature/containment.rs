@@ -144,12 +144,10 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 };
             imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
 
-            let (entry_value, entry_imports) =
-                value_value.keyed_by(&key_ty, &path).into_parts();
+            let (entry_value, entry_imports) = value_value.keyed_by(&key_ty, &path).into_parts();
             imports.extend(entry_imports);
 
-            let stream =
-                quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> => #entry_value };
+            let stream = quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> => #entry_value };
             return Ok(Fragment::new(stream, imports, warnings));
         }
 
