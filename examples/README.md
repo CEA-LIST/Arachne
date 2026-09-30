@@ -54,3 +54,11 @@ We also provide a set of "pet" metamodels ([/pet_metamodels](./pet_metamodels/))
 Two things about it are worth reading before it is changed. A `Diagram`'s `element` is the 32-hex id of the model it depicts, which is how an editor pairs the two with nothing recorded on the node; and every coordinate carries `urn:arachne:semantics` `datatype="lww-register"`, because a plain `EInt` derives to a **resettable counter** and two people dragging one box would sum their moves rather than settle on one of them.
 
 `notation.metamodel.json` is `arachne describe notation.ecore`, and `examples/fixtures/metamodel-digests.json` records its identity as it does for the case studies.
+
+## The UML class-diagram metamodel
+
+[`umlclass.ecore`](./umlclass.ecore) succeeds `SimpleUML.ecore` for class diagrams. It covers the class-diagram subset of UML 2.5.1 (Package, Class, Interface, DataType, PrimitiveType, Enumeration, Property, Operation, Parameter, Association with its ends, Generalization, InterfaceRealization, Dependency, Usage, Comment) and uses Eclipse UML2's names for every class, feature, enumeration and literal, so that a model built on it can later be mapped to Papyrus Web by name. It is written here, not derived from [`UML.ecore`](./UML.ecore), which stays only as the reference for those names. A model created under it gets an id ending in `_umlclass`.
+
+Three things about it are worth reading before it is changed. References carry the target's `name`, as SimpleUML's do, so every element a reference points at must be named. `lower` and `upper` are stored `EInt` attributes with `urn:arachne:semantics` `datatype="mv-register"`, so two concurrent bound changes stay visible instead of summing as a counter would. Only two `eOpposite` pairs are declared, `Classifier.generalization` with `Generalization.specific` and `BehavioredClassifier.interfaceRealization` with `InterfaceRealization.implementingClassifier`, which is how a reader of the descriptor tells the owning end of those two relationships.
+
+`umlclass.metamodel.json` is `arachne describe umlclass.ecore`; the digest fixture has no entry for it yet.
