@@ -72,6 +72,8 @@ pub struct Structural {
     pub resolve_proxies: Option<bool>,
     /// Raw `eKeys` of the reference, in document order; they are not resolved.
     pub keys: Vec<String>,
+    /// Raw `eOpposite` of the reference, *e.g.* `#//Class/feature`; it is not resolved.
+    pub opposite: Option<String>,
 }
 impl Structural {
     pub fn new(name: impl Into<String>, kind: Typ, typ: idx::Class, bounds: Bounds) -> Self {
@@ -95,6 +97,7 @@ impl Structural {
             annotations: Annots::with_capacity(2),
             resolve_proxies: None,
             keys: Vec::new(),
+            opposite: None,
         }
     }
 
@@ -124,6 +127,7 @@ impl Structural {
             annotations: Annots::with_capacity(2),
             resolve_proxies: None,
             keys: Vec::new(),
+            opposite: None,
         }
     }
 
@@ -238,5 +242,13 @@ impl Structural {
     }
     pub fn add_key(&mut self, key: impl Into<String>) {
         self.keys.push(key.into())
+    }
+    /// Raw `eOpposite` of the reference, as written in the XML attribute, *e.g.*
+    /// `#//Class/feature`; it is not resolved, and nothing keeps the two ends in step.
+    pub fn opposite(&self) -> Option<&str> {
+        self.opposite.as_deref()
+    }
+    pub fn set_opposite(&mut self, opposite: impl Into<String>) {
+        self.opposite = Some(opposite.into())
     }
 }

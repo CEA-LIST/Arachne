@@ -1261,11 +1261,12 @@ impl<'input> Parser<'input> {
         }
         if let Some(opposite) = opposite {
             warn!(
-                "Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` attributes are currently not supported, ignoring",
+                "Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` is recorded as written, but the two ends are not kept in step",
                 name,
                 ctx.current().name(),
                 opposite,
-            )
+            );
+            structural.set_opposite(opposite);
         }
 
         // If early_done, parse nested content like eAnnotations

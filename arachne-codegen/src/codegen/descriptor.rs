@@ -299,6 +299,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "ordered": feature.ordered.unwrap_or(true),
                     });
                     add_semantics(&mut containment, ctx, class, feature);
+                    add_declarations(&mut containment, feature);
                     containments.push(containment);
                 } else {
                     let mut reference = json!({
@@ -308,6 +309,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "required": required,
                     });
                     add_semantics(&mut reference, ctx, class, feature);
+                    add_declarations(&mut reference, feature);
                     references.push(reference);
                 }
             }
@@ -349,6 +351,49 @@ fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structur
         .unwrap_or(Value::Null);
     entry["merge"] = semantics::merge_json(&merge, ctx);
     entry["provenance"] = semantics::provenance_json(&provenance);
+}
+
+/// Adds to one reference entry what the `.ecore` declares about which end is
+/// whose: `eOpposite`, the name of the opposite reference on the target class,
+/// and `subsets` and `redefines`, one `{"class", "feature"}` object per entry
+/// of the `references` of every `EAnnotation` with that `source`, in document
+/// order.
+///
+/// Each key is written only when the `.ecore` declares at least one such
+/// thing, so the descriptor of a metamodel that declares none is unchanged,
+/// byte for byte, and keeps its digest. They are data for a reader of the
+/// descriptor: no merge rule reads them, and nothing keeps two opposite ends
+/// in step.
+fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
+    if let Some(opposite) = feature.opposite() {
+        let name = opposite.rsplit('/').next().unwrap_or(opposite);
+        entry["eOpposite"] = json!(name);
+    }
+    for source in ["subsets", "redefines"] {
+        let declared: Vec<Value> = feature
+            .annotations()
+            .iter()
+            .filter(|annot| annot.source() == source)
+            .flat_map(|annot| annot.references())
+            .map(|reference| {
+                let (class, name) = class_and_feature(reference);
+                json!({"class": class, "feature": name})
+            })
+            .collect();
+        if !declared.is_empty() {
+            entry[source] = Value::Array(declared);
+        }
+    }
+}
+
+/// The last two segments of a `#//Class/feature` fragment: the class and the
+/// feature it names.
+fn class_and_feature(reference: &str) -> (&str, &str) {
+    let path = reference.rsplit('#').next().unwrap_or(reference);
+    let mut segments = path.rsplit('/');
+    let feature = segments.next().unwrap_or("");
+    let class = segments.next().unwrap_or("");
+    (class, feature)
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the

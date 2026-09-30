@@ -134,6 +134,7 @@
       "containments": [
         {
           "annotation": null,
+          "eOpposite": "owner",
           "facets": {
             "ordered": null,
             "unique": null
@@ -396,6 +397,7 @@
       "containments": [
         {
           "annotation": null,
+          "eOpposite": "owner",
           "facets": {
             "ordered": null,
             "unique": null
@@ -433,6 +435,7 @@
       "references": [
         {
           "annotation": null,
+          "eOpposite": "ownedElements",
           "facets": {
             "ordered": null,
             "unique": null
@@ -494,6 +497,7 @@
         },
         {
           "annotation": null,
+          "eOpposite": "attributes",
           "facets": {
             "ordered": null,
             "unique": null
