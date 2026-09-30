@@ -13,6 +13,14 @@
 //! ```bash
 //! nice -n 10 cargo test -j 2 -p arachne-codegen --test ar01_regeneration -- --nocapture
 //! ```
+//!
+//! AR.02 (`cea-cdrt-knowledge/spec/items/AR.02.md`) amends one of the 35 comparisons, and only
+//! the bytes it expects. From AR.02 on the descriptor carries the `eOpposite`, `subsets` and
+//! `redefines` an `.ecore` declares, and `SimpleUML.ecore` declares four `eOpposite`, so
+//! `simpleuml_crdt/metamodel.json` is written with them. The checked-in crate is not
+//! regenerated: that file is compared against the checked-in one with exactly those four keys
+//! set (`AR02_OPPOSITES`), rendered as the generator renders a descriptor (`{:#}` and a
+//! newline). The other 34 files are compared byte for byte as before.
 
 use std::{
     collections::BTreeSet,
@@ -21,6 +29,7 @@ use std::{
 };
 
 use arachne_codegen::{Config, generate_with_report};
+use serde_json::{Value, json};
 
 /// Each checked-in crate, under `generated/`, and the metamodel it was generated from.
 const CRATES: [(&str, &str); 5] = [
@@ -68,6 +77,43 @@ fn files(root: &Path) -> BTreeSet<String> {
         }
     }
     out
+}
+
+/// AR.02: the `eOpposite` declarations of `SimpleUML.ecore` (lines 13, 23, 34, 62), as
+/// `(crate, class, feature, opposite)`, read by hand.
+const AR02_OPPOSITES: [(&str, &str, &str, &str); 4] = [
+    ("simpleuml_crdt", "Package", "ownedElements", "owner"),
+    ("simpleuml_crdt", "Packageable", "owner", "ownedElements"),
+    ("simpleuml_crdt", "DataType", "attributes", "owner"),
+    ("simpleuml_crdt", "Property", "owner", "attributes"),
+];
+
+/// The bytes the generator must write for `file` of `krate`: the checked-in bytes, except for a
+/// descriptor AR.02 adds declarations to, which is the checked-in descriptor with them set.
+fn expected_bytes(krate: &str, file: &str, checked_in: Vec<u8>) -> Vec<u8> {
+    let declared: Vec<_> = AR02_OPPOSITES
+        .iter()
+        .filter(|(k, ..)| *k == krate)
+        .collect();
+    if file != "metamodel.json" || declared.is_empty() {
+        return checked_in;
+    }
+    let mut descriptor: Value = serde_json::from_slice(&checked_in)
+        .unwrap_or_else(|e| panic!("set-up: {krate}/{file} is not JSON: {e}"));
+    for (_, class, feature, opposite) in declared {
+        let entry = ["containments", "references"]
+            .iter()
+            .find_map(|array| {
+                let position = descriptor["classes"][class][*array]
+                    .as_array()?
+                    .iter()
+                    .position(|entry| entry["name"] == json!(feature))?;
+                Some((*array, position))
+            })
+            .unwrap_or_else(|| panic!("set-up: {krate}/{file} has no `{class}.{feature}`"));
+        descriptor["classes"][class][entry.0][entry.1]["eOpposite"] = json!(opposite);
+    }
+    format!("{descriptor:#}\n").into_bytes()
 }
 
 /// Where two byte strings first differ, as a 1-based line number.
@@ -118,6 +164,7 @@ fn ar01_the_five_checked_in_crates_regenerate_byte_for_byte() {
             let checked_in = repo.join("generated").join(krate).join(file);
             let checked_in = fs::read(&checked_in)
                 .unwrap_or_else(|e| panic!("reading {}: {e}", checked_in.display()));
+            let checked_in = expected_bytes(krate, file, checked_in);
             let regenerated = fs::read(output.join(file)).unwrap_or_default();
             if regenerated != checked_in {
                 differing.push(format!(
