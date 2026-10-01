@@ -1,0 +1,315 @@
+{
+  "json": {
+    "version": "1.0",
+    "encoding": "utf-8"
+  },
+  "ns": {
+    "sysml": "http://www.eclipse.org/syson/sysml"
+  },
+  "content": [
+    {
+      "id": "425ce862-ae11-4788-a052-85bff9e258b5",
+      "eClass": "sysml:Namespace",
+      "data": {
+        "eAnnotations": [
+          {
+            "source": "cea.crdt.ed12.excerpt"
+          }
+        ],
+        "elementId": "5eee6f92",
+        "ownedRelationship": [
+          {
+            "id": "af05c457-1fdd-4fcb-b928-0ebfb89db9e8",
+            "eClass": "sysml:OwningMembership",
+            "data": {
+              "elementId": "d350eecd",
+              "ownedRelatedElement": [
+                {
+                  "id": "69eec947-1aca-44c5-8a48-1b55c4f8cca1",
+                  "eClass": "sysml:Package",
+                  "data": {
+                    "declaredName": "Survey",
+                    "elementId": "7d643115",
+                    "ownedRelationship": [
+                      {
+                        "id": "650fa7c4-11a1-43cf-beb4-5d9a94186997",
+                        "eClass": "sysml:OwningMembership",
+                        "data": {
+                          "elementId": "0acb0c4f",
+                          "ownedRelatedElement": [
+                            {
+                              "id": "c3fb85d7-54b6-40ba-b921-6b60462cb003",
+                              "eClass": "sysml:PartDefinition",
+                              "data": {
+                                "declaredName": "Drone",
+                                "elementId": "bd4d3311",
+                                "ownedRelationship": [
+                                  {
+                                    "id": "c9779c2e-8c3a-4fef-acf4-bed6f64570af",
+                                    "eClass": "sysml:Subclassification",
+                                    "data": {
+                                      "elementId": "bf55b379",
+                                      "subclassifier": "c3fb85d7-54b6-40ba-b921-6b60462cb003",
+                                      "superclassifier": "4852e97e-1bf1-4d28-ad07-46b9105c9e8b"
+                                    }
+                                  },
+                                  {
+                                    "id": "48dc50ae-efb3-4af1-9e1f-10792991e2b2",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "e82532b8",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "39d7a8a5-68ba-48f7-992a-747e39a98e10",
+                                          "eClass": "sysml:PartUsage",
+                                          "data": {
+                                            "declaredName": "rotors",
+                                            "elementId": "e31fbe61",
+                                            "isComposite": true,
+                                            "ownedRelationship": [
+                                              {
+                                                "id": "5567bb00-c5d1-4e2c-a1a4-ffeee61061d2",
+                                                "eClass": "sysml:FeatureTyping",
+                                                "data": {
+                                                  "elementId": "09bf32ac",
+                                                  "type": "4ddff68b-c736-498f-a034-b495ff3dc86c",
+                                                  "typedFeature": "39d7a8a5-68ba-48f7-992a-747e39a98e10"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "id": "13536120-4c76-471d-b45e-33a6289664d8",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "0a235a2c",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "b653f411-c959-467b-9892-26686949d54d",
+                                          "eClass": "sysml:PartUsage",
+                                          "data": {
+                                            "declaredName": "leadRotor",
+                                            "elementId": "cc621504",
+                                            "isComposite": true,
+                                            "ownedRelationship": [
+                                              {
+                                                "id": "304a3eb1-3c01-4398-8f91-1dc7bdcd0abf",
+                                                "eClass": "sysml:Subsetting",
+                                                "data": {
+                                                  "elementId": "ad5d8ae2",
+                                                  "subsettedFeature": "39d7a8a5-68ba-48f7-992a-747e39a98e10",
+                                                  "subsettingFeature": "b653f411-c959-467b-9892-26686949d54d"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "id": "a4f595bd-0f2f-4391-8108-9a5f50b61d41",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "bbe849e9",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "41f00fb6-50cb-4f35-9b3c-50a2e13ef920",
+                                          "eClass": "sysml:PartUsage",
+                                          "data": {
+                                            "declaredName": "pack",
+                                            "elementId": "e4a6e07f",
+                                            "isComposite": true,
+                                            "ownedRelationship": [
+                                              {
+                                                "id": "639eaa33-c536-4962-8953-9b2ea6496431",
+                                                "eClass": "sysml:FeatureTyping",
+                                                "data": {
+                                                  "elementId": "f9123609",
+                                                  "type": "5e4040d8-060c-4df9-a056-88f14ddd72c9",
+                                                  "typedFeature": "41f00fb6-50cb-4f35-9b3c-50a2e13ef920"
+                                                }
+                                              },
+                                              {
+                                                "id": "3460a184-3738-40b2-be84-70e8ba0678ab",
+                                                "eClass": "sysml:Redefinition",
+                                                "data": {
+                                                  "elementId": "cebf7167",
+                                                  "redefinedFeature": "d45e592e-b8fa-4906-a768-1dca9b98f21d",
+                                                  "redefiningFeature": "41f00fb6-50cb-4f35-9b3c-50a2e13ef920"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "id": "ce6000d9-9927-4e18-a001-07441ecbde4e",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "aca71edf",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "8c55582e-a924-484f-8e10-9a6bfb7f2a7c",
+                                          "eClass": "sysml:PortUsage",
+                                          "data": {
+                                            "declaredName": "telemetry",
+                                            "elementId": "923a11ab",
+                                            "isComposite": true,
+                                            "ownedRelationship": [
+                                              {
+                                                "id": "2fd748c7-0473-4c53-84f7-da294dd6e189",
+                                                "eClass": "sysml:FeatureTyping",
+                                                "data": {
+                                                  "elementId": "afb92e93",
+                                                  "type": "d4d851ef-d46a-4515-b1e7-5250ec1796b8",
+                                                  "typedFeature": "8c55582e-a924-484f-8e10-9a6bfb7f2a7c"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "id": "8d9cc74f-e9b8-41f6-901b-543d9c318389",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "a576cc07",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "e51e128a-839b-4999-b026-e410c0d45381",
+                                          "eClass": "sysml:AttributeUsage",
+                                          "data": {
+                                            "declaredName": "payload",
+                                            "elementId": "ba33fa06",
+                                            "isComposite": true,
+                                            "ownedRelationship": [
+                                              {
+                                                "id": "0a74f2fc-85fe-4e22-8e6e-eba4d3c46612",
+                                                "eClass": "sysml:FeatureTyping",
+                                                "data": {
+                                                  "elementId": "2c09fb6d",
+                                                  "type": "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66",
+                                                  "typedFeature": "e51e128a-839b-4999-b026-e410c0d45381"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "291d8165-922f-4222-8e39-3e022de19f49",
+                        "eClass": "sysml:OwningMembership",
+                        "data": {
+                          "elementId": "0b27736f",
+                          "ownedRelatedElement": [
+                            {
+                              "id": "4852e97e-1bf1-4d28-ad07-46b9105c9e8b",
+                              "eClass": "sysml:PartDefinition",
+                              "data": {
+                                "declaredName": "Craft",
+                                "elementId": "11ad5661",
+                                "isAbstract": true,
+                                "ownedRelationship": [
+                                  {
+                                    "id": "d81abf44-1817-4dd7-9600-0d528a548c60",
+                                    "eClass": "sysml:FeatureMembership",
+                                    "data": {
+                                      "elementId": "d0b7bd17",
+                                      "ownedRelatedElement": [
+                                        {
+                                          "id": "d45e592e-b8fa-4906-a768-1dca9b98f21d",
+                                          "eClass": "sysml:PartUsage",
+                                          "data": {
+                                            "declaredName": "powerUnit",
+                                            "elementId": "d3555e79",
+                                            "isComposite": true
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "503848ea-2284-4fa0-8626-e75478deffde",
+                        "eClass": "sysml:OwningMembership",
+                        "data": {
+                          "elementId": "acbf0ece",
+                          "ownedRelatedElement": [
+                            {
+                              "id": "4ddff68b-c736-498f-a034-b495ff3dc86c",
+                              "eClass": "sysml:PartDefinition",
+                              "data": {
+                                "declaredName": "Rotor",
+                                "elementId": "209ba027"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "08861a78-e954-412a-a583-4319ea0853b1",
+                        "eClass": "sysml:OwningMembership",
+                        "data": {
+                          "elementId": "2f937ba9",
+                          "ownedRelatedElement": [
+                            {
+                              "id": "5e4040d8-060c-4df9-a056-88f14ddd72c9",
+                              "eClass": "sysml:PartDefinition",
+                              "data": {
+                                "declaredName": "Battery",
+                                "elementId": "bc5c3781"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "31dfac98-71a1-4f21-b4af-9351305da4b6",
+                        "eClass": "sysml:OwningMembership",
+                        "data": {
+                          "elementId": "a833babd",
+                          "ownedRelatedElement": [
+                            {
+                              "id": "d4d851ef-d46a-4515-b1e7-5250ec1796b8",
+                              "eClass": "sysml:PortDefinition",
+                              "data": {
+                                "declaredName": "DataLink",
+                                "elementId": "c7076408"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

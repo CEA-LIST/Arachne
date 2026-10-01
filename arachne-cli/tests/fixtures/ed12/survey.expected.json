@@ -1,0 +1,209 @@
+{
+  "eClass": "Namespace",
+  "eAnnotations": [
+    {
+      "eClass": "ecore::EAnnotation",
+      "source": "cea.crdt.ed12.excerpt"
+    }
+  ],
+  "elementId": "5eee6f92",
+  "ownedRelationship": [
+    {
+      "eClass": "OwningMembership",
+      "elementId": "d350eecd",
+      "ownedRelatedElement": [
+        {
+          "eClass": "Package",
+          "declaredName": "Survey",
+          "elementId": "7d643115",
+          "ownedRelationship": [
+            {
+              "eClass": "OwningMembership",
+              "elementId": "0acb0c4f",
+              "ownedRelatedElement": [
+                {
+                  "eClass": "PartDefinition",
+                  "declaredName": "Drone",
+                  "elementId": "bd4d3311",
+                  "ownedRelationship": [
+                    {
+                      "eClass": "Subclassification",
+                      "elementId": "bf55b379",
+                      "subclassifier": "bd4d3311",
+                      "superclassifier": "11ad5661"
+                    },
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "e82532b8",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "PartUsage",
+                          "declaredName": "rotors",
+                          "elementId": "e31fbe61",
+                          "isComposite": true,
+                          "ownedRelationship": [
+                            {
+                              "eClass": "FeatureTyping",
+                              "elementId": "09bf32ac",
+                              "type": "209ba027",
+                              "typedFeature": "e31fbe61"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "0a235a2c",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "PartUsage",
+                          "declaredName": "leadRotor",
+                          "elementId": "cc621504",
+                          "isComposite": true,
+                          "ownedRelationship": [
+                            {
+                              "eClass": "Subsetting",
+                              "elementId": "ad5d8ae2",
+                              "subsettedFeature": "e31fbe61",
+                              "subsettingFeature": "cc621504"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "bbe849e9",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "PartUsage",
+                          "declaredName": "pack",
+                          "elementId": "e4a6e07f",
+                          "isComposite": true,
+                          "ownedRelationship": [
+                            {
+                              "eClass": "FeatureTyping",
+                              "elementId": "f9123609",
+                              "type": "bc5c3781",
+                              "typedFeature": "e4a6e07f"
+                            },
+                            {
+                              "eClass": "Redefinition",
+                              "elementId": "cebf7167",
+                              "redefinedFeature": "d3555e79",
+                              "redefiningFeature": "e4a6e07f"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "aca71edf",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "PortUsage",
+                          "declaredName": "telemetry",
+                          "elementId": "923a11ab",
+                          "isComposite": true,
+                          "ownedRelationship": [
+                            {
+                              "eClass": "FeatureTyping",
+                              "elementId": "afb92e93",
+                              "type": "c7076408",
+                              "typedFeature": "923a11ab"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "a576cc07",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "AttributeUsage",
+                          "declaredName": "payload",
+                          "elementId": "ba33fa06",
+                          "isComposite": true,
+                          "ownedRelationship": [
+                            {
+                              "eClass": "FeatureTyping",
+                              "elementId": "2c09fb6d",
+                              "type": "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66",
+                              "typedFeature": "ba33fa06"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "eClass": "OwningMembership",
+              "elementId": "0b27736f",
+              "ownedRelatedElement": [
+                {
+                  "eClass": "PartDefinition",
+                  "declaredName": "Craft",
+                  "elementId": "11ad5661",
+                  "isAbstract": true,
+                  "ownedRelationship": [
+                    {
+                      "eClass": "FeatureMembership",
+                      "elementId": "d0b7bd17",
+                      "ownedRelatedElement": [
+                        {
+                          "eClass": "PartUsage",
+                          "declaredName": "powerUnit",
+                          "elementId": "d3555e79",
+                          "isComposite": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "eClass": "OwningMembership",
+              "elementId": "acbf0ece",
+              "ownedRelatedElement": [
+                {
+                  "eClass": "PartDefinition",
+                  "declaredName": "Rotor",
+                  "elementId": "209ba027"
+                }
+              ]
+            },
+            {
+              "eClass": "OwningMembership",
+              "elementId": "2f937ba9",
+              "ownedRelatedElement": [
+                {
+                  "eClass": "PartDefinition",
+                  "declaredName": "Battery",
+                  "elementId": "bc5c3781"
+                }
+              ]
+            },
+            {
+              "eClass": "OwningMembership",
+              "elementId": "a833babd",
+              "ownedRelatedElement": [
+                {
+                  "eClass": "PortDefinition",
+                  "declaredName": "DataLink",
+                  "elementId": "c7076408"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
