@@ -1154,4 +1154,78 @@ mod tests {
         assert_eq!(node.instance_class_name(), Some("org.example.Node"));
         assert_eq!(node.inst_name(), None);
     }
+
+    fn ecore_with_annotation_value(value: &str) -> String {
+        format!(
+            r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Root">
+        <eAnnotations source="http://www.eclipse.org/emf/2002/GenModel">
+            <details key="documentation" value="{value}"/>
+        </eAnnotations>
+    </eClassifiers>
+</ecore:EPackage>
+"##
+        )
+    }
+
+    /// `until_char_is` advances its byte cursor by one per `char` and then slices
+    /// the source by that cursor, so a multi-byte character near the end of an
+    /// attribute value puts the slice end inside the character and the parse
+    /// panics with "is not a char boundary".
+    #[test]
+    fn parses_a_non_ascii_attribute_value_ending_in_a_multibyte_char() {
+        for value in ["»", "«»x", "ℕx", "the «Focus»."] {
+            let ecore = ecore_with_annotation_value(value);
+            let parsed = std::panic::catch_unwind(|| Ctx::parse(&ecore).map(|_| ()));
+            match parsed {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => panic!("value {value:?} refused: {e:?}"),
+                Err(panic) => panic!(
+                    "value {value:?} panicked: {}",
+                    panic.downcast_ref::<String>().cloned().unwrap_or_default()
+                ),
+            }
+        }
+    }
+
+    /// The same one-per-`char` cursor, where the lag lands on a character
+    /// boundary: the value slice stops short of the closing quote and the file
+    /// is refused as malformed although it is well-formed XML.
+    #[test]
+    fn parses_a_non_ascii_attribute_value_followed_by_ascii() {
+        let ecore = ecore_with_annotation_value("a guillemet » inside an attribute value");
+        if let Err(e) = Ctx::parse(&ecore) {
+            panic!("refused: {e:?}");
+        }
+    }
+
+    /// Three-byte (`ℕ`) and four-byte (`𝔸`) characters, at the end of the value,
+    /// in the middle of it, and on their own: the value is read back whole.
+    #[test]
+    fn parses_attribute_values_with_three_and_four_byte_chars() {
+        for value in ["ℕ", "𝔸", "x ℕ", "x 𝔸", "ℕ𝔸 in the middle of a value", "𝔸ℕ𝔸"]
+        {
+            let ecore = ecore_with_annotation_value(value);
+            let ctx =
+                Ctx::parse(&ecore).unwrap_or_else(|e| panic!("value {value:?} refused: {e:?}"));
+            let root = ctx
+                .classes()
+                .iter()
+                .find(|class| class.name() == "Root")
+                .expect("Root classifier should exist");
+            let read = root
+                .annotations()
+                .iter()
+                .find_map(|annot| annot.details().get("documentation"))
+                .expect("documentation detail should exist");
+            assert_eq!(read, value);
+        }
+    }
 }
