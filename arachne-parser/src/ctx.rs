@@ -904,6 +904,83 @@ impl<'a, 'b> ClassCtx<'a, 'b> {
 mod tests {
     use super::Ctx;
 
+    /// A package with one class and one attribute, with no XML declaration before it and no
+    /// newline after it.
+    const BARE_PACKAGE: &str = r##"<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>"##;
+
+    const XML_DECLARATION: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+
+    fn assert_parses_bare_package(ecore: &str) {
+        let ctx = match Ctx::parse(ecore) {
+            Ok(ctx) => ctx,
+            Err(e) => panic!("refused: {e}"),
+        };
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        assert!(node
+            .structural()
+            .iter()
+            .any(|feature| feature.name == "label"));
+    }
+
+    /// `top` skips everything up to the first `>` without looking at it, `at_path` accepts the
+    /// end of input, and nothing asks for a package, so input with no `EPackage` in it parses as
+    /// an empty model.
+    #[test]
+    fn refuses_input_with_no_epackage_root() {
+        for input in [
+            "",
+            "hello world",
+            "<not ecore",
+            XML_DECLARATION,
+            "<foo>bar</foo>\n",
+        ] {
+            match Ctx::parse(input) {
+                Ok(_) => panic!("input {input:?} parsed as an empty model"),
+                Err(e) => assert!(
+                    e.to_string().contains("`ecore:EPackage`"),
+                    "input {input:?} refused without naming the missing root: {e}"
+                ),
+            }
+        }
+    }
+
+    /// `top` takes the first tag to be the XML declaration and throws it away, so a file that
+    /// starts with its `EPackage` loses that tag and is refused at its first classifier.
+    #[test]
+    fn parses_a_file_with_no_xml_declaration() {
+        assert_parses_bare_package(&format!("{BARE_PACKAGE}\n"));
+    }
+
+    /// `try_raw_tag` only matches a tag strictly shorter than the rest of the input, so a file
+    /// whose last bytes are `</ecore:EPackage>` is refused.
+    #[test]
+    fn parses_a_file_with_no_trailing_newline() {
+        assert_parses_bare_package(&format!("{XML_DECLARATION}{BARE_PACKAGE}"));
+    }
+
+    /// `top` skips to the first `<` one byte per character, so the three bytes of a byte order
+    /// mark leave the cursor inside it.
+    #[test]
+    fn parses_a_file_starting_with_a_byte_order_mark() {
+        assert_parses_bare_package(&format!("\u{feff}{XML_DECLARATION}{BARE_PACKAGE}\n"));
+    }
+
     #[test]
     fn parses_structural_feature_default_values() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
@@ -975,6 +1052,140 @@ mod tests {
         assert_eq!(target.resolve_proxies, Some(false));
     }
 
+    /// Runs `parse` and returns the warnings it logged on the current thread.
+    ///
+    /// The parser reports what it drops only through `log::warn!`, so this installs, once for the
+    /// test binary, a logger that keeps each thread's warnings apart.
+    fn with_warnings<T>(parse: impl FnOnce() -> T) -> (T, Vec<String>) {
+        use std::{cell::RefCell, sync::Once};
+
+        thread_local! {
+            static WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        }
+
+        struct Capture;
+        impl log::Log for Capture {
+            fn enabled(&self, metadata: &log::Metadata) -> bool {
+                metadata.level() == log::Level::Warn
+            }
+            fn log(&self, record: &log::Record) {
+                if self.enabled(record.metadata()) {
+                    WARNINGS.with(|warnings| warnings.borrow_mut().push(record.args().to_string()));
+                }
+            }
+            fn flush(&self) {}
+        }
+
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            log::set_logger(&Capture).expect("no other logger should be installed in unit tests");
+            log::set_max_level(log::LevelFilter::Warn);
+        });
+
+        WARNINGS.with(|warnings| warnings.borrow_mut().clear());
+        let res = parse();
+        (res, WARNINGS.with(RefCell::take))
+    }
+
+    /// `class_structural` reads `unsettable` and then neither stores it nor warns about it, so the
+    /// flag is dropped without a trace.
+    #[test]
+    fn warns_when_dropping_unsettable() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Feature">
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="direction"
+            unsettable="true"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            unsettable="false"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (parsed, warnings) = with_warnings(|| Ctx::parse(ecore));
+        parsed.expect("ecore should parse");
+
+        let unsettable: Vec<_> = warnings
+            .iter()
+            .filter(|warning| warning.contains("unsettable"))
+            .collect();
+        assert_eq!(
+            unsettable.len(),
+            1,
+            "expected one warning about `unsettable`, got {warnings:?}"
+        );
+        assert!(
+            unsettable[0].contains("`Feature`") && unsettable[0].contains("`direction`"),
+            "the warning does not name `Feature.direction`: {}",
+            unsettable[0]
+        );
+    }
+
+    /// The warning for a dropped `eOpposite` names neither the feature nor its opposite, so a
+    /// metamodel with many of them gives no way to tell which were lost.
+    #[test]
+    fn names_the_feature_when_dropping_eopposite() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Teacher">
+        <eStructuralFeatures xsi:type="ecore:EReference"
+            name="advises"
+            upperBound="-1"
+            eType="#//Student"
+            eOpposite="#//Student/advisor"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Student">
+        <eStructuralFeatures xsi:type="ecore:EReference"
+            name="advisor"
+            eType="#//Teacher"
+            eOpposite="#//Teacher/advises"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let (parsed, warnings) = with_warnings(|| Ctx::parse(ecore));
+        parsed.expect("ecore should parse");
+
+        let opposite: Vec<_> = warnings
+            .iter()
+            .filter(|warning| warning.contains("eOpposite"))
+            .collect();
+        assert_eq!(
+            opposite.len(),
+            2,
+            "expected one warning about `eOpposite` per reference, got {warnings:?}"
+        );
+        for (class, feature, path) in [
+            ("Teacher", "advises", "#//Student/advisor"),
+            ("Student", "advisor", "#//Teacher/advises"),
+        ] {
+            assert!(
+                opposite.iter().any(|warning| {
+                    warning.contains(&format!("`{class}`"))
+                        && warning.contains(&format!("`{feature}`"))
+                        && warning.contains(path)
+                }),
+                "no warning names `{class}.{feature}` and `{path}`: {opposite:?}"
+            );
+        }
+    }
+
     #[test]
     fn parses_operation_annotations() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
@@ -1016,6 +1227,145 @@ mod tests {
             .details()
             .get("body")
             .is_some_and(|body| body.contains("ArrayList&lt;SignalType>")));
+    }
+
+    /// `annotation` reads a `source` attribute and then requires `>`, so an annotation closed
+    /// with `/>` is refused, although it is how Ecore writes an annotation with no details.
+    #[test]
+    fn parses_self_closing_annotations() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eAnnotations source="on-package"/>
+    <eClassifiers xsi:type="ecore:EClass" name="Node">
+        <eAnnotations source="on-class" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="label"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString">
+            <eAnnotations source="on-feature"/>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EAttribute"
+            name="count"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let sources = |annotations: &[crate::repr::Annot]| {
+            annotations
+                .iter()
+                .map(|annotation| annotation.source().to_string())
+                .collect::<Vec<_>>()
+        };
+
+        let test = ctx
+            .packs()
+            .iter()
+            .find(|pack| pack.name() == "test")
+            .expect("test package should exist");
+        assert_eq!(sources(test.annotations()), ["on-package"]);
+
+        let node = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Node")
+            .expect("Node class should exist");
+        assert_eq!(sources(node.annotations()), ["on-class"]);
+
+        let label = node
+            .structural()
+            .iter()
+            .find(|feature| feature.name == "label")
+            .expect("label feature should exist");
+        assert_eq!(sources(label.annotations()), ["on-feature"]);
+        assert!(label.annotations()[0].details().is_empty());
+        assert!(label.annotations()[0].references().is_empty());
+
+        assert!(node
+            .structural()
+            .iter()
+            .any(|feature| feature.name == "count"));
+    }
+
+    /// `annotation` reads no attribute but `source`, so the `references` attribute that holds
+    /// `EAnnotation.references` is refused, in whichever order the two attributes come and
+    /// whether or not the annotation has details.
+    #[test]
+    fn parses_annotation_references() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test"
+    nsURI="http://example.org/test"
+    nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Step">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="parameter" upperBound="-1" eType="#//Step"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Usage">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="nested" upperBound="-1" eType="#//Usage"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="documented" eType="#//Usage">
+            <eAnnotations source="subsets" references="#//Step/parameter
+                #//Usage/nested">
+                <details key="note" value="kept"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="subsetting" upperBound="-1" eType="#//Usage">
+            <eAnnotations source="subsets" references="#//Usage/nested #//Step/parameter"/>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="redefining" eType="#//Usage">
+            <eAnnotations references="#//Usage/nested" source="redefines"/>
+        </eStructuralFeatures>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let ctx = Ctx::parse(ecore).expect("ecore should parse");
+        let usage = ctx
+            .classes()
+            .iter()
+            .find(|class| class.name() == "Usage")
+            .expect("Usage class should exist");
+        let annotation = |feature: &str| {
+            let feature = usage
+                .structural()
+                .iter()
+                .find(|candidate| candidate.name == feature)
+                .expect("feature should exist");
+            assert_eq!(feature.annotations().len(), 1);
+            feature.annotations()[0].clone()
+        };
+
+        let subsetting = annotation("subsetting");
+        assert_eq!(subsetting.source(), "subsets");
+        assert_eq!(
+            subsetting.references(),
+            ["#//Usage/nested", "#//Step/parameter"]
+        );
+        assert!(subsetting.details().is_empty());
+
+        let redefining = annotation("redefining");
+        assert_eq!(redefining.source(), "redefines");
+        assert_eq!(redefining.references(), ["#//Usage/nested"]);
+        assert!(redefining.details().is_empty());
+
+        let documented = annotation("documented");
+        assert_eq!(documented.source(), "subsets");
+        assert_eq!(
+            documented.references(),
+            ["#//Step/parameter", "#//Usage/nested"]
+        );
+        assert_eq!(
+            documented.details().get("note").map(String::as_str),
+            Some("kept")
+        );
     }
 
     #[test]

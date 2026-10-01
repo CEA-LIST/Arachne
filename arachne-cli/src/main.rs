@@ -92,6 +92,12 @@ fn main() -> ExitCode {
 }
 
 fn run_parse(args: ParseArgs) -> Result<()> {
+    if args.quiet {
+        init_logger_at("error");
+    } else {
+        init_logger(u8::from(args.verbose));
+    }
+
     if args.verbose {
         info!("{}", "Verbose mode enabled".blue());
     }
@@ -169,6 +175,10 @@ fn init_logger(verbosity: u8) {
         _ => "trace",
     };
 
+    init_logger_at(default_level);
+}
+
+fn init_logger_at(default_level: &str) {
     let env = env_logger::Env::default().filter_or("RUST_LOG", default_level);
     env_logger::Builder::from_env(env)
         .format_timestamp(None)

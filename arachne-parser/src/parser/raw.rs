@@ -49,12 +49,34 @@ impl<'input> Parser<'input> {
     }
 
     fn top(&mut self, ctx: &mut Ctx) -> Res<()> {
-        // ignore xml header
-        let _ = self.until_char('<', true);
-        let _ = self.until_char('>', true);
+        self.prolog()?;
+        if !self.tail().starts_with("<ecore:EPackage") {
+            bail!("expected an `ecore:EPackage` root element")
+        }
 
         let mut path = ctx.enter_root_pack()?;
         self.at_path(&mut path)
+    }
+
+    /// Skips what may come before the root element: a byte order mark, then whitespace, comments,
+    /// the XML declaration and processing instructions, each only if present.
+    fn prolog(&mut self) -> Res<()> {
+        const BYTE_ORDER_MARK: char = '\u{feff}';
+        if self.tail().starts_with(BYTE_ORDER_MARK) {
+            self.cursor += BYTE_ORDER_MARK.len_utf8();
+        }
+
+        loop {
+            self.ws_and_comments();
+            if !self.tail().starts_with("<?") {
+                return Ok(());
+            }
+            let Some(end) = self.tail().find("?>") else {
+                bail!("unterminated XML declaration or processing instruction")
+            };
+            let instruction = &self.tail()[..end + "?>".len()];
+            self.raw_tag(instruction)?;
+        }
     }
 }
 
@@ -192,7 +214,7 @@ impl<'input> Parser<'input> {
     pub fn try_raw_tag(&mut self, tag: impl AsRef<str>) -> bool {
         let tag = tag.as_ref();
         let tail = self.tail();
-        if tag.len() < self.tail().len() && tail.starts_with(tag) {
+        if tail.starts_with(tag) {
             for c in tag.chars() {
                 if c == '\n' {
                     self.line += 1;
@@ -702,17 +724,50 @@ impl<'input> Parser<'input> {
         Ok(())
     }
 
-    /// Parses everything **after** a `<eAnnotations` until a `</eAnnotations>`.
+    /// Parses everything **after** a `<eAnnotations` until a `/>` or a `</eAnnotations>`.
     ///
     /// Expects no leading whitespaces, as all parsers do except for the top-level one.
     pub fn annotation(&mut self) -> Res<repr::Annot> {
-        let source = self.named_xml_attribute("source")?;
-        self.ws();
-        self.tag(">")?;
-        let mut annot = repr::Annot::with_capacity(source, 3);
+        let (mut source, mut references) = (None, None);
+        // annotations XML tags can be closed directly with `/>`, or have details and end with
+        // `</eAnnotations>`; this flag indicates the former
+        let mut early_done = false;
 
-        // log::debug!("|==| post source:");
-        // self.debug_show_tail_n(2, "| ");
+        'attributes: loop {
+            self.ws();
+
+            if self.try_raw_tag("/>") {
+                early_done = true;
+                break 'attributes;
+            } else if self.try_raw_tag(">") {
+                break 'attributes;
+            }
+
+            let (key, val) = self.xml_ident_attribute()?;
+            match key {
+                "source" => {
+                    self.handle_redef("annotation", "source", source.as_ref(), val)?;
+                    source = Some(val);
+                }
+                "references" => {
+                    self.handle_redef("annotation", "references", references.as_ref(), val)?;
+                    references = Some(val);
+                }
+                _ => bail!(@unexpected("annotation attribute") key),
+            }
+        }
+
+        let source =
+            source.ok_or_else(|| error!(@unexpected("`eAnnotations`") "with no source"))?;
+        let mut annot = repr::Annot::with_capacity(source, 3);
+        for reference in references.into_iter().flat_map(str::split_whitespace) {
+            annot.add_reference(reference);
+        }
+
+        if early_done {
+            annot.shrink_to_fit();
+            return Ok(annot);
+        }
 
         // parse `<details
         'details: loop {
@@ -1144,8 +1199,20 @@ impl<'input> Parser<'input> {
         }
         structural.try_set_default_value(default_value);
         structural.try_set_default_value_literal(default_value_literal);
-        if opposite.is_some() {
-            warn!("`eOpposite` attributes are currently not supported, ignoring")
+        if unsettable.is_some_and(|unsettable| helpers::bool(unsettable).unwrap_or(false)) {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `unsettable=\"true\"`, which is currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+            )
+        }
+        if let Some(opposite) = opposite {
+            warn!(
+                "Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` attributes are currently not supported, ignoring",
+                name,
+                ctx.current().name(),
+                opposite,
+            )
         }
 
         // If early_done, parse nested content like eAnnotations

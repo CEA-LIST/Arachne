@@ -12,6 +12,7 @@ pub mod annot {
     pub type Source = String;
     pub type Key = String;
     pub type Val = String;
+    pub type Reference = String;
 }
 
 /// A package/class annotation.
@@ -22,6 +23,8 @@ pub mod annot {
 pub struct Annot {
     source: annot::Source,
     details: HashMap<annot::Key, annot::Val>,
+    /// Raw `references` of the annotation, in document order; they are not resolved.
+    references: Vec<annot::Reference>,
 }
 
 pub type Annots = Vec<Annot>;
@@ -38,11 +41,13 @@ impl Annot {
         Self {
             source: source.into(),
             details: HashMap::with_capacity(details_capa),
+            references: Vec::new(),
         }
     }
 
     pub fn shrink_to_fit(&mut self) {
-        self.details.shrink_to_fit()
+        self.details.shrink_to_fit();
+        self.references.shrink_to_fit()
     }
 
     pub fn source(&self) -> &str {
@@ -50,6 +55,16 @@ impl Annot {
     }
     pub fn details(&self) -> &HashMap<annot::Key, annot::Val> {
         &self.details
+    }
+    /// Raw `references` of the annotation, in document order.
+    ///
+    /// These are the paths as written in the XML attribute, *e.g.* `#//Class/feature`, and are not
+    /// resolved.
+    pub fn references(&self) -> &[annot::Reference] {
+        &self.references
+    }
+    pub fn add_reference(&mut self, reference: impl Into<annot::Reference>) {
+        self.references.push(reference.into())
     }
 
     /// Same as [`HashMap`]'s `insert` function, but fails with context on overwrite.
