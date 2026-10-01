@@ -1,8 +1,7 @@
 use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
 use log::warn;
 
-use crate::codegen::classifier::is_instantiable_class;
-use crate::utils::hash::HashSet;
+use crate::{codegen::classifier::is_instantiable_class, utils::hash::HashSet};
 
 /// A non-containment reference in the Ecore model.
 #[derive(Debug, Clone)]

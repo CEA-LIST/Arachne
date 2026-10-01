@@ -65,6 +65,10 @@ struct GenerateArgs {
     #[arg(short = 'p', long = "project-name")]
     project_name: Option<String>,
 
+    /// Use crates from a local Moirai workspace
+    #[arg(long, value_name = "DIRECTORY")]
+    moirai_path: Option<PathBuf>,
+
     /// Increase log verbosity (`-v`, `-vv`)
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
     verbose: u8,
@@ -125,6 +129,10 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
 
     if let Some(project_name) = args.project_name {
         config = config.with_project_name(project_name);
+    }
+
+    if let Some(path) = args.moirai_path {
+        config = config.with_moirai_path(path);
     }
 
     let start = Instant::now();

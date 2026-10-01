@@ -66,9 +66,6 @@ impl ToUseStatement for Crdt {
             Crdt::Simple(crdt) => match crdt {
                 SimpleCrdt::Primitive(primitive) => match primitive {
                     Primitive::Counter(counter) => match counter {
-                        Counter::Counter => {
-                            format!("{}::counter::simple_counter::Counter", CRDT_PREFIX)
-                        }
                         Counter::ResettableCounter => {
                             format!("{}::counter::resettable_counter::Counter", CRDT_PREFIX)
                         }
@@ -103,7 +100,7 @@ impl ToUseStatement for Crdt {
                     },
                     Collection::Graph(graph) => match graph {
                         Graph::AWMultigraph => {
-                            format!("{}::graph::aw_multigraph::AWMultigraph", CRDT_PREFIX)
+                            format!("{}::graph::aw_multidigraph::Graph", CRDT_PREFIX)
                         }
                     },
                     Collection::Bag(bag) => match bag {
@@ -116,7 +113,7 @@ impl ToUseStatement for Crdt {
                     Map::UWMap => format!("{}::map::uw_map::UWMapLog", CRDT_PREFIX),
                 },
                 NestedCrdt::List => format!("{}::list::nested_list::NestedListLog", CRDT_PREFIX),
-                NestedCrdt::Graph => format!("{}::graph::uw_multigraph::UWMultigraph", CRDT_PREFIX),
+                NestedCrdt::Graph => format!("{}::graph::uw_multidigraph::UWGraphLog", CRDT_PREFIX),
                 NestedCrdt::Optional => format!("{}::option::OptionLog", CRDT_PREFIX),
             },
         }
@@ -164,12 +161,13 @@ pub enum Protocol {
     EvalNested,
     IsLog,
     Version,
+    Frontier,
     ReplicaIdx,
     Policy,
     LwwPolicy,
     FairPolicy,
     Event,
-    PureCRDT,
+    ReplicatedDataType,
     QueryOperation,
     Sink,
     SinkEffect,
@@ -177,8 +175,6 @@ pub enum Protocol {
     EffectContext,
     PathSegment,
     ObjectPath,
-    Interner,
-    InternalizeOp,
     BoxedLog,
 }
 
@@ -192,12 +188,23 @@ impl ToUseStatement for Protocol {
             }
             Protocol::IsLog => format!("{}::state::log::IsLog", PROTOCOL_PREFIX),
             Protocol::Version => format!("{}::clock::version_vector::Version", PROTOCOL_PREFIX),
+            Protocol::Frontier => format!(
+                "{}::clock::causal_frontier::CausalFrontier",
+                PROTOCOL_PREFIX
+            ),
             Protocol::ReplicaIdx => format!("{}::replica::ReplicaIdx", PROTOCOL_PREFIX),
-            Protocol::LwwPolicy => format!("{}::policy::LwwPolicy", CRDT_PREFIX),
-            Protocol::FairPolicy => format!("{}::policy::FairPolicy", CRDT_PREFIX),
+            Protocol::LwwPolicy => {
+                format!("{}::crdt::policy::LwwPolicy", PROTOCOL_PREFIX)
+            }
+            Protocol::FairPolicy => {
+                format!("{}::crdt::policy::FairPolicy", PROTOCOL_PREFIX)
+            }
             Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
             Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
-            Protocol::PureCRDT => format!("{}::crdt::pure_crdt::PureCRDT", PROTOCOL_PREFIX),
+            Protocol::ReplicatedDataType => format!(
+                "{}::crdt::replicated_data_type::ReplicatedDataType",
+                PROTOCOL_PREFIX
+            ),
             Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
             Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
             Protocol::EffectContext => {
@@ -210,13 +217,6 @@ impl ToUseStatement for Protocol {
             ),
             Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
-            Protocol::Interner => format!("{}::broadcast::internalizer::Interner", PROTOCOL_PREFIX),
-            Protocol::InternalizeOp => {
-                format!(
-                    "{}::broadcast::internalizer::InternalizeOp",
-                    PROTOCOL_PREFIX
-                )
-            }
             Protocol::BoxedLog => format!("{}::state::log::BoxedLog", PROTOCOL_PREFIX),
         }
     }

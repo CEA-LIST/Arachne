@@ -16,6 +16,8 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Optional generated project name (Cargo package name)
     pub project_name: Option<String>,
+    /// Local Moirai workspace to use instead of the pinned Git revision.
+    pub moirai_path: Option<PathBuf>,
     /// Format output code
     pub format_code: Formatting,
 }
@@ -28,6 +30,7 @@ impl Config {
             input_path,
             output_dir: PathBuf::from(".output/generated_project"),
             project_name: None,
+            moirai_path: None,
             format_code: Formatting::Prettyplease,
         }
     }
@@ -44,6 +47,11 @@ impl Config {
         self
     }
 
+    pub fn with_moirai_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.moirai_path = Some(path.into());
+        self
+    }
+
     pub fn with_formatting(mut self, formatting: Formatting) -> Self {
         self.format_code = formatting;
         self
@@ -56,6 +64,22 @@ impl Config {
                 "Input file does not exist: {:?}",
                 self.input_path
             )));
+        }
+
+        if let Some(path) = &self.moirai_path {
+            for name in [
+                "moirai-protocol",
+                "moirai-crdt",
+                "moirai-macros",
+                "moirai-fuzz",
+            ] {
+                if !path.join(name).join("Cargo.toml").is_file() {
+                    return Err(crate::error::ArachneError::Config(format!(
+                        "Moirai workspace is missing {name}/Cargo.toml: {}",
+                        path.display()
+                    )));
+                }
+            }
         }
 
         Ok(())

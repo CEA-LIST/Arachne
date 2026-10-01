@@ -5,12 +5,12 @@
 In a POSIX shell:
 
 ```sh
-RUST_LOG=debug cargo run generate -vv -o <WHERE_TO_GENERATE_PROJECT> <PATH_TO_ECORE_METAMODEL>
+cargo run --locked -p arachne-cli -- generate <ECORE_FILE> --output <WHERE_TO_GENERATE>
 ```
 
 ## Case studies
 
-The `example` folder contains three metamodel case studies that demonstrate the capabilities of the code generator: Class Hierarchy, Behavior Tree, and JSON.
+The `examples` folder contains three metamodel case studies that demonstrate the capabilities of the code generator: Class Hierarchy, Behavior Tree, and JSON.
 
 | DSML            | Domain                             | # Model elements                                      | Characteristics                                  |
 | --------------- | ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------ |

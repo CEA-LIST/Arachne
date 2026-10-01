@@ -60,9 +60,13 @@ impl<'a> Generator<'a> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.tokens.iter().all(TokenStream::is_empty)
+    }
+
     pub fn build(self) -> TokenStream {
         let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, &self.path_mod)).unwrap();
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, self.path_mod)).unwrap();
         let imports = &self.imports;
         let tokens = &self.tokens;
 

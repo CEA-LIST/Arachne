@@ -160,8 +160,7 @@ impl<'a> ReferenceGenerator<'a> {
             .collect()
     }
 
-    /// Generate `#[derive(Debug, Clone, PartialEq, Eq, Hash)] pub struct {RefName}Edge;`
-    /// for each non-containment reference.
+    /// Generate an edge marker struct for each non-containment reference.
     fn generate_edge_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let mut seen = std::collections::HashSet::new();
         let edge_names = self.edge_type_names(analysis);
@@ -176,6 +175,7 @@ impl<'a> ReferenceGenerator<'a> {
 
                 Some(quote! {
                     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+                    #[cfg_attr(feature = "test_utils", derive(deepsize::DeepSizeOf))]
                     pub struct #edge_name;
                 })
             })

@@ -9,13 +9,17 @@ use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         annotation::{DatatypeOverride, datatype_override, uw_map_spec},
-        classifier::{containment_target_log_ident, is_uninhabited_polymorphic_class},
+        classifier::{
+            containment_target_log_ident, containment_target_value_ident,
+            is_uninhabited_polymorphic_class,
+        },
         cycles::{BoxingStrategy, CycleAnalysis},
         datatype::{
             crdt::{Crdt, Map, Named, NestedCrdt, Primitive, SimpleCrdt},
             to_crdt::ToCrdt,
         },
         feature::{
+            attribute::primitive_value_type,
             bounds::{BoundKind, normalize_bounds},
             typed_element::unsupported_feature_properties,
         },
@@ -70,10 +74,12 @@ impl<'a> Generate for ContainmentGenerator<'a> {
 
         let name = value_ident(&self.reference.name);
         let target_type = containment_target_log_ident(self.ctx, target_class);
+        let target_value_type = containment_target_value_ident(self.ctx, target_class);
         let boxing_strategy = self
             .cycle_analysis
             .boxing_strategy(self.source_class, &self.reference.name);
         let boxed_target_type = quote! { #path::BoxedLog<#target_type> };
+        let boxed_target_value_type = quote! { Box<#target_value_type> };
 
         if let Some(spec) = uw_map_spec(self.reference) {
             anyhow::ensure!(
@@ -126,21 +132,29 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                 })?
             };
 
-            let (value_log_ty, mut imports) =
+            let (value_log_ty, value_ty, mut imports) =
                 self.uw_map_value_log_type(target_class.idx, value_feature, &path)?;
             imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
 
-            let stream = quote! { #name: #path::UWMapLog<#key_ty, #value_log_ty> };
+            let stream = quote! {
+                #name: #path::UWMapLog<#key_ty, #value_log_ty>
+                    => rustc_hash::FxHashMap<#key_ty, #value_ty>
+            };
             return Ok(Fragment::new(stream, imports, warnings));
         }
 
-        let (field_type, imports) = match bound_kind {
+        let (field_type, value_type, imports) = match bound_kind {
             BoundKind::Single => {
                 if boxing_strategy == BoxingStrategy::NoBox {
-                    (quote! { #target_type }, vec![])
+                    (
+                        quote! { #target_type },
+                        quote! { #target_value_type },
+                        vec![],
+                    )
                 } else {
                     (
                         boxed_target_type.clone(),
+                        boxed_target_value_type.clone(),
                         vec![Import::Protocol(Protocol::BoxedLog)],
                     )
                 }
@@ -150,6 +164,11 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                     quote! { #path::OptionLog<#target_type> }
                 } else {
                     quote! { #path::OptionLog<#boxed_target_type> }
+                },
+                if boxing_strategy == BoxingStrategy::NoBox {
+                    quote! { Option<#target_value_type> }
+                } else {
+                    quote! { Option<#boxed_target_value_type> }
                 },
                 if boxing_strategy == BoxingStrategy::NoBox {
                     vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
@@ -167,6 +186,11 @@ impl<'a> Generate for ContainmentGenerator<'a> {
                     quote! { #path::NestedListLog<#boxed_target_type> }
                 },
                 if boxing_strategy == BoxingStrategy::NoBox {
+                    quote! { Vec<#target_value_type> }
+                } else {
+                    quote! { Vec<#boxed_target_value_type> }
+                },
+                if boxing_strategy == BoxingStrategy::NoBox {
                     vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))]
                 } else {
                     vec![
@@ -177,7 +201,7 @@ impl<'a> Generate for ContainmentGenerator<'a> {
             ),
         };
 
-        let stream = quote! { #name: #field_type };
+        let stream = quote! { #name: #field_type => #value_type };
 
         Ok(Fragment::new(stream, imports, warnings))
     }
@@ -189,7 +213,7 @@ impl<'a> ContainmentGenerator<'a> {
         entry_class: idx::Class,
         value_feature: &Structural,
         path: &syn::Path,
-    ) -> anyhow::Result<(TokenStream, Vec<Import>)> {
+    ) -> anyhow::Result<(TokenStream, TokenStream, Vec<Import>)> {
         match value_feature.kind {
             structural::Typ::EAttribute => {
                 let value_class = self.ctx.classes().get(*value_feature.typ.unwrap()).unwrap();
@@ -212,6 +236,10 @@ impl<'a> ContainmentGenerator<'a> {
                     primitive = override_primitive;
                 }
 
+                let rust_value_ty = rust_ty
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("Attribute must have a Rust value type"))?;
+                let value_ty = primitive_value_type(&primitive, &rust_value_ty);
                 let (log_ty, imports) = match primitive {
                     Primitive::Counter(_) => {
                         let rust_ty = rust_ty
@@ -258,7 +286,7 @@ impl<'a> ContainmentGenerator<'a> {
                         ],
                     ),
                 };
-                Ok((log_ty, imports))
+                Ok((log_ty, value_ty, imports))
             }
             structural::Typ::EReference => {
                 anyhow::ensure!(
@@ -273,20 +301,24 @@ impl<'a> ContainmentGenerator<'a> {
                     value_class.name()
                 );
                 let value_log = containment_target_log_ident(self.ctx, value_class);
+                let value_ty = containment_target_value_ident(self.ctx, value_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(entry_class, &value_feature.name);
-                let log_ty = if boxing_strategy == BoxingStrategy::NoBox {
-                    quote! { #value_log }
+                let (log_ty, read_ty) = if boxing_strategy == BoxingStrategy::NoBox {
+                    (quote! { #value_log }, quote! { #value_ty })
                 } else {
-                    quote! { #path::BoxedLog<#value_log> }
+                    (
+                        quote! { #path::BoxedLog<#value_log> },
+                        quote! { Box<#value_ty> },
+                    )
                 };
                 let imports = if boxing_strategy == BoxingStrategy::NoBox {
                     Vec::new()
                 } else {
                     vec![Import::Protocol(Protocol::BoxedLog)]
                 };
-                Ok((log_ty, imports))
+                Ok((log_ty, read_ty, imports))
             }
         }
     }

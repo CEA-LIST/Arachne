@@ -61,21 +61,38 @@ You can programmatically create one or several replicas of a generated CRDT, and
 
 ```rust
 // Create two replicas of the generated CRDT, each with a unique identifier and a list of replicas it can communicate with.
-let mut replica_a = Replica::<MyGeneratedCRDT>::bootstrap("a", &["a", "b"]);
-let mut replica_b = Replica::<MyGeneratedCRDT>::bootstrap("b", &["a", "b"]);
+use moirai_protocol::{
+    broadcast::tcsb::Tcsb,
+    crdt::query::Read,
+    replica::{IsReplica, Replica},
+};
+
+type ModelReplica = Replica<MyGeneratedLog, Tcsb<MyGeneratedCRDT>>;
+let mut replica_a = ModelReplica::bootstrap("a".into(), &["a", "b"]);
+let mut replica_b = ModelReplica::bootstrap("b".into(), &["a", "b"]);
 
 // Perform an operation on replica A
-let event_a = replica_a.send(MyGeneratedCRDT::SomeOperation { /* ... */ });
+let event_a = replica_a.send(MyGeneratedCRDT::SomeOperation { /* ... */ })
+    .expect("operation should be enabled");
 // Read the current state of replica A
-let returned_value_a = replica_a.query(Read::new());
+let returned_value_a = replica_a.query(&Read::new());
 
 // B receives the operation from A and applies it to its local state
 replica_b.receive(event_a);
 // Read the current state of replica B
-let returned_value_b = replica_b.query(Read::new());
+let returned_value_b = replica_b.query(&Read::new());
 
 // A and B have delivered the same operations in a causally consistent order, and thus have converged to the same state.
 assert_eq!(returned_value_a, returned_value_b);
+```
+
+Generated projects also expose a `ReadAsEcore` query that streams the replicated model as a standard Ecore XMI format.
+
+```rust
+use my_generated_crdt::read_as_ecore::ReadAsEcore;
+
+let xmi: Vec<u8> = replica_a.query(&ReadAsEcore::new());
+std::fs::write("model.xmi", xmi)?;
 ```
 
 ## Repository organization
@@ -84,6 +101,8 @@ assert_eq!(returned_value_a, returned_value_b);
   See the [parser README](./arachne-parser/README.md).
 - `arachne-codegen`: mapping analysis and Rust code generation.
   See the [codegen README](./arachne-codegen/README.md).
+- `arachne-xmi`: shared, `quick-xml`-backed XMI serialization runtime used by
+  generated projects.
 - `arachne-cli`: command-line interface exposed as `arachne`.
   See the [CLI README](./arachne-cli/README.md).
 - `examples`: input Ecore metamodels used to exercise the generator.

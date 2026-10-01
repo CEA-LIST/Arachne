@@ -30,6 +30,7 @@ use crate::{
 const CLASSIFIERS_PATH_MOD: &str = "classifiers";
 const REFERENCES_PATH_MOD: &str = "references";
 const PACKAGE_PATH_MOD: &str = "package";
+const READ_AS_ECORE_PATH_MOD: &str = "read_as_ecore";
 
 /// Metadata about the code generation process, including input/output paths, project/package names, and statistics about the generated code
 #[derive(Debug, Clone)]
@@ -84,18 +85,21 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     );
 
     info!("Generating Rust tokens");
-    let (classifiers, references, package, generated_class_count) =
+    let (classifiers, references, package, read_as_ecore, generated_class_count) =
         generate_from_parser(&parser, pack)?;
 
     // Emit any warnings collected during generation
     classifiers.emit_warnings();
     references.emit_warnings();
     package.emit_warnings();
+    read_as_ecore.emit_warnings();
 
     // Build the final TokenStream
+    let requires_sink = !references.is_empty();
     let classifiers_code = classifiers.build();
     let references_code = references.build();
     let package_code = package.build();
+    let read_as_ecore_code = read_as_ecore.build();
 
     // Choose a project name
     let project_name = config
@@ -112,6 +116,8 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         classifiers_code,
         references_code,
         package_code,
+        read_as_ecore_code,
+        requires_sink,
     )?;
 
     Ok(GenerationReport {
@@ -124,14 +130,22 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 }
 
 /// Generates code from a parsed Ecore context.
-/// Returns the generated classifiers CRDT objects and the generated reference management code
+/// Returns generators for classifiers, references, the package, and `ReadAsEcore`,
+/// followed by the number of generated classes.
 pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
-) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>, usize)> {
+) -> anyhow::Result<(
+    Generator<'a>,
+    Generator<'a>,
+    Generator<'a>,
+    Generator<'a>,
+    usize,
+)> {
     let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
     let mut references = Generator::new(REFERENCES_PATH_MOD);
     let mut package = Generator::new(PACKAGE_PATH_MOD);
+    let mut read_as_ecore = Generator::new(READ_AS_ECORE_PATH_MOD);
 
     let cycle_analysis = analyze_cycles(&parser.ctx)?;
 
@@ -251,11 +265,24 @@ pub fn generate_from_parser<'a>(
     let fragment = package_gen.generate()?;
     package.register(fragment);
 
-    let read_as_ecore_gen = ReadAsEcoreGenerator::new(&parser.ctx, pack.idx, top_level_roots);
+    let read_as_ecore_gen = ReadAsEcoreGenerator::new(
+        &parser.ctx,
+        pack.idx,
+        reachable_package_classes,
+        top_level_roots,
+        &reference_analysis,
+        &cycle_analysis,
+    );
     let fragment = read_as_ecore_gen.generate()?;
-    package.register(fragment);
+    read_as_ecore.register(fragment);
 
-    Ok((classifiers, references, package, generated_class_count))
+    Ok((
+        classifiers,
+        references,
+        package,
+        read_as_ecore,
+        generated_class_count,
+    ))
 }
 
 fn collect_reachable_classes(
@@ -451,8 +478,8 @@ mod tests {
             .iter()
             .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
             .expect("package should exist");
-        let (classifiers, references, _package, _generated_class_count) =
-            generate_from_parser(&parser, pack).expect("generation should succeed");
+        let (classifiers, references, _package, _read_as_ecore, _generated_class_count) =
+            generate_from_parser(parser, pack).expect("generation should succeed");
 
         (
             normalize(classifiers.build()),
@@ -478,8 +505,8 @@ mod tests {
             .iter()
             .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
             .expect("package should exist");
-        let (_classifiers, _references, package, _generated_class_count) =
-            generate_from_parser(&parser, pack).expect("generation should succeed");
+        let (_classifiers, _references, package, _read_as_ecore, _generated_class_count) =
+            generate_from_parser(parser, pack).expect("generation should succeed");
 
         normalize(package.build())
     }
@@ -493,6 +520,30 @@ mod tests {
     fn generate_package_from_str(ecore: &str) -> String {
         let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
         generate_package_from_parser(&parser)
+    }
+
+    fn generate_read_as_ecore_from_parser(parser: &EcoreParser) -> String {
+        let pack = parser
+            .ctx
+            .packs()
+            .iter()
+            .find(|p| p.name() != "[root]" && p.name() != "[builtin]")
+            .expect("package should exist");
+        let (_classifiers, _references, _package, read_as_ecore, _generated_class_count) =
+            generate_from_parser(parser, pack).expect("generation should succeed");
+
+        normalize(read_as_ecore.build())
+    }
+
+    fn generate_read_as_ecore_from_file(path: impl AsRef<Path>) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+        let parser = EcoreParser::from_file(path).expect("ecore should parse");
+        generate_read_as_ecore_from_parser(&parser)
+    }
+
+    fn generate_read_as_ecore_from_str(ecore: &str) -> String {
+        let parser = EcoreParser::from_string(ecore).expect("ecore should parse");
+        generate_read_as_ecore_from_parser(&parser)
     }
 
     #[test]
@@ -542,8 +593,20 @@ mod tests {
             "../examples/pet_metamodels/concrete_inherits_concrete.ecore",
         );
 
+        assert!(classifiers.contains("pubusemoirai_macros::record;"));
         assert!(classifiers.contains("__classifiers::record!(A{"));
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(B,BLog));"));
+        assert!(
+            classifiers
+                .contains("__classifiers::union!(AKind=A(A,ALog=>AValue)|B(B,BLog=>BValue));")
+        );
+    }
+
+    #[test]
+    fn union_only_models_do_not_import_the_record_macro() {
+        let (classifiers, _references) = generate_modules_from_file("../examples/json.ecore");
+
+        assert!(!classifiers.contains("pubusemoirai_macros::record;"));
+        assert!(classifiers.contains("pubusemoirai_macros::union;"));
     }
 
     #[test]
@@ -571,7 +634,7 @@ mod tests {
         let (classifiers, _references) = generate_modules_from_str(ecore);
 
         assert!(classifiers.contains(
-            "__classifiers::union!(TypesLibraryKind=NativeTypesLibrary(NativeTypesLibrary,NativeTypesLibraryLog)|UserDefinedTypesLibrary(UserDefinedTypesLibrary,UserDefinedTypesLibraryLog));"
+            "__classifiers::union!(TypesLibraryKind=NativeTypesLibrary(NativeTypesLibrary,NativeTypesLibraryLog=>NativeTypesLibraryValue)|UserDefinedTypesLibrary(UserDefinedTypesLibrary,UserDefinedTypesLibraryLog=>UserDefinedTypesLibraryValue));"
         ));
         assert!(classifiers.contains("pubenumTypesLibraryKindModel{"));
         assert!(classifiers.contains(
@@ -586,9 +649,17 @@ mod tests {
             "../examples/pet_metamodels/concrete_polymorphic_targets.ecore",
         );
 
-        assert!(classifiers.contains("__classifiers::union!(AKind=A(A,ALog)|B(BKind,BKindLog));"));
-        assert!(classifiers.contains("__classifiers::union!(BKind=B(B,BLog)|C(C,CLog));"));
-        assert!(classifiers.contains("D{child:__classifiers::OptionLog<AKindLog>,}"));
+        assert!(classifiers.contains(
+            "__classifiers::union!(AKind=A(A,ALog=>AValue)|B(BKind,BKindLog=>BKindValue));"
+        ));
+        assert!(
+            classifiers
+                .contains("__classifiers::union!(BKind=B(B,BLog=>BValue)|C(C,CLog=>CValue));")
+        );
+        assert!(
+            classifiers
+                .contains("D{child:__classifiers::OptionLog<AKindLog>=>Option<AKindValue>,}")
+        );
     }
 
     #[test]
@@ -617,7 +688,7 @@ mod tests {
 
         assert!(classifiers.contains("pubusemoirai_protocol::state::log::BoxedLog;"));
         assert!(classifiers.contains(
-            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>,}"
+            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>=>Option<Box<UnionValue>>,}"
         ));
         assert!(!classifiers.contains("OptionLog<Box<UnionLog>>"));
     }
@@ -673,6 +744,9 @@ mod tests {
     fn reference_vertex_matchers_use_sink_kind() {
         let (_classifiers, references) = generate_modules_from_file("../examples/conference.ecore");
 
+        assert!(
+            references.contains("#[cfg_attr(feature=\"test_utils\",derive(deepsize::DeepSizeOf))]")
+        );
         assert!(references.contains("instance_from_sink_kind"));
         assert!(references.contains("\"Session\""));
         assert!(references.contains("Instance::SessionId"));
@@ -689,8 +763,8 @@ mod tests {
 
         println!("classifiers: {}", classifiers);
 
-        assert!(classifiers.contains("AKind=C(C,CLog)"));
-        assert!(classifiers.contains("BKind=C(C,CLog)"));
+        assert!(classifiers.contains("AKind=C(C,CLog=>CValue)"));
+        assert!(classifiers.contains("BKind=C(C,CLog=>CValue)"));
     }
 
     #[test]
@@ -702,7 +776,9 @@ mod tests {
 
         let (classifiers, references) = generate_modules_from_str(&ecore);
 
-        assert!(classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog));"));
+        assert!(
+            classifiers.contains("__classifiers::union!(AbstractKind=Baz(Baz,BazLog=>BazValue));")
+        );
         assert!(classifiers.contains("__classifiers::record!(Abstract{"));
         assert!(classifiers.contains(
             "name:__classifiers::OptionLog<__classifiers::GraphLog<__classifiers::List<char>>>"
@@ -746,7 +822,7 @@ mod tests {
         assert!(!classifiers.contains("constraints:"));
         assert!(
             classifiers
-                .contains("__classifiers::record!(Method{named_element_super:NamedElementLog,});")
+                .contains("__classifiers::record!(Method{named_element_super:NamedElementLog=>NamedElementValue,});")
         );
         assert!(classifiers.contains("__classifiers::record!(NamedElement{});"));
     }
@@ -786,31 +862,81 @@ mod tests {
     }
 
     #[test]
-    fn package_generates_read_as_ecore_query() {
+    fn package_uses_the_current_moirai_log_and_query_api() {
         let package = generate_package_from_file("../examples/class_hierarchy.ecore");
 
-        assert!(package.contains("pubstructReadAsEcore;"));
-        assert!(package.contains("impl__package::QueryOperationforReadAsEcore"));
-        assert!(package.contains("impl__package::EvalNested<ReadAsEcore>forClassHierarchyLog"));
-        assert!(package.contains("XMLElement::new(\"xmi:XMI\")"));
-        assert!(package.contains(
-            "document_root.add_attribute(\"xmlns:class_hierarchy\",\"http://www.example.org/class_hierarchy\")"
+        assert!(package.contains("typeCommand=ClassHierarchy;"));
+        assert!(package.contains("typeOp=ClassHierarchy;"));
+        assert!(package.contains("fnprepare(&self,command:Self::Command)->Self::Op{command}"));
+        assert!(package.contains("_q:&__package::Read<ClassHierarchyValue>"));
+        assert!(!package.contains("typeValue="));
+        assert!(!package.contains("InternalizeOp"));
+    }
+
+    #[test]
+    fn read_as_ecore_is_generated_separately_from_package() {
+        let package = generate_package_from_file("../examples/class_hierarchy.ecore");
+        let read_as_ecore = generate_read_as_ecore_from_file("../examples/class_hierarchy.ecore");
+
+        assert!(!package.contains("ReadAsEcore"));
+        assert!(read_as_ecore.contains("pubstructReadAsEcore;"));
+        assert!(read_as_ecore.contains("impl__read_as_ecore::QueryOperationforReadAsEcore"));
+        assert!(read_as_ecore.contains("typeResponse=Vec<u8>;"));
+        assert!(read_as_ecore.contains("log.execute_query(&__read_as_ecore::Read::<V>::new())"));
+        assert!(read_as_ecore.contains(
+            "impl__read_as_ecore::EvalNested<ReadAsEcore>for__read_as_ecore::ClassHierarchyLog"
         ));
-        assert!(package.contains("XMLElement::new(\"class_hierarchy:Package\")"));
-        assert!(!package.contains("XMLElement::new(\"ecore:EPackage\")"));
+        assert!(read_as_ecore.contains("_q:&ReadAsEcore"));
+        assert!(read_as_ecore.contains(
+            "__read_as_ecore::XmiWriter::new(\"class_hierarchy\",\"http://www.example.org/class_hierarchy\")"
+        ));
+        assert!(read_as_ecore.contains("fnvisit_package("));
+        assert!(read_as_ecore.contains("attrs.push_value(\"xsi:type\",xmi_type)"));
+        assert!(read_as_ecore.contains("fnbuild_xmi_references("));
+        assert!(read_as_ecore.contains("\"structural_feature::typ\""));
+        assert!(read_as_ecore.contains("__read_as_ecore::Ref::AttributeToClass(_)"));
+        assert!(read_as_ecore.contains("values.insert(source.0.clone()"));
+        assert!(read_as_ecore.contains("refs.values(&path,\"structural_feature::typ\")"));
+        assert!(!read_as_ecore.contains("fn__xmi_escape"));
+        assert!(!read_as_ecore.contains("fn__xmi_write_open"));
+        assert!(!read_as_ecore.contains("\"ecore:EPackage\""));
     }
 
     #[test]
     fn read_as_ecore_dispatches_polymorphic_roots_to_concrete_eclasses() {
-        let package = generate_package_from_file("../examples/json.ecore");
+        let read_as_ecore = generate_read_as_ecore_from_file("../examples/json.ecore");
 
-        assert!(package.contains("match&self.json_log.child"));
-        assert!(package.contains("crate::classifiers::JsonKindChild::Array(_)"));
-        assert!(package.contains("crate::classifiers::JsonKindChild::Object(_)"));
-        assert!(package.contains("XMLElement::new(\"json:Array\")"));
-        assert!(package.contains("XMLElement::new(\"json:Object\")"));
-        assert!(package.contains("XMLElement::new(\"json:String\")"));
-        assert!(package.contains("XMLElement::new(\"json:Number\")"));
-        assert!(package.contains("XMLElement::new(\"json:Boolean\")"));
+        assert!(read_as_ecore.contains("letvisit_child=|child:&__read_as_ecore::JsonKindChild"));
+        assert!(read_as_ecore.contains("match&log.child"));
+        assert!(read_as_ecore.contains("__read_as_ecore::JsonKindChild::Array(child_log)"));
+        assert!(read_as_ecore.contains("__read_as_ecore::JsonKindChild::Object(child_log)"));
+        assert!(read_as_ecore.contains("None=>(\"json:Array\",false)"));
+        assert!(read_as_ecore.contains("None=>(\"json:Object\",false)"));
+        assert!(read_as_ecore.contains("None=>(\"json:String\",false)"));
+        assert!(read_as_ecore.contains("None=>(\"json:Number\",false)"));
+        assert!(read_as_ecore.contains("None=>(\"json:Boolean\",false)"));
+        assert!(read_as_ecore.contains("(child).inner()"));
+        assert!(read_as_ecore.contains("children.sort_by_key(|child|child_rank(child))"));
+    }
+
+    #[test]
+    fn read_as_ecore_omits_transient_features() {
+        let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="test" nsURI="http://example.org/test" nsPrefix="test">
+    <eClassifiers xsi:type="ecore:EClass" name="Model">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="visible" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="temporary" lowerBound="1" transient="true" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</ecore:EPackage>
+"##;
+
+        let read_as_ecore = generate_read_as_ecore_from_str(ecore);
+
+        assert!(read_as_ecore.contains(".visible()"));
+        assert!(!read_as_ecore.contains(".temporary()"));
     }
 }

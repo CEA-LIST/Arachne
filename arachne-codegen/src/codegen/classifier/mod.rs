@@ -16,7 +16,10 @@ use crate::{
             crdt::{Crdt, Map as CrdtMap, Named, NestedCrdt, Primitive, Register, SimpleCrdt},
             to_crdt::ToCrdt,
         },
-        feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
+        feature::{
+            attribute::{AttributeGenerator, primitive_value_type},
+            containment::ContainmentGenerator,
+        },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
         ident::{
@@ -74,6 +77,10 @@ pub fn classifier_log_ident(ctx: &Ctx, class: &Class) -> Ident {
     classifier_type_ident_with_suffix(ctx, class, "Log")
 }
 
+pub fn classifier_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+    classifier_type_ident_with_suffix(ctx, class, "Value")
+}
+
 pub fn polymorphic_kind_ident(ctx: &Ctx, class: &Class) -> Ident {
     if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, POLYMORPHIC_KIND_SUFFIX)
@@ -90,12 +97,24 @@ pub fn polymorphic_kind_log_ident(ctx: &Ctx, class: &Class) -> Ident {
     }
 }
 
+pub fn polymorphic_kind_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+    if has_codegen_polymorphic_family(ctx, class) {
+        classifier_type_ident_with_suffix(ctx, class, &format!("{POLYMORPHIC_KIND_SUFFIX}Value"))
+    } else {
+        classifier_value_ident(ctx, class)
+    }
+}
+
 pub fn containment_target_ident(ctx: &Ctx, class: &Class) -> Ident {
     polymorphic_kind_ident(ctx, class)
 }
 
 pub fn containment_target_log_ident(ctx: &Ctx, class: &Class) -> Ident {
     polymorphic_kind_log_ident(ctx, class)
+}
+
+pub fn containment_target_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+    polymorphic_kind_value_ident(ctx, class)
 }
 
 pub fn inherited_field_ident(class: &Class) -> Ident {
@@ -112,6 +131,7 @@ struct TransparentVariantSpec {
     variant_name: Ident,
     payload_ty: TokenStream,
     log_ty: TokenStream,
+    value_ty: TokenStream,
     imports: Vec<Import>,
     warnings: Vec<Warning>,
 }
@@ -164,7 +184,7 @@ impl<'a> ClassGenerator<'a> {
     }
 
     /// Compute inherited field names and types from superclasses
-    fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>, Vec<Import>) {
+    fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>, Vec<TokenStream>, Vec<Import>) {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
         let inherited = self
@@ -174,32 +194,31 @@ impl<'a> ClassGenerator<'a> {
             .map(|idx| &self.ctx.classes()[**idx])
             .collect::<Vec<_>>();
 
-        let field_names = inherited
-            .iter()
-            .map(|class| inherited_field_ident(class))
-            .collect::<Vec<_>>();
-
+        let mut field_names = Vec::new();
+        let mut field_types = Vec::new();
+        let mut value_types = Vec::new();
         let mut imports = Vec::new();
-        let field_types = inherited
-            .iter()
-            .map(|class| {
-                let field_ident = inherited_field_ident(class);
-                let log_ident = classifier_log_ident(self.ctx, class);
-                let base_type = quote! { #log_ident };
-                if self
-                    .cycle_analysis
-                    .boxing_strategy(self.class.idx, &field_ident.to_string())
-                    == crate::codegen::cycles::BoxingStrategy::DirectReference
-                {
-                    imports.push(Import::Protocol(Protocol::BoxedLog));
-                    quote! { #path::BoxedLog<#base_type> }
-                } else {
-                    base_type
-                }
-            })
-            .collect::<Vec<_>>();
+        for class in inherited {
+            let field_ident = inherited_field_ident(class);
+            let log_ident = classifier_log_ident(self.ctx, class);
+            let value_ident = classifier_value_ident(self.ctx, class);
+            let is_boxed = self
+                .cycle_analysis
+                .boxing_strategy(self.class.idx, &field_ident.to_string())
+                == crate::codegen::cycles::BoxingStrategy::DirectReference;
 
-        (field_names, field_types, imports)
+            field_names.push(field_ident);
+            if is_boxed {
+                imports.push(Import::Protocol(Protocol::BoxedLog));
+                field_types.push(quote! { #path::BoxedLog<#log_ident> });
+                value_types.push(quote! { Box<#value_ident> });
+            } else {
+                field_types.push(quote! { #log_ident });
+                value_types.push(quote! { #value_ident });
+            }
+        }
+
+        (field_names, field_types, value_types, imports)
     }
 
     fn is_uw_map_entry_helper(&self) -> bool {
@@ -257,13 +276,14 @@ impl<'a> ClassGenerator<'a> {
             })?;
 
         let variant_name = classifier_ident(self.ctx, subclass);
-        let (payload_ty, log_ty, imports, warnings) =
+        let (payload_ty, log_ty, value_ty, imports, warnings) =
             self.transparent_field_types(subclass, field)?;
 
         Ok(Some(TransparentVariantSpec {
             variant_name,
             payload_ty,
             log_ty,
+            value_ty,
             imports,
             warnings,
         }))
@@ -273,7 +293,13 @@ impl<'a> ClassGenerator<'a> {
         &self,
         subclass: &Class,
         field: &Structural,
-    ) -> anyhow::Result<(TokenStream, TokenStream, Vec<Import>, Vec<Warning>)> {
+    ) -> anyhow::Result<(
+        TokenStream,
+        TokenStream,
+        TokenStream,
+        Vec<Import>,
+        Vec<Warning>,
+    )> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
         let (bound_kind, warnings) =
@@ -300,6 +326,11 @@ impl<'a> ClassGenerator<'a> {
                 {
                     primitive = p;
                 }
+
+                let rust_value_ty = rust_typ
+                    .clone()
+                    .expect("Supported Ecore attributes should have a Rust value type");
+                let scalar_value_ty = primitive_value_type(&primitive, &rust_value_ty);
 
                 let (payload_ty, log_ty, imports) = match primitive.clone() {
                     Primitive::Counter(_) => {
@@ -350,24 +381,26 @@ impl<'a> ClassGenerator<'a> {
                     ),
                 };
 
-                let (payload_ty, log_ty, mut extra_imports) = match bound_kind {
+                let (payload_ty, log_ty, value_ty, mut extra_imports) = match bound_kind {
                     crate::codegen::feature::bounds::BoundKind::Single => {
-                        (payload_ty, log_ty, Vec::new())
+                        (payload_ty, log_ty, scalar_value_ty, Vec::new())
                     }
                     crate::codegen::feature::bounds::BoundKind::Optional => (
                         quote! { Option<<#log_ty as #path::IsLog>::Op> },
                         quote! { #path::OptionLog<#log_ty> },
+                        quote! { Option<#scalar_value_ty> },
                         vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
                     ),
                     crate::codegen::feature::bounds::BoundKind::Many => (
                         quote! { #path::List<<#log_ty as #path::IsLog>::Op> },
                         quote! { #path::NestedListLog<#log_ty> },
+                        quote! { Vec<#scalar_value_ty> },
                         vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
                     ),
                 };
                 let mut imports = imports;
                 imports.append(&mut extra_imports);
-                Ok((payload_ty, log_ty, imports, warnings))
+                Ok((payload_ty, log_ty, value_ty, imports, warnings))
             }
             structural::Typ::EReference => {
                 anyhow::ensure!(
@@ -383,6 +416,7 @@ impl<'a> ClassGenerator<'a> {
                 );
                 let target_name = containment_target_ident(self.ctx, target_class);
                 let target_log = containment_target_log_ident(self.ctx, target_class);
+                let target_value = containment_target_value_ident(self.ctx, target_class);
                 let boxing_strategy = self
                     .cycle_analysis
                     .boxing_strategy(subclass.idx, &field.name);
@@ -437,7 +471,7 @@ impl<'a> ClassGenerator<'a> {
                         })?
                     };
 
-                    let (value_payload, value_log, mut imports, mut field_warnings) =
+                    let (value_payload, value_log, value_read, mut imports, mut field_warnings) =
                         self.transparent_field_types(subclass, value_feature)?;
                     anyhow::ensure!(
                         matches!(value_feature.bounds.ubound, Some(1)),
@@ -445,21 +479,28 @@ impl<'a> ClassGenerator<'a> {
                     );
                     let payload = quote! { #path::UWMap<#key_ty, Box<#value_payload>> };
                     let log = quote! { #path::UWMapLog<#key_ty, #value_log> };
+                    let read = quote! { rustc_hash::FxHashMap<#key_ty, #value_read> };
                     imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(CrdtMap::UWMap))));
                     imports.push(Import::Custom("moirai_crdt::map::uw_map::UWMap"));
                     let mut all_warnings = warnings;
                     all_warnings.append(&mut field_warnings);
-                    return Ok((payload, log, imports, all_warnings));
+                    return Ok((payload, log, read, imports, all_warnings));
                 }
 
-                let (payload_ty, log_ty, imports) = match bound_kind {
+                let (payload_ty, log_ty, value_ty, imports) = match bound_kind {
                     crate::codegen::feature::bounds::BoundKind::Single => {
                         if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                            (quote! { #target_name }, quote! { #target_log }, vec![])
+                            (
+                                quote! { #target_name },
+                                quote! { #target_log },
+                                quote! { #target_value },
+                                vec![],
+                            )
                         } else {
                             (
                                 quote! { Box<#target_name> },
                                 quote! { #path::BoxedLog<#target_log> },
+                                quote! { Box<#target_value> },
                                 vec![Import::Protocol(Protocol::BoxedLog)],
                             )
                         }
@@ -477,6 +518,12 @@ impl<'a> ClassGenerator<'a> {
                             } else {
                                 quote! { #path::BoxedLog<#target_log> }
                             };
+                        let inner_value =
+                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
+                                quote! { #target_value }
+                            } else {
+                                quote! { Box<#target_value> }
+                            };
                         let imports =
                             if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
                                 vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
@@ -489,6 +536,7 @@ impl<'a> ClassGenerator<'a> {
                         (
                             quote! { Option<#inner_payload> },
                             quote! { #path::OptionLog<#inner_log> },
+                            quote! { Option<#inner_value> },
                             imports,
                         )
                     }
@@ -504,6 +552,12 @@ impl<'a> ClassGenerator<'a> {
                                 quote! { #target_log }
                             } else {
                                 quote! { #path::BoxedLog<#target_log> }
+                            };
+                        let inner_value =
+                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
+                                quote! { #target_value }
+                            } else {
+                                quote! { Box<#target_value> }
                             };
                         let imports =
                             if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
@@ -521,11 +575,12 @@ impl<'a> ClassGenerator<'a> {
                         (
                             quote! { #path::NestedList<#inner_payload> },
                             quote! { #path::NestedListLog<#inner_log> },
+                            quote! { Vec<#inner_value> },
                             imports,
                         )
                     }
                 };
-                Ok((payload_ty, log_ty, imports, warnings))
+                Ok((payload_ty, log_ty, value_ty, imports, warnings))
             }
         }
     }
@@ -552,8 +607,12 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (inherited_field_names, inherited_field_types, inherited_imports) =
-            self.inherited_fields();
+        let (
+            inherited_field_names,
+            inherited_field_types,
+            inherited_value_types,
+            inherited_imports,
+        ) = self.inherited_fields();
         let should_emit_feat = !inherited_field_names.is_empty()
             || !attribute_tokens.is_empty()
             || !reference_tokens.is_empty()
@@ -574,6 +633,7 @@ impl<'a> ClassGenerator<'a> {
                 variant_name,
                 payload_ty,
                 log_ty,
+                value_ty,
                 imports,
                 warnings,
             }) = self.transparent_variant_spec(subclass)?
@@ -584,21 +644,24 @@ impl<'a> ClassGenerator<'a> {
                     type #payload_alias = #payload_ty;
                     type #log_alias = #log_ty;
                 });
-                union_variants.push(quote! { #variant_name(#payload_alias, #log_alias) });
+                union_variants
+                    .push(quote! { #variant_name(#payload_alias, #log_alias => #value_ty) });
                 union_imports.extend(imports);
                 union_warnings.extend(warnings);
             } else {
                 let variant_name = classifier_ident(self.ctx, subclass);
                 let payload_name = containment_target_ident(self.ctx, subclass);
                 let log_name = containment_target_log_ident(self.ctx, subclass);
-                union_variants.push(quote! { #variant_name(#payload_name, #log_name) });
+                let value_name = containment_target_value_ident(self.ctx, subclass);
+                union_variants
+                    .push(quote! { #variant_name(#payload_name, #log_name => #value_name) });
             }
         }
 
         let record_tokens = if should_emit_feat {
             quote! {
                 #path::record!(#name {
-                    #(#inherited_field_names: #inherited_field_types,)*
+                    #(#inherited_field_names: #inherited_field_types => #inherited_value_types,)*
                     #(#attribute_tokens,)*
                     #(#reference_tokens,)*
                 });
@@ -612,14 +675,19 @@ impl<'a> ClassGenerator<'a> {
             #path::union!(#kind_name = #(#union_variants)|*);
             #record_tokens
         };
+        let macro_imports = if should_emit_feat {
+            vec![
+                Import::Macros(Macros::Record),
+                Import::Macros(Macros::Union),
+            ]
+        } else {
+            vec![Import::Macros(Macros::Union)]
+        };
 
         Ok(Fragment::new(
             tokens,
             [
-                vec![
-                    Import::Macros(Macros::Record),
-                    Import::Macros(Macros::Union),
-                ],
+                macro_imports,
                 union_imports,
                 inherited_imports,
                 attribute_imports,
@@ -656,13 +724,18 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (inherited_field_names, inherited_field_types, inherited_imports) =
-            self.inherited_fields();
+        let (
+            inherited_field_names,
+            inherited_field_types,
+            inherited_value_types,
+            inherited_imports,
+        ) = self.inherited_fields();
         let family_name = polymorphic_kind_ident(self.ctx, self.class);
         let family_log = classifier_log_ident(self.ctx, self.class);
         let (family_tokens, family_imports, family_warnings) =
             if has_codegen_subclasses(self.ctx, self.class) {
-                let self_variant = quote! { #name(#name, #family_log) };
+                let self_value = classifier_value_ident(self.ctx, self.class);
+                let self_variant = quote! { #name(#name, #family_log => #self_value) };
                 let mut union_aliases = Vec::new();
                 let mut union_variants = vec![self_variant];
                 let mut union_imports = Vec::new();
@@ -678,6 +751,7 @@ impl<'a> ClassGenerator<'a> {
                         variant_name,
                         payload_ty,
                         log_ty,
+                        value_ty,
                         imports,
                         warnings,
                     }) = self.transparent_variant_spec(subclass)?
@@ -689,14 +763,19 @@ impl<'a> ClassGenerator<'a> {
                             type #payload_alias = #payload_ty;
                             type #log_alias = #log_ty;
                         });
-                        union_variants.push(quote! { #variant_name(#payload_alias, #log_alias) });
+                        union_variants.push(
+                            quote! { #variant_name(#payload_alias, #log_alias => #value_ty) },
+                        );
                         union_imports.extend(imports);
                         union_warnings.extend(warnings);
                     } else {
                         let variant_name = classifier_ident(self.ctx, subclass);
                         let payload_name = containment_target_ident(self.ctx, subclass);
                         let log_name = containment_target_log_ident(self.ctx, subclass);
-                        union_variants.push(quote! { #variant_name(#payload_name, #log_name) });
+                        let value_name = containment_target_value_ident(self.ctx, subclass);
+                        union_variants.push(
+                            quote! { #variant_name(#payload_name, #log_name => #value_name) },
+                        );
                     }
                 }
 
@@ -711,7 +790,7 @@ impl<'a> ClassGenerator<'a> {
 
         let tokens = quote! {
             #path::record!(#name {
-                #(#inherited_field_names: #inherited_field_types,)*
+                #(#inherited_field_names: #inherited_field_types => #inherited_value_types,)*
                 #(#attribute_tokens,)*
                 #(#reference_tokens,)*
             });

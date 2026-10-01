@@ -1,0 +1,12 @@
+[package]
+name = "arachne-xmi"
+version = "0.3.0"
+edition = "2024"
+description = "Shared XMI serialization runtime for Arachne-generated CRDTs"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+quick-xml = "0.42.0"

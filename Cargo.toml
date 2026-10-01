@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["arachne-codegen", "arachne-cli", "arachne-parser"]
+members = ["arachne-codegen", "arachne-cli", "arachne-parser", "arachne-xmi"]
 
 [workspace.package]
 license = "Apache-2.0"

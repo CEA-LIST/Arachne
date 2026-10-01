@@ -1,5 +1,6 @@
-use crate::codegen::warnings::Warning;
 use ecore_rs::repr::Structural;
+
+use crate::codegen::warnings::Warning;
 
 pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<Warning>) {
     if let Some(changeable) = feature.changeable

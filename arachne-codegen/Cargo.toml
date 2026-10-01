@@ -1,6 +1,6 @@
 [package]
 name = "arachne-codegen"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 description = "Code generator for Arachne"
 
@@ -16,6 +16,4 @@ rustc-hash = "2.1.1"
 heck = "0.5.0"
 log = "0.4.29"
 owo-colors = "4"
-moirai-protocol = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.6" }
-moirai-crdt = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.6" }
-moirai-macros = { git = "https://github.com/CEA-LIST/Moirai.git", tag = "v0.6" }
+arachne-xmi = { version = "*", path = "../arachne-xmi" }

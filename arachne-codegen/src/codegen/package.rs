@@ -93,26 +93,27 @@ impl<'a> PackageGenerator<'a> {
         self.ref_analysis.has_references()
     }
 
+    fn package_name(&self) -> &str {
+        self.ctx.packs().get(self.pack_idx).unwrap().name()
+    }
+
     fn imports(&self) -> Vec<Import> {
         let mut imports = vec![
             Import::Protocol(Protocol::Read),
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
+            Import::Protocol(Protocol::Frontier),
             Import::Custom("moirai_protocol::event::Event as ProtocolEvent"),
-            Import::Protocol(Protocol::QueryOperation),
-            Import::Protocol(Protocol::SinkEffect),
             Import::Protocol(Protocol::EffectContext),
-            Import::Protocol(Protocol::Interner),
-            Import::Protocol(Protocol::InternalizeOp),
-            Import::Protocol(Protocol::SinkCollector),
         ];
 
         if self.has_references() {
             imports.extend([
+                Import::Protocol(Protocol::SinkEffect),
+                Import::Protocol(Protocol::SinkCollector),
                 Import::Protocol(Protocol::FairPolicy),
                 Import::Log(Log::Vec),
-                Import::Protocol(Protocol::PureCRDT),
                 Import::Custom("crate::references::*"),
             ]);
         }
@@ -123,7 +124,7 @@ impl<'a> PackageGenerator<'a> {
     fn generate_package_enum(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_ident = type_ident(package_name);
         let classifiers = classifiers_path();
         let root_variants = self.roots().into_iter().map(|root| {
@@ -148,7 +149,7 @@ impl<'a> PackageGenerator<'a> {
     fn generate_package_rejection_enum(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
         let reference_log_ty = quote! { #path::VecLog<#path::ReferenceManager<#path::FairPolicy>> };
         let classifiers = classifiers_path();
@@ -203,7 +204,7 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_package_value_struct(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
@@ -215,7 +216,7 @@ impl<'a> PackageGenerator<'a> {
         });
         let refs_field = if self.has_references() {
             quote! {
-                pub refs: <#path::ReferenceManager<#path::FairPolicy> as #path::PureCRDT>::Value,
+                pub refs: petgraph::graph::DiGraph<#path::Instance, #path::Ref>,
             }
         } else {
             quote! {}
@@ -231,7 +232,7 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_package_log_struct(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
@@ -285,10 +286,9 @@ impl<'a> PackageGenerator<'a> {
     fn generate_is_log_impl(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let package_ident = type_ident(package_name);
-        let package_value_name = type_ident_with_suffix(package_name, "Value");
         let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
 
         let enabled_root_arms = self.roots().into_iter().map(|root| {
@@ -303,7 +303,7 @@ impl<'a> PackageGenerator<'a> {
         });
         let stabilize_roots = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
-            quote! { self.#field.stabilize(version); }
+            quote! { self.#field.stabilize(frontier); }
         });
         let redundant_roots = self.roots().into_iter().map(|root| {
             let field = self.root_field_ident(root);
@@ -334,7 +334,7 @@ impl<'a> PackageGenerator<'a> {
             quote! {}
         };
         let stabilize_refs = if self.has_references() {
-            quote! { self.reference_manager_log.stabilize(version); }
+            quote! { self.reference_manager_log.stabilize(frontier); }
         } else {
             quote! {}
         };
@@ -430,9 +430,13 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             impl #path::IsLog for #package_log_name {
-                type Value = #package_value_name;
+                type Command = #package_ident;
                 type Op = #package_ident;
                 type Rejection = #package_rejection_name;
+
+                fn prepare(&self, command: Self::Command) -> Self::Op {
+                    command
+                }
 
                 fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
                     match op {
@@ -445,7 +449,7 @@ impl<'a> PackageGenerator<'a> {
                     #effect
                 }
 
-                fn stabilize(&mut self, version: &#path::Version) {
+                fn stabilize(&mut self, frontier: &#path::CausalFrontier) {
                     #(#stabilize_roots)*
                     #stabilize_refs
                 }
@@ -463,7 +467,7 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_eval_nested_impl(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
@@ -472,55 +476,33 @@ impl<'a> PackageGenerator<'a> {
         let root_reads = self.roots().into_iter().map(|root| {
             let field_name = value_ident(self.root_class_name(root));
             let log_field = self.root_field_ident(root);
-            quote! { #field_name: self.#log_field.execute_query(#path::Read::new()) }
+            let value_ty = self.root_value_ident(root);
+            let classifiers = classifiers_path();
+            quote! {
+                #field_name: self.#log_field.execute_query(
+                    &#path::Read::<#classifiers::#value_ty>::new()
+                )
+            }
         });
         let refs_field = if self.has_references() {
-            quote! { refs: self.reference_manager_log.execute_query(#path::Read::new()), }
+            quote! {
+                refs: self.reference_manager_log.execute_query(
+                    &#path::Read::<petgraph::graph::DiGraph<#path::Instance, #path::Ref>>::new()
+                ),
+            }
         } else {
             quote! {}
         };
 
         quote! {
-            impl #path::EvalNested<#path::Read<<Self as #path::IsLog>::Value>> for #package_log_name {
+            impl #path::EvalNested<#path::Read<#package_value_name>> for #package_log_name {
                 fn execute_query(
                     &self,
-                    _q: #path::Read<<Self as #path::IsLog>::Value>,
-                ) -> <#path::Read<<Self as #path::IsLog>::Value> as #path::QueryOperation>::Response {
+                    _q: &#path::Read<#package_value_name>,
+                ) -> #package_value_name {
                     #package_value_name {
                         #(#root_reads,)*
                         #refs_field
-                    }
-                }
-            }
-        }
-    }
-
-    fn translate_ids_impl(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_ident = type_ident(package_name);
-        let translate_root_arms = self.roots().into_iter().map(|root| {
-            let variant = self.root_variant_ident(root);
-            quote! { #package_ident::#variant(op) => #package_ident::#variant(op.clone()) }
-        });
-        let translate_ref_arms = if self.has_references() {
-            quote! {
-                #package_ident::AddReference(op) => {
-                    #package_ident::AddReference(op.internalize(interner))
-                }
-                #package_ident::RemoveReference(op) => {
-                    #package_ident::RemoveReference(op.internalize(interner))
-                }
-            }
-        } else {
-            quote! {}
-        };
-
-        quote! {
-            impl __package::InternalizeOp for #package_ident {
-                fn internalize(self, interner: &__package::Interner) -> Self {
-                    match self {
-                        #(#translate_root_arms,)*
-                        #translate_ref_arms
                     }
                 }
             }
@@ -536,7 +518,6 @@ impl<'a> Generate for PackageGenerator<'a> {
         let package_log = self.generate_package_log_struct();
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
-        let translate_ids = self.translate_ids_impl();
 
         let tokens = quote! {
             #package_enum
@@ -545,7 +526,6 @@ impl<'a> Generate for PackageGenerator<'a> {
             #package_log
             #is_log_impl
             #eval_nested_impl
-            #translate_ids
         };
 
         let imports = self.imports();
