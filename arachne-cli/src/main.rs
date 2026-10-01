@@ -1,4 +1,10 @@
-use std::{fs, path::PathBuf, process::ExitCode, time::Instant};
+use std::{
+    fs,
+    io::{BufWriter, Write},
+    path::PathBuf,
+    process::ExitCode,
+    time::Instant,
+};
 
 use anyhow::{Result, anyhow};
 use arachne_codegen::{Config, MoiraiPathStyle, generate_with_report};
@@ -6,6 +12,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use ecore_rs::ctx::Ctx;
 use log::{error, info};
+
+mod import_sirius;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -34,6 +42,11 @@ enum Command {
     /// the digest a node keys it by
     #[command(name = "digest")]
     Digest(DigestArgs),
+
+    /// Print the node operations that build a Sirius Web / SysON project export, as the body
+    /// `POST /api/model/{id}/ops` takes; references outside the project are reported on stderr
+    #[command(name = "import-sirius")]
+    ImportSirius(ImportSiriusArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -133,6 +146,17 @@ struct DigestArgs {
     input: PathBuf,
 }
 
+#[derive(Debug, clap::Args)]
+struct ImportSiriusArgs {
+    /// Path to the project export (`{"json", "ns", "content"}`)
+    #[arg(value_name = "PROJECT")]
+    input: PathBuf,
+
+    /// Path to the metamodel descriptor the model is registered under
+    #[arg(long, value_name = "DESCRIPTOR")]
+    descriptor: PathBuf,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -141,6 +165,7 @@ fn main() -> ExitCode {
         Command::Generate(args) => run_generate(args),
         Command::Describe(args) => run_describe(args),
         Command::Digest(args) => run_digest(args),
+        Command::ImportSirius(args) => run_import_sirius(args),
     };
 
     match result {
@@ -258,6 +283,49 @@ fn run_digest(args: DigestArgs) -> Result<()> {
     let descriptor: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| anyhow!("'{}' is not a JSON descriptor: {}", args.input.display(), e))?;
     println!("{}", metamodel_id(&descriptor));
+    Ok(())
+}
+
+/// `{"ops": [...]}` on stdout; the references left as the source wrote them, one line each,
+/// and the count of both kinds on stderr. Posts nothing: the node and the model are the
+/// caller's.
+fn run_import_sirius(args: ImportSiriusArgs) -> Result<()> {
+    init_logger_at("error");
+    let read = |path: &PathBuf, what: &str| -> Result<serde_json::Value> {
+        let text = fs::read_to_string(path)
+            .map_err(|e| anyhow!("Failed to read '{}': {}", path.display(), e))?;
+        serde_json::from_str(&text)
+            .map_err(|e| anyhow!("'{}' is not a JSON {what}: {}", path.display(), e))
+    };
+    let descriptor = read(&args.descriptor, "descriptor")?;
+    let project = read(&args.input, "project export")?;
+    let import = import_sirius::import(&descriptor, &project).map_err(|failures| {
+        anyhow!(
+            "'{}' cannot be carried by the descriptor:\n  {}",
+            args.input.display(),
+            failures.join("\n  ")
+        )
+    })?;
+
+    let mut out = BufWriter::new(std::io::stdout().lock());
+    out.write_all(b"{\"ops\":")?;
+    serde_json::to_writer(&mut out, &import.ops)?;
+    out.write_all(b"}\n")?;
+    out.flush()?;
+
+    eprintln!("metamodel: {}", metamodel_id(&descriptor));
+    eprintln!("operations: {}", import.ops.len());
+    for missing in &import.unresolved {
+        eprintln!(
+            "unresolved: {} {} {}",
+            missing.holder, missing.feature, missing.value
+        );
+    }
+    eprintln!(
+        "references: {} resolved, {} unresolved",
+        import.resolved,
+        import.unresolved.len()
+    );
     Ok(())
 }
 
