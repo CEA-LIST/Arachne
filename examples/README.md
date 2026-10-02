@@ -51,6 +51,8 @@ We also provide a set of "pet" metamodels ([/pet_metamodels](./pet_metamodels/))
 
 [`notation.ecore`](./notation.ecore) is not a case study: it is the language the model editor's diagram panel keeps a drawing in, held in the store beside the domain model the drawing depicts. It is shaped after the GMF Runtime notation metamodel (`org.eclipse.gmf.runtime.notation`) as Papyrus writes a `.notation` resource beside a `.uml` one, cut down to a `Diagram` of `Node`s and `Edge`s with `x`/`y`/`width`/`height` and no styles, compartments or bendpoints.
 
+One view holds several diagrams of one model: its root `Diagram` followed by the root's `diagrams`, in order. Each diagram has its own `Node`s, so one element can sit at different places on two diagrams. A diagram's kind is its `type`, the element it is drawn for is its `element` and its title is `name`. A `Node` whose `visible` is `false` is hidden on its diagram and keeps its place; `visible` is an LWW register, so a node never written reads `null`, which means shown.
+
 Two things about it are worth reading before it is changed. A `Diagram`'s `element` is the 32-hex id of the model it depicts, which is how an editor pairs the two with nothing recorded on the node; and every coordinate carries `urn:arachne:semantics` `datatype="lww-register"`, because a plain `EInt` derives to a **resettable counter** and two people dragging one box would sum their moves rather than settle on one of them.
 
 `notation.metamodel.json` is `arachne describe notation.ecore`, and `examples/fixtures/metamodel-digests.json` records its identity as it does for the case studies.

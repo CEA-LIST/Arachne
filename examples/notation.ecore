@@ -16,7 +16,11 @@
   - Location/Size/Bounds/LayoutConstraint are collapsed into four attributes
     on Node. GMF's hierarchy is an abstract interface with four subclasses.
   - No styles, no compartments, no bendpoints, no anchors, no nested children,
-    no `visible`, no measurementUnit, no eAnnotations.
+    no measurementUnit, no eAnnotations.
+  - A Diagram holds further Diagrams in `diagrams`, each with its own Nodes,
+    so one view keeps several diagrams of one model. A view's diagrams are
+    its root followed by the root's `diagrams`, in order.
+  - `visible` on Node only, an LWW register: a hidden node keeps its place.
   - Coordinates carry `urn:arachne:semantics datatype="lww-register"`, which
     is what makes a concurrent drag settle on one answer.
 -->
@@ -44,6 +48,8 @@
         eType="#//Node" containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="edges" upperBound="-1"
         eType="#//Edge" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="diagrams" upperBound="-1"
+        eType="#//Diagram" containment="true"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Node" eSuperTypes="#//View">
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="x" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"
@@ -60,6 +66,10 @@
     </eStructuralFeatures>
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="height" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"
         defaultValueLiteral="-1">
+      <eAnnotations source="urn:arachne:semantics"><details key="datatype" value="lww-register"/></eAnnotations>
+    </eStructuralFeatures>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="visible" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"
+        defaultValueLiteral="true">
       <eAnnotations source="urn:arachne:semantics"><details key="datatype" value="lww-register"/></eAnnotations>
     </eStructuralFeatures>
   </eClassifiers>
