@@ -6,10 +6,12 @@ use quote::quote;
 
 use super::ReadAsEcoreGenerator;
 use crate::codegen::{
-    annotation::{transparent_field, uw_map_spec},
     classifier::{inherited_field_ident, is_uninhabited_polymorphic_class},
     cycles::BoxingStrategy,
-    feature::bounds::{BoundKind, normalize_bounds},
+    feature::{
+        bounds::BoundKind,
+        plan::{FeaturePlan, MapPlan, Storage},
+    },
     ident::value_ident,
 };
 
@@ -76,35 +78,30 @@ impl ReadAsEcoreGenerator<'_> {
         base_path: TokenStream,
         include_field_in_path: bool,
         writer: TokenStream,
-    ) -> TokenStream {
+    ) -> anyhow::Result<TokenStream> {
         let module_path = self.path();
-        if let Some(spec) = uw_map_spec(feature) {
-            return self.generate_uw_map_visit(
-                source_class,
-                feature,
-                spec.key_feature,
-                spec.value_feature,
-                log,
-                base_path,
-                include_field_in_path,
-                writer,
-            );
-        }
-
-        let target_class = self.class(feature.typ.expect("containment should have a type"));
+        let plan = FeaturePlan::resolve(self.ctx, source_class, feature, self.cycle_analysis)?;
         let path_field = value_ident(&feature.name).to_string();
         let xml_name = feature.name.as_str();
-        let (bound_kind, _) = normalize_bounds(feature.bounds, &feature.name);
-        let unbox = |log| self.unbox_log_expr(source_class, &feature.name, log);
         let child_base_path = if include_field_in_path {
             quote! { #base_path.clone().field(#path_field) }
         } else {
             quote! { #base_path.clone() }
         };
 
-        match bound_kind {
+        let target_class = match &plan.storage {
+            Storage::Map(map) => {
+                return self.generate_uw_map_visit(feature, map, log, child_base_path, writer);
+            }
+            Storage::Containment { target, .. } => *target,
+            Storage::Attribute(_) => {
+                anyhow::bail!("Expected a containment plan for `{}`", feature.name)
+            }
+        };
+
+        Ok(match plan.bounds {
             BoundKind::Single => {
-                let child_log = unbox(log);
+                let child_log = plan.unbox_log(log);
                 self.call_target_visitor(
                     target_class,
                     writer,
@@ -115,7 +112,7 @@ impl ReadAsEcoreGenerator<'_> {
                 )
             }
             BoundKind::Optional => {
-                let child_log = unbox(quote! { child });
+                let child_log = plan.unbox_log(quote! { child });
                 let call = self.call_target_visitor(
                     target_class,
                     writer,
@@ -132,7 +129,7 @@ impl ReadAsEcoreGenerator<'_> {
                 }
             }
             BoundKind::Many => {
-                let child_log = unbox(quote! { child });
+                let child_log = plan.unbox_log(quote! { child });
                 let call = self.call_target_visitor(
                     target_class,
                     writer,
@@ -157,78 +154,48 @@ impl ReadAsEcoreGenerator<'_> {
                     }
                 }
             }
-        }
+        })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn generate_uw_map_visit(
         &self,
-        source_class: idx::Class,
         feature: &Structural,
-        key_feature_name: String,
-        value_feature_name: String,
+        map: &MapPlan<'_>,
         log: TokenStream,
-        base_path: TokenStream,
-        include_field_in_path: bool,
+        map_base_path: TokenStream,
         writer: TokenStream,
-    ) -> TokenStream {
+    ) -> anyhow::Result<TokenStream> {
         let module_path = self.path();
-        let target_class = self.class(feature.typ.expect("uw-map should have a target type"));
-        let key_feature = target_class
-            .structural()
-            .iter()
-            .find(|candidate| candidate.name == key_feature_name)
-            .expect("uw-map key feature should exist");
-        let value_feature = target_class
-            .structural()
-            .iter()
-            .find(|candidate| candidate.name == value_feature_name)
-            .expect("uw-map value feature should exist");
-        let key_class = self.class(key_feature.typ.expect("uw-map key should have a type"));
-        let key_to_string = self.scalar_to_string(key_class, quote! { key });
-        let path_field = value_ident(&feature.name).to_string();
+        let key_to_string = self.scalar_to_string(map.key_type, quote! { key });
         let xml_name = feature.name.as_str();
-        let key_xml_name = key_feature.name.as_str();
-        let xmi_type = self.xmi_type(target_class);
-        let map_base_path = if include_field_in_path {
-            quote! { #base_path.clone().field(#path_field) }
-        } else {
-            quote! { #base_path.clone() }
-        };
+        let key_xml_name = map.key.name.as_str();
+        let xmi_type = self.xmi_type(map.entry);
 
-        let (value_attributes, value_children) = match value_feature.kind {
-            structural::Typ::EAttribute => {
-                let collect = self.attribute_collect_from_log(
-                    value_feature,
+        let (value_attributes, value_children) = match &map.value.storage {
+            Storage::Attribute(_) => {
+                let collect = self.attribute_collect_from_plan(
+                    &map.value,
                     quote! { child },
                     quote! { &mut attrs },
-                );
-                (quote! { #collect }, quote! {})
+                )?;
+                (collect, quote! {})
             }
-            structural::Typ::EReference => {
-                let value_target =
-                    self.class(value_feature.typ.expect("uw-map value should have a type"));
-                let value_xml_name = value_feature.name.as_str();
-                let value_log_source = if transparent_field(self.class(source_class)).is_some() {
-                    source_class
-                } else {
-                    target_class.idx
-                };
-                let value_log =
-                    self.unbox_log_expr(value_log_source, &value_feature.name, quote! { child });
+            Storage::Containment { target, .. } => {
+                let value_log = map.value.unbox_log(quote! { child });
                 let visit = self.call_target_visitor(
-                    value_target,
+                    target,
                     quote! { writer },
-                    Some(value_xml_name),
+                    Some(&map.value.feature.name),
                     quote! { entry_path.clone() },
                     value_log,
                     false,
                 );
                 (quote! {}, visit)
             }
+            Storage::Map(_) => anyhow::bail!("UWMap values must be single-valued"),
         };
 
-        quote! {
+        Ok(quote! {
             {
                 let map_base_path = #map_base_path;
                 let mut entries = (#log).children().iter().collect::<Vec<_>>();
@@ -245,7 +212,7 @@ impl ReadAsEcoreGenerator<'_> {
                     });
                 }
             }
-        }
+        })
     }
 
     pub(super) fn generate_child_visits(
@@ -254,7 +221,7 @@ impl ReadAsEcoreGenerator<'_> {
         log: TokenStream,
         base_path: TokenStream,
         writer: TokenStream,
-    ) -> Vec<TokenStream> {
+    ) -> anyhow::Result<Vec<TokenStream>> {
         let mut visits = Vec::new();
 
         for super_idx in class.sup() {
@@ -268,7 +235,7 @@ impl ReadAsEcoreGenerator<'_> {
                 inherited_log,
                 quote! { (#base_path).clone().field(#inherited_field) },
                 writer.clone(),
-            ));
+            )?);
         }
 
         visits.extend(
@@ -293,9 +260,10 @@ impl ReadAsEcoreGenerator<'_> {
                         true,
                         writer.clone(),
                     )
-                }),
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
         );
 
-        visits
+        Ok(visits)
     }
 }

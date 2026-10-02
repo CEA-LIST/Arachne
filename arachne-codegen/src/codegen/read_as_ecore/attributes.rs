@@ -6,15 +6,11 @@ use quote::quote;
 
 use super::ReadAsEcoreGenerator;
 use crate::codegen::{
-    annotation::{DatatypeOverride, datatype_override},
     classifier::{classifier_ident, inherited_field_ident},
-    datatype::{
-        crdt::{Primitive, Register},
-        to_crdt::ToCrdt,
-    },
+    datatype::crdt::{Primitive, Register},
     feature::{
-        attribute::primitive_value_type,
-        bounds::{BoundKind, normalize_bounds},
+        bounds::BoundKind,
+        plan::{AttributeCollection, AttributePlan, FeaturePlan, Storage},
     },
     ident::{rust_ident, value_ident},
 };
@@ -55,61 +51,6 @@ impl ReadAsEcoreGenerator<'_> {
                 | Ok(BuiltinTyp::EFloat)
                 | Ok(BuiltinTyp::EDouble) => quote! { (#value).to_string() },
                 _ => quote! { format!("{:?}", #value) },
-            }
-        }
-    }
-
-    fn primitive_for_attribute(&self, feature: &Structural) -> Primitive {
-        let class_typ = self.class(feature.typ.expect("attribute should have a type"));
-        let mut primitive = if class_typ.is_enum() {
-            Primitive::Register(Register::MultiValue)
-        } else {
-            let typ: BuiltinTyp = class_typ
-                .name()
-                .parse()
-                .unwrap_or_else(|_| panic!("Failed to parse type: {}", class_typ.name()));
-            typ.to_crdt_container()
-        };
-
-        if let Some(DatatypeOverride::Primitive(override_primitive)) = datatype_override(feature) {
-            primitive = override_primitive;
-        }
-
-        primitive
-    }
-
-    fn attribute_read_type(&self, feature: &Structural) -> TokenStream {
-        let typ = self.class(feature.typ.expect("attribute should have a type"));
-        let rust_type = if typ.is_enum() {
-            let enum_ident = classifier_ident(self.ctx, typ);
-            quote! { #enum_ident }
-        } else {
-            let builtin: BuiltinTyp = typ
-                .name()
-                .parse()
-                .unwrap_or_else(|_| panic!("Failed to parse type: {}", typ.name()));
-            builtin
-                .to_rust_type()
-                .expect("Supported Ecore attributes should have a Rust value type")
-        };
-        let primitive = self.primitive_for_attribute(feature);
-        let scalar_type = primitive_value_type(&primitive, &rust_type);
-        let (bound_kind, _) = normalize_bounds(feature.bounds, &feature.name);
-
-        match (
-            bound_kind,
-            feature.unique.unwrap_or(true),
-            feature.ordered.unwrap_or(true),
-        ) {
-            (BoundKind::Single, _, _) => scalar_type,
-            (BoundKind::Optional, _, _) => quote! { Option<#scalar_type> },
-            (BoundKind::Many, false, true) => quote! { Vec<#scalar_type> },
-            (BoundKind::Many, true, true) => quote! { Vec<#rust_type> },
-            (BoundKind::Many, false, false) => {
-                quote! { rustc_hash::FxHashMap<#rust_type, usize> }
-            }
-            (BoundKind::Many, true, false) => {
-                quote! { rustc_hash::FxHashSet<#rust_type> }
             }
         }
     }
@@ -155,23 +96,27 @@ impl ReadAsEcoreGenerator<'_> {
         }
     }
 
-    fn collection_value_to_values(&self, feature: &Structural, value: TokenStream) -> TokenStream {
-        let typ = self.class(feature.typ.expect("attribute should have a type"));
-        let primitive = self.primitive_for_attribute(feature);
-        let unique = feature.unique.unwrap_or(true);
-        let ordered = feature.ordered.unwrap_or(true);
-
-        match (unique, ordered) {
-            (true, true) => {
+    fn attribute_value_to_values(
+        &self,
+        attribute: &AttributePlan<'_>,
+        value: TokenStream,
+    ) -> TokenStream {
+        let typ = attribute.typ;
+        match attribute.collection {
+            AttributeCollection::Scalar => {
+                self.primitive_value_to_values(typ, &attribute.primitive, value)
+            }
+            AttributeCollection::Sequence => {
                 let item = rust_ident("value");
                 let scalar = self.scalar_to_string(typ, quote! { #item });
                 quote! {
                     (#value).iter().map(|#item| #scalar).collect::<Vec<_>>()
                 }
             }
-            (false, true) => {
+            AttributeCollection::NestedList => {
                 let item = rust_ident("value");
-                let inner = self.primitive_value_to_values(typ, &primitive, quote! { #item });
+                let inner =
+                    self.primitive_value_to_values(typ, &attribute.primitive, quote! { #item });
                 quote! {
                     {
                         let mut values = Vec::new();
@@ -182,7 +127,7 @@ impl ReadAsEcoreGenerator<'_> {
                     }
                 }
             }
-            (false, false) => {
+            AttributeCollection::Bag => {
                 let item = rust_ident("value");
                 let count = rust_ident("count");
                 let scalar = self.scalar_to_string(typ, quote! { #item });
@@ -199,7 +144,7 @@ impl ReadAsEcoreGenerator<'_> {
                     }
                 }
             }
-            (true, false) => {
+            AttributeCollection::Set(_) => {
                 let item = rust_ident("value");
                 let scalar = self.scalar_to_string(typ, quote! { #item });
                 quote! {
@@ -221,48 +166,43 @@ impl ReadAsEcoreGenerator<'_> {
         feature: &Structural,
         log: TokenStream,
         attrs: TokenStream,
-    ) -> TokenStream {
-        let xml_name = feature.name.as_str();
-        let (bound_kind, _) = normalize_bounds(feature.bounds, &feature.name);
-        let value = rust_ident("value");
-        let read_type = self.attribute_read_type(feature);
+    ) -> anyhow::Result<TokenStream> {
+        self.attribute_collect_from_plan(&FeaturePlan::attribute(self.ctx, feature)?, log, attrs)
+    }
 
-        match bound_kind {
-            BoundKind::Single => {
-                let primitive = self.primitive_for_attribute(feature);
-                let typ = self.class(feature.typ.expect("attribute should have a type"));
-                let values = self.primitive_value_to_values(typ, &primitive, quote! { #value });
-                quote! {
-                    {
-                        let #value = xmi_read::<_, #read_type>(#log);
+    pub(super) fn attribute_collect_from_plan(
+        &self,
+        plan: &FeaturePlan<'_>,
+        log: TokenStream,
+        attrs: TokenStream,
+    ) -> anyhow::Result<TokenStream> {
+        let Storage::Attribute(attribute) = &plan.storage else {
+            anyhow::bail!("Expected an attribute plan for `{}`", plan.feature.name);
+        };
+        let xml_name = plan.feature.name.as_str();
+        let value = rust_ident("value");
+        let path = self.path();
+        let read_type = plan.types(self.ctx, &path, Some(&path))?.value;
+        let values = self.attribute_value_to_values(attribute, quote! { #value });
+
+        Ok(if matches!(plan.bounds, BoundKind::Optional) {
+            quote! {
+                {
+                    let optional_value = xmi_read::<_, #read_type>(#log);
+                    if let Some(#value) = optional_value {
                         (#attrs).push_values(#xml_name, #values, true);
                     }
                 }
             }
-            BoundKind::Optional => {
-                let primitive = self.primitive_for_attribute(feature);
-                let typ = self.class(feature.typ.expect("attribute should have a type"));
-                let values = self.primitive_value_to_values(typ, &primitive, quote! { #value });
-                quote! {
-                    {
-                        let optional_value = xmi_read::<_, #read_type>(#log);
-                        if let Some(#value) = optional_value {
-                            (#attrs).push_values(#xml_name, #values, true);
-                        }
-                    }
+        } else {
+            let force = matches!(plan.bounds, BoundKind::Single) || plan.feature.bounds.lbound > 0;
+            quote! {
+                {
+                    let #value = xmi_read::<_, #read_type>(#log);
+                    (#attrs).push_values(#xml_name, #values, #force);
                 }
             }
-            BoundKind::Many => {
-                let values = self.collection_value_to_values(feature, quote! { #value });
-                let force = feature.bounds.lbound > 0;
-                quote! {
-                    {
-                        let #value = xmi_read::<_, #read_type>(#log);
-                        (#attrs).push_values(#xml_name, #values, #force);
-                    }
-                }
-            }
-        }
+        })
     }
 
     fn generate_attribute_collect(
@@ -270,7 +210,7 @@ impl ReadAsEcoreGenerator<'_> {
         feature: &Structural,
         log: TokenStream,
         attrs: TokenStream,
-    ) -> TokenStream {
+    ) -> anyhow::Result<TokenStream> {
         let accessor = value_ident(&feature.name);
         self.attribute_collect_from_log(feature, quote! { (#log).#accessor() }, attrs)
     }
@@ -281,7 +221,7 @@ impl ReadAsEcoreGenerator<'_> {
         log: TokenStream,
         path: TokenStream,
         attrs: TokenStream,
-    ) -> Vec<TokenStream> {
+    ) -> anyhow::Result<Vec<TokenStream>> {
         let mut visits = Vec::new();
 
         for super_idx in class.sup() {
@@ -297,7 +237,7 @@ impl ReadAsEcoreGenerator<'_> {
                 inherited_log,
                 path.clone(),
                 attrs.clone(),
-            ));
+            )?);
         }
 
         for feature in class
@@ -310,7 +250,7 @@ impl ReadAsEcoreGenerator<'_> {
                     feature,
                     log.clone(),
                     attrs.clone(),
-                )),
+                )?),
                 structural::Typ::EReference if !feature.containment && self.has_references() => {
                     let feature_key = self.reference_feature_key(class, feature);
                     let xml_name = feature.name.as_str();
@@ -326,6 +266,6 @@ impl ReadAsEcoreGenerator<'_> {
             }
         }
 
-        visits
+        Ok(visits)
     }
 }

@@ -12,9 +12,9 @@ use crate::codegen::{
 };
 
 impl ReadAsEcoreGenerator<'_> {
-    pub(super) fn generate_class_visitor(&self, class: &Class) -> TokenStream {
+    pub(super) fn generate_class_visitor(&self, class: &Class) -> anyhow::Result<TokenStream> {
         if !self.generates_concrete_wrapper(class) {
-            return quote! {};
+            return Ok(quote! {});
         }
 
         let path = self.path();
@@ -26,11 +26,11 @@ impl ReadAsEcoreGenerator<'_> {
             quote! { log },
             quote! { &path },
             quote! { &mut attrs },
-        );
+        )?;
         let child_visits =
-            self.generate_child_visits(class, quote! { log }, quote! { path }, quote! { writer });
+            self.generate_child_visits(class, quote! { log }, quote! { path }, quote! { writer })?;
 
-        quote! {
+        Ok(quote! {
             // The visitor signature is uniform; leaf classes may not use every argument.
             #[allow(dead_code, unused_variables)]
             fn #fn_ident(
@@ -50,7 +50,7 @@ impl ReadAsEcoreGenerator<'_> {
                     #(#child_visits)*
                 });
             }
-        }
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -63,7 +63,7 @@ impl ReadAsEcoreGenerator<'_> {
         xmi_type: TokenStream,
         path: TokenStream,
         log: TokenStream,
-    ) -> TokenStream {
+    ) -> anyhow::Result<TokenStream> {
         let module_path = self.path();
         let (attribute_visit, child_visit) = if field.transient == Some(true) {
             (quote! {}, quote! {})
@@ -71,7 +71,7 @@ impl ReadAsEcoreGenerator<'_> {
             match field.kind {
                 structural::Typ::EAttribute => {
                     let collect =
-                        self.attribute_collect_from_log(field, log.clone(), quote! { &mut attrs });
+                        self.attribute_collect_from_log(field, log.clone(), quote! { &mut attrs })?;
                     (quote! { #collect }, quote! {})
                 }
                 structural::Typ::EReference => (
@@ -83,13 +83,13 @@ impl ReadAsEcoreGenerator<'_> {
                         quote! { path },
                         false,
                         quote! { writer },
-                    ),
+                    )?,
                 ),
             }
         };
 
         let subclass_type = self.xmi_type(subclass);
-        quote! {
+        Ok(quote! {
             {
                 let path = #path;
                 let mut attrs = #module_path::XmiAttributes::for_object(&path);
@@ -101,12 +101,12 @@ impl ReadAsEcoreGenerator<'_> {
                     #child_visit
                 });
             }
-        }
+        })
     }
 
-    pub(super) fn generate_union_visitor(&self, class: &Class) -> TokenStream {
+    pub(super) fn generate_union_visitor(&self, class: &Class) -> anyhow::Result<TokenStream> {
         if !self.union_is_generated(class) {
-            return quote! {};
+            return Ok(quote! {});
         }
 
         let path = self.path();
@@ -134,7 +134,7 @@ impl ReadAsEcoreGenerator<'_> {
                 let subclass_type = self.xmi_type(subclass);
                 let root_element = self.root_element(subclass);
 
-                if let Some(field_name) = transparent_field(subclass) {
+                Ok(if let Some(field_name) = transparent_field(subclass) {
                     let field = subclass
                         .structural()
                         .iter()
@@ -148,7 +148,7 @@ impl ReadAsEcoreGenerator<'_> {
                         quote! { emit_xmi_type },
                         quote! { path.clone().variant(#variant_path) },
                         quote! { child_log },
-                    );
+                    )?;
                     quote! {
                         #path::#child_ty::#variant(child_log) => {
                             let (element_name, emit_xmi_type) = match element_name {
@@ -189,11 +189,11 @@ impl ReadAsEcoreGenerator<'_> {
                             );
                         }
                     }
-                }
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
-        quote! {
+        Ok(quote! {
             // Some family unions are updated directly but never occur in containment traversal.
             #[allow(dead_code, unused_variables)]
             fn #fn_ident(
@@ -229,6 +229,6 @@ impl ReadAsEcoreGenerator<'_> {
                     }
                 }
             }
-        }
+        })
     }
 }

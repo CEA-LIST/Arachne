@@ -242,11 +242,13 @@ impl Generate for ReadAsEcoreGenerator<'_> {
         let class_visitors = self
             .package_classes
             .iter()
-            .map(|class_idx| self.generate_class_visitor(self.class(*class_idx)));
+            .map(|class_idx| self.generate_class_visitor(self.class(*class_idx)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
         let union_visitors = self
             .package_classes
             .iter()
-            .map(|class_idx| self.generate_union_visitor(self.class(*class_idx)));
+            .map(|class_idx| self.generate_union_visitor(self.class(*class_idx)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
         let query_impl = self.generate_query_impl();
 
         let tokens = quote! {

@@ -1,6 +1,6 @@
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Structural, builtin::Typ as BuiltinTyp, structural},
+    repr::{Class, Structural, structural},
 };
 use log::debug;
 use proc_macro2::TokenStream;
@@ -10,15 +10,12 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{DatatypeOverride, datatype_override, transparent_field, uw_map_spec},
+        annotation::{transparent_field, uw_map_spec},
         cycles::CycleAnalysis,
-        datatype::{
-            crdt::{Crdt, Map as CrdtMap, Named, NestedCrdt, Primitive, Register, SimpleCrdt},
-            to_crdt::ToCrdt,
-        },
         feature::{
-            attribute::{AttributeGenerator, primitive_value_type},
+            attribute::AttributeGenerator,
             containment::ContainmentGenerator,
+            plan::{FeaturePlan, FeatureTypes},
         },
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
@@ -26,7 +23,7 @@ use crate::{
             classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident,
             value_ident_with_suffix,
         },
-        import::{Import, Log, Macros, Protocol},
+        import::{Import, Macros, Protocol},
         operation::OperationGenerator,
         warnings::Warning,
     },
@@ -276,8 +273,15 @@ impl<'a> ClassGenerator<'a> {
             })?;
 
         let variant_name = classifier_ident(self.ctx, subclass);
-        let (payload_ty, log_ty, value_ty, imports, warnings) =
-            self.transparent_field_types(subclass, field)?;
+        let plan = FeaturePlan::resolve(self.ctx, subclass.idx, field, self.cycle_analysis)?;
+        let path = syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD))?;
+        let FeatureTypes {
+            payload: payload_ty,
+            log: log_ty,
+            value: value_ty,
+            imports,
+        } = plan.types(self.ctx, &path, None)?;
+        let warnings = plan.warnings;
 
         Ok(Some(TransparentVariantSpec {
             variant_name,
@@ -287,302 +291,6 @@ impl<'a> ClassGenerator<'a> {
             imports,
             warnings,
         }))
-    }
-
-    fn transparent_field_types(
-        &self,
-        subclass: &Class,
-        field: &Structural,
-    ) -> anyhow::Result<(
-        TokenStream,
-        TokenStream,
-        TokenStream,
-        Vec<Import>,
-        Vec<Warning>,
-    )> {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
-        let (bound_kind, warnings) =
-            crate::codegen::feature::bounds::normalize_bounds(field.bounds, &field.name);
-
-        match field.kind {
-            structural::Typ::EAttribute => {
-                let class_typ = self.ctx.classes().get(*field.typ.unwrap()).unwrap();
-                let (rust_typ, mut primitive) = if class_typ.is_enum() {
-                    let enum_name = classifier_ident(self.ctx, class_typ);
-                    (
-                        Some(quote! { #enum_name }),
-                        Primitive::Register(Register::MultiValue),
-                    )
-                } else {
-                    let typ: BuiltinTyp = class_typ.name().parse().map_err(|_| {
-                        anyhow::anyhow!("Failed to parse type: {}", class_typ.name())
-                    })?;
-                    (typ.to_rust_type(), typ.to_crdt_container())
-                };
-
-                if let Some(override_typ) = datatype_override(field)
-                    && let DatatypeOverride::Primitive(p) = override_typ
-                {
-                    primitive = p;
-                }
-
-                let rust_value_ty = rust_typ
-                    .clone()
-                    .expect("Supported Ecore attributes should have a Rust value type");
-                let scalar_value_ty = primitive_value_type(&primitive, &rust_value_ty);
-
-                let (payload_ty, log_ty, imports) = match primitive.clone() {
-                    Primitive::Counter(_) => {
-                        let rust_typ = rust_typ.clone().expect("Counter should have a rust type");
-                        (
-                            quote! { #path::Counter<#rust_typ> },
-                            quote! { #path::VecLog<#path::Counter<#rust_typ>> },
-                            vec![
-                                Import::Log(Log::Vec),
-                                Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(primitive))),
-                            ],
-                        )
-                    }
-                    Primitive::Flag(flag) => {
-                        let flag_name = rust_ident(flag.name());
-                        (
-                            quote! { #path::#flag_name },
-                            quote! { #path::VecLog<#path::#flag_name> },
-                            vec![
-                                Import::Log(Log::Vec),
-                                Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::Flag(
-                                    flag,
-                                )))),
-                            ],
-                        )
-                    }
-                    Primitive::Register(register) => {
-                        let rust_typ = rust_typ.clone().expect("Register should have a rust type");
-                        let reg_name = rust_ident(register.name());
-                        (
-                            quote! { #path::#reg_name<#rust_typ> },
-                            quote! { #path::VecLog<#path::#reg_name<#rust_typ>> },
-                            vec![
-                                Import::Log(Log::Vec),
-                                Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(
-                                    Primitive::Register(register),
-                                ))),
-                            ],
-                        )
-                    }
-                    Primitive::List => (
-                        quote! { #path::List<char> },
-                        quote! { #path::GraphLog<#path::List<char>> },
-                        vec![
-                            Import::Log(Log::Graph),
-                            Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
-                        ],
-                    ),
-                };
-
-                let (payload_ty, log_ty, value_ty, mut extra_imports) = match bound_kind {
-                    crate::codegen::feature::bounds::BoundKind::Single => {
-                        (payload_ty, log_ty, scalar_value_ty, Vec::new())
-                    }
-                    crate::codegen::feature::bounds::BoundKind::Optional => (
-                        quote! { Option<<#log_ty as #path::IsLog>::Op> },
-                        quote! { #path::OptionLog<#log_ty> },
-                        quote! { Option<#scalar_value_ty> },
-                        vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))],
-                    ),
-                    crate::codegen::feature::bounds::BoundKind::Many => (
-                        quote! { #path::List<<#log_ty as #path::IsLog>::Op> },
-                        quote! { #path::NestedListLog<#log_ty> },
-                        quote! { Vec<#scalar_value_ty> },
-                        vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))],
-                    ),
-                };
-                let mut imports = imports;
-                imports.append(&mut extra_imports);
-                Ok((payload_ty, log_ty, value_ty, imports, warnings))
-            }
-            structural::Typ::EReference => {
-                anyhow::ensure!(
-                    field.containment,
-                    "Transparent field must be a containment reference"
-                );
-                let target_class = self.ctx.classes().get(*field.typ.unwrap()).unwrap();
-                anyhow::ensure!(
-                    !is_uninhabited_polymorphic_class(self.ctx, target_class),
-                    "Transparent containment field `{}` targets abstract class `{}` with no concrete subclasses",
-                    field.name,
-                    target_class.name()
-                );
-                let target_name = containment_target_ident(self.ctx, target_class);
-                let target_log = containment_target_log_ident(self.ctx, target_class);
-                let target_value = containment_target_value_ident(self.ctx, target_class);
-                let boxing_strategy = self
-                    .cycle_analysis
-                    .boxing_strategy(subclass.idx, &field.name);
-
-                if let Some(spec) = uw_map_spec(field) {
-                    anyhow::ensure!(
-                        matches!(bound_kind, crate::codegen::feature::bounds::BoundKind::Many),
-                        "Transparent uw-map field `{}` must be multi-valued",
-                        field.name
-                    );
-                    let entry_class = target_class;
-                    let key_feature = entry_class
-                        .structural()
-                        .iter()
-                        .find(|f| f.name == spec.key_feature)
-                        .ok_or_else(|| {
-                            anyhow::anyhow!("UWMap key feature `{}` not found", spec.key_feature)
-                        })?;
-                    let value_feature = entry_class
-                        .structural()
-                        .iter()
-                        .find(|f| f.name == spec.value_feature)
-                        .ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "UWMap value feature `{}` not found",
-                                spec.value_feature
-                            )
-                        })?;
-                    anyhow::ensure!(
-                        key_feature.kind == structural::Typ::EAttribute,
-                        "UWMap key feature must be an attribute"
-                    );
-                    anyhow::ensure!(
-                        value_feature.kind != structural::Typ::EReference
-                            || value_feature.containment,
-                        "UWMap value feature cannot be a non-containment reference"
-                    );
-
-                    let key_class = self.ctx.classes().get(*key_feature.typ.unwrap()).unwrap();
-                    let key_ty = if key_class.is_enum() {
-                        let enum_name = classifier_ident(self.ctx, key_class);
-                        quote! { #enum_name }
-                    } else {
-                        let typ: BuiltinTyp = key_class.name().parse().map_err(|_| {
-                            anyhow::anyhow!("Unsupported UWMap key type `{}`", key_class.name())
-                        })?;
-                        typ.to_rust_type().ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "UWMap key type `{}` has no Rust type",
-                                key_class.name()
-                            )
-                        })?
-                    };
-
-                    let (value_payload, value_log, value_read, mut imports, mut field_warnings) =
-                        self.transparent_field_types(subclass, value_feature)?;
-                    anyhow::ensure!(
-                        matches!(value_feature.bounds.ubound, Some(1)),
-                        "UWMap value feature must be single-valued"
-                    );
-                    let payload = quote! { #path::UWMap<#key_ty, Box<#value_payload>> };
-                    let log = quote! { #path::UWMapLog<#key_ty, #value_log> };
-                    let read = quote! { rustc_hash::FxHashMap<#key_ty, #value_read> };
-                    imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(CrdtMap::UWMap))));
-                    imports.push(Import::Custom("moirai_crdt::map::uw_map::UWMap"));
-                    let mut all_warnings = warnings;
-                    all_warnings.append(&mut field_warnings);
-                    return Ok((payload, log, read, imports, all_warnings));
-                }
-
-                let (payload_ty, log_ty, value_ty, imports) = match bound_kind {
-                    crate::codegen::feature::bounds::BoundKind::Single => {
-                        if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                            (
-                                quote! { #target_name },
-                                quote! { #target_log },
-                                quote! { #target_value },
-                                vec![],
-                            )
-                        } else {
-                            (
-                                quote! { Box<#target_name> },
-                                quote! { #path::BoxedLog<#target_log> },
-                                quote! { Box<#target_value> },
-                                vec![Import::Protocol(Protocol::BoxedLog)],
-                            )
-                        }
-                    }
-                    crate::codegen::feature::bounds::BoundKind::Optional => {
-                        let inner_payload =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_name }
-                            } else {
-                                quote! { Box<#target_name> }
-                            };
-                        let inner_log =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_log }
-                            } else {
-                                quote! { #path::BoxedLog<#target_log> }
-                            };
-                        let inner_value =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_value }
-                            } else {
-                                quote! { Box<#target_value> }
-                            };
-                        let imports =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                vec![Import::Crdt(Crdt::Nested(NestedCrdt::Optional))]
-                            } else {
-                                vec![
-                                    Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
-                                    Import::Protocol(Protocol::BoxedLog),
-                                ]
-                            };
-                        (
-                            quote! { Option<#inner_payload> },
-                            quote! { #path::OptionLog<#inner_log> },
-                            quote! { Option<#inner_value> },
-                            imports,
-                        )
-                    }
-                    crate::codegen::feature::bounds::BoundKind::Many => {
-                        let inner_payload =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_name }
-                            } else {
-                                quote! { Box<#target_name> }
-                            };
-                        let inner_log =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_log }
-                            } else {
-                                quote! { #path::BoxedLog<#target_log> }
-                            };
-                        let inner_value =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                quote! { #target_value }
-                            } else {
-                                quote! { Box<#target_value> }
-                            };
-                        let imports =
-                            if boxing_strategy == crate::codegen::cycles::BoxingStrategy::NoBox {
-                                vec![
-                                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
-                                    Import::Custom("moirai_crdt::list::nested_list::NestedList"),
-                                ]
-                            } else {
-                                vec![
-                                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
-                                    Import::Custom("moirai_crdt::list::nested_list::NestedList"),
-                                    Import::Protocol(Protocol::BoxedLog),
-                                ]
-                            };
-                        (
-                            quote! { #path::NestedList<#inner_payload> },
-                            quote! { #path::NestedListLog<#inner_log> },
-                            quote! { Vec<#inner_value> },
-                            imports,
-                        )
-                    }
-                };
-                Ok((payload_ty, log_ty, value_ty, imports, warnings))
-            }
-        }
     }
 
     fn generate_abstract_class(&self) -> anyhow::Result<Fragment> {
