@@ -574,7 +574,9 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
         ),
         (
             "examples/notation.ecore",
-            "9d551713bd2d1b1cfd8c38e591ed33a454706305278f0d1c1dc7d3589167506c",
+            // ED.16a (spec/items/ED.16a.md, decision D5 (a)): `Diagram.diagrams` and
+            // `Node.visible` added; 9d551713... before.
+            "12e7d2beab5a6d0a44090ed0512228c170a19879a7ac25093d817d58fe5c4de1",
         ),
         (
             "examples/pet_metamodels/abstract_inherits_concrete.ecore",
@@ -613,7 +615,8 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
         ),
         (
             "examples/notation.metamodel.json",
-            "8c98687d156d8d27688119599601f2b335d9ee9ee88b9348fec30971b28e38c3",
+            // ED.16a; 8c98687d... before.
+            "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f",
         ),
     ];
     let repo = repo();

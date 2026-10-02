@@ -938,7 +938,10 @@ fn ed10_a3_the_owning_end_of_a_relationship_is_read_from_the_descriptor() {
 /// digests the fixture names, and the only new files are the two ED.10 ships.
 #[test]
 fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
-    const TODAY: [(&str, &str); 20] = [
+    // ED.16a (spec/items/ED.16a.md, decision D5 (a)) moves the notation metamodel: its
+    // `.ecore` leaves this list (its bytes are the executor's), its descriptor and the digest
+    // fixture are pinned at the bytes and digest ED.16a registered.
+    const TODAY: [(&str, &str); 19] = [
         (
             "GENERIC_NETWORK_GUIDE.md",
             "01ab74a6ad9ea4e0f7cf0465b10661f8953d095eafef3bb87d684ccc9c15adac",
@@ -973,7 +976,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "fixtures/metamodel-digests.json",
-            "eafd2754b56a1fd10dc4005082ea33cb411b845bac0c24bd0d661a7b0ad0357d",
+            "9d217db433c8a2d72b9badc5264869b3f2b65b84ad95cfe3047c79a244476879",
         ),
         (
             "json.ecore",
@@ -984,12 +987,8 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
             "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
         ),
         (
-            "notation.ecore",
-            "3618fb17585c75c644d5b0aad3c66ad1bc3c9471b99a8bb4c96ac4fe72591aa1",
-        ),
-        (
             "notation.metamodel.json",
-            "8c98687d156d8d27688119599601f2b335d9ee9ee88b9348fec30971b28e38c3",
+            "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f",
         ),
         (
             "pet_metamodels/abstract_inherits_concrete.ecore",
@@ -1036,10 +1035,14 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "notation.metamodel.json",
-            "9d551713bd2d1b1cfd8c38e591ed33a454706305278f0d1c1dc7d3589167506c",
+            "12e7d2beab5a6d0a44090ed0512228c170a19879a7ac25093d817d58fe5c4de1",
         ),
     ];
-    const NEW: [&str; 2] = ["umlclass.ecore", "umlclass.metamodel.json"];
+    const NEW: [&str; 3] = [
+        "umlclass.ecore",
+        "umlclass.metamodel.json",
+        "notation.ecore",
+    ];
     let examples = repo().join("examples");
     let mut differing = Vec::new();
     for (file, today) in TODAY {
