@@ -23,7 +23,7 @@ pub mod annot {
 pub struct Annot {
     source: annot::Source,
     details: HashMap<annot::Key, annot::Val>,
-    /// Raw `references` of the annotation, in document order; they are not resolved.
+    /// Decoded `references` in document order; they are not resolved.
     references: Vec<annot::Reference>,
 }
 
@@ -56,10 +56,10 @@ impl Annot {
     pub fn details(&self) -> &HashMap<annot::Key, annot::Val> {
         &self.details
     }
-    /// Raw `references` of the annotation, in document order.
+    /// Decoded `references` of the annotation, in document order.
     ///
-    /// These are the paths as written in the XML attribute, *e.g.* `#//Class/feature`, and are not
-    /// resolved.
+    /// These are paths from the XML attribute, *e.g.* `#//Class/feature`, with XML
+    /// escaping removed. They are not resolved.
     pub fn references(&self) -> &[annot::Reference] {
         &self.references
     }

@@ -14,7 +14,7 @@ categories = ["encoding", "parser-implementations"]
 
 [dependencies]
 log = "0.4"
-regex = "1.13.1"
+roxmltree = "0.21.1"
 anyhow = "1.0.104"
 safe_index = "0.10"
 smallvec = "1.16.2"

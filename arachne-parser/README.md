@@ -11,66 +11,41 @@ Framework (EMF).
 
 ## Input (XML) format
 
-A few examples are available in the [rsc](./rsc) folder, both XML and JPG.
+[`roxmltree`](https://docs.rs/roxmltree/0.21.1/roxmltree/) reads the XML document.
+The [adapter](./src/parser.rs) maps its nodes into the existing Ecore `Ctx`
+and finalizes forward references. XML syntax, namespaces, comments, processing
+instructions and source positions are handled by the library.
 
-We currently support the following abstract layout
+A document has one `EPackage` root in the
+`http://www.eclipse.org/emf/2002/Ecore` namespace. Namespace prefixes are
+arbitrary; the adapter matches namespace URIs and resolves the QNames in
+`xsi:type` and builtin `eType` attributes. The XML declaration and a final
+newline are optional. Both quote styles and empty-element forms are accepted.
 
-```ebnf
-file =
-    xml_version (package)*
+Attribute values are XML-decoded before they enter the representation.
+For example, `List&lt;Signal&gt; &amp; ℕ` becomes `List<Signal> & ℕ`.
+Annotation references retain their order as decoded, unresolved paths.
+Malformed XML and unsupported Ecore attributes or elements return errors with
+source positions.
 
-package =
-    "<ecore:Package" ... "name" "=" string ">"
-        (annotation | package | classifier)*
-    "</ecore:Package>"
+The adapter supports packages and `eSubpackages`, classifiers, structural
+features, operations and parameters, enum literals, and annotations with
+details and references. Type links, inheritance links, bounds, defaults and
+supported flags use the existing context and representation. Unsupported
+`unsettable` and `eOpposite` settings still produce warnings. Generics are
+not supported; generation has its own
+[supported subset](../arachne-codegen/README.md#supported-metalanguage).
 
-# a class (concrete/abstract/enum/...)
-classifier =
-    "<eClassifiers"
-        "xsi:type" "=" string
-        "name" "=" string
-        "instanceClassName" "=" string
-        "instanceTypeName" "=" string
-        "abstract" "=" string
-    ">"
-        (annotation | operation | structural_feature)
-    "</eClassifiers>
-
-annotation =
-    "<eAnnotations"
-        "source" "=" string
-    ">"
-        ( "<details" "key" "=" string "value" "=" string ">" )*
-    "</eAnnotations>"
-
-# a method
-operation =
-    "<eOperations"
-        "name" "=" string
-        "ordered" "=" bool_string
-        "unique" "=" bool_string
-        "lowerBound" "=" nat_string
-        "upperBound" "=" int_string
-        "eType" "=" string
-    ">"
-        (
-            "<eParameters"
-                "name" "=" string
-                "ordered" "=" bool_string
-                "unique" "=" bool_string
-                "lowerBound" "=" nat_string
-                "upperBound" "=" int_string
-                "eType" "=" string
-            ">"
-        )*
-    "</eOperations>"
-
-structural_feature =
-    "<eStructuralFeatures"
-        "xsi:type" "=" string
-        "name" "=" string
-        "eType" "=" string
-    "/>"
+```xml
+<e:EPackage xmlns:e="http://www.eclipse.org/emf/2002/Ecore"
+    xmlns:t="http://www.w3.org/2001/XMLSchema-instance" name="example">
+    <eClassifiers name="Node" t:type="e:EClass">
+        <eStructuralFeatures name="label" t:type="e:EAttribute"
+            eType="e:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+</e:EPackage>
 ```
+
+More examples are available in the [rsc](./rsc) folder.
 
 [ecore]: https://download.eclipse.org/modeling/emf/emf/javadoc/2.9.0/org/eclipse/emf/ecore/package-summary.html#details

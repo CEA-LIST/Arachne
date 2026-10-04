@@ -62,9 +62,9 @@ pub struct Structural {
     pub unsettable: Option<bool>,
     /// Indicates whether the feature value is unique. Default is true.
     pub unique: Option<bool>,
-    /// Raw Ecore default value, if explicitly specified.
+    /// XML-decoded Ecore default value, if explicitly specified.
     pub default_value: Option<String>,
-    /// Raw Ecore default value literal, if explicitly specified.
+    /// XML-decoded Ecore default value literal, if explicitly specified.
     pub default_value_literal: Option<String>,
     /// Annotations associated with the feature.
     pub annotations: Annots,

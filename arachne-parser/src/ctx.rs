@@ -119,7 +119,7 @@ impl Ctx {
 
     pub fn parse(txt: impl AsRef<str>) -> Res<Self> {
         let mut slf = Self::with_capacity(7, 7);
-        parser::raw::Parser::parse(txt.as_ref(), &mut slf)?;
+        parser::parse(txt.as_ref(), &mut slf)?;
         slf.finalize()?;
         Ok(slf)
     }
@@ -938,9 +938,7 @@ mod tests {
             .any(|feature| feature.name == "label"));
     }
 
-    /// `top` skips everything up to the first `>` without looking at it, `at_path` accepts the
-    /// end of input, and nothing asks for a package, so input with no `EPackage` in it parses as
-    /// an empty model.
+    /// Invalid input and unrelated XML roots must not become an empty model.
     #[test]
     fn refuses_input_with_no_epackage_root() {
         for input in [
@@ -960,22 +958,19 @@ mod tests {
         }
     }
 
-    /// `top` takes the first tag to be the XML declaration and throws it away, so a file that
-    /// starts with its `EPackage` loses that tag and is refused at its first classifier.
+    /// The XML declaration is optional; retain the package and its contents.
     #[test]
     fn parses_a_file_with_no_xml_declaration() {
         assert_parses_bare_package(&format!("{BARE_PACKAGE}\n"));
     }
 
-    /// `try_raw_tag` only matches a tag strictly shorter than the rest of the input, so a file
-    /// whose last bytes are `</ecore:EPackage>` is refused.
+    /// The closing root tag can end exactly at the end of the input.
     #[test]
     fn parses_a_file_with_no_trailing_newline() {
         assert_parses_bare_package(&format!("{XML_DECLARATION}{BARE_PACKAGE}"));
     }
 
-    /// `top` skips to the first `<` one byte per character, so the three bytes of a byte order
-    /// mark leave the cursor inside it.
+    /// A UTF-8 byte order mark before the declaration is accepted.
     #[test]
     fn parses_a_file_starting_with_a_byte_order_mark() {
         assert_parses_bare_package(&format!("\u{feff}{XML_DECLARATION}{BARE_PACKAGE}\n"));
@@ -1226,11 +1221,10 @@ mod tests {
         assert!(annotation
             .details()
             .get("body")
-            .is_some_and(|body| body.contains("ArrayList&lt;SignalType>")));
+            .is_some_and(|body| body.contains("ArrayList<SignalType>")));
     }
 
-    /// `annotation` reads a `source` attribute and then requires `>`, so an annotation closed
-    /// with `/>` is refused, although it is how Ecore writes an annotation with no details.
+    /// Empty annotations can use the self-closing form at every supported level.
     #[test]
     fn parses_self_closing_annotations() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
@@ -1525,10 +1519,7 @@ mod tests {
         )
     }
 
-    /// `until_char_is` advances its byte cursor by one per `char` and then slices
-    /// the source by that cursor, so a multi-byte character near the end of an
-    /// attribute value puts the slice end inside the character and the parse
-    /// panics with "is not a char boundary".
+    /// A multi-byte character at the end of an attribute must not panic or truncate.
     #[test]
     fn parses_a_non_ascii_attribute_value_ending_in_a_multibyte_char() {
         for value in ["»", "«»x", "ℕx", "the «Focus»."] {
@@ -1545,9 +1536,7 @@ mod tests {
         }
     }
 
-    /// The same one-per-`char` cursor, where the lag lands on a character
-    /// boundary: the value slice stops short of the closing quote and the file
-    /// is refused as malformed although it is well-formed XML.
+    /// Mixed ASCII and Unicode attribute values must parse intact.
     #[test]
     fn parses_a_non_ascii_attribute_value_followed_by_ascii() {
         let ecore = ecore_with_annotation_value("a guillemet » inside an attribute value");
