@@ -1,15 +1,17 @@
 //! Shared, validated storage decisions for record fields, transparent variants and XMI.
 
 use anyhow::{Context, Result, ensure};
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Class, Structural, builtin::Typ, idx, structural},
-};
+use ecore_rs::repr::{Class, Structural, builtin::Typ, idx, structural};
 use proc_macro2::TokenStream;
 use quote::quote;
 
+use super::{
+    bounds::{BoundKind, normalize_bounds},
+    typed_element::unsupported_feature_properties,
+};
 use crate::codegen::{
-    annotation::{DatatypeOverride, datatype_override, transparent_field, uw_map_spec},
+    analysis::ModelIndex,
+    annotation::{DatatypeOverride, datatype_override, uw_map_spec},
     classifier::{
         containment_target_ident, containment_target_log_ident, containment_target_value_ident,
         is_uninhabited_polymorphic_class,
@@ -25,11 +27,6 @@ use crate::codegen::{
     ident::{classifier_type_ident, rust_ident, value_ident},
     import::{Import, Log, Protocol},
     warnings::Warning,
-};
-
-use super::{
-    bounds::{BoundKind, normalize_bounds},
-    typed_element::unsupported_feature_properties,
 };
 
 pub(crate) struct FeaturePlan<'a> {
@@ -76,7 +73,7 @@ pub(crate) struct FeatureTypes {
     pub imports: Vec<Import>,
 }
 
-fn feature_type<'a>(ctx: &'a Ctx, feature: &Structural) -> Result<&'a Class> {
+fn feature_type<'a>(ctx: &'a ModelIndex<'a>, feature: &Structural) -> Result<&'a Class> {
     feature
         .typ
         .and_then(|idx| ctx.classes().get(*idx))
@@ -96,7 +93,11 @@ fn builtin_type(class: &Class) -> Result<Typ> {
     Ok(typ)
 }
 
-fn rust_type(ctx: &Ctx, class: &Class, namespace: Option<&syn::Path>) -> Result<TokenStream> {
+fn rust_type(
+    ctx: &ModelIndex<'_>,
+    class: &Class,
+    namespace: Option<&syn::Path>,
+) -> Result<TokenStream> {
     if class.is_enum() {
         let ident = classifier_type_ident(ctx, class);
         Ok(qualify(quote! { #ident }, namespace))
@@ -126,7 +127,7 @@ impl<'a> FeaturePlan<'a> {
         }
     }
 
-    pub fn attribute(ctx: &'a Ctx, feature: &'a Structural) -> Result<Self> {
+    pub fn attribute(ctx: &'a ModelIndex<'a>, feature: &'a Structural) -> Result<Self> {
         ensure!(
             feature.kind == structural::Typ::EAttribute,
             "Expected an attribute"
@@ -168,7 +169,7 @@ impl<'a> FeaturePlan<'a> {
     }
 
     pub fn resolve(
-        ctx: &'a Ctx,
+        ctx: &'a ModelIndex<'a>,
         source: idx::Class,
         feature: &'a Structural,
         cycles: &CycleAnalysis,
@@ -229,7 +230,7 @@ impl<'a> FeaturePlan<'a> {
             rust_type(ctx, key_type, None)?;
             // Transparent variants project the entry value directly into their union.
             // Preserve that projection's boxing owner in the plan so XMI uses it too.
-            let owner = if transparent_field(&ctx.classes()[*source]).is_some() {
+            let owner = if ctx.info(source).transparent_field.is_some() {
                 source
             } else {
                 target.idx
@@ -250,7 +251,7 @@ impl<'a> FeaturePlan<'a> {
     /// when the consumer is outside classifiers.rs (notably the XMI query module).
     pub fn types(
         &self,
-        ctx: &Ctx,
+        ctx: &ModelIndex<'_>,
         path: &syn::Path,
         namespace: Option<&syn::Path>,
     ) -> Result<FeatureTypes> {
@@ -382,7 +383,7 @@ impl<'a> FeaturePlan<'a> {
         Ok(types)
     }
 
-    pub fn into_field(self, ctx: &Ctx, path: &syn::Path) -> Result<Fragment> {
+    pub fn into_field(self, ctx: &ModelIndex<'_>, path: &syn::Path) -> Result<Fragment> {
         let name = value_ident(&self.feature.name);
         let FeatureTypes {
             log,

@@ -5,10 +5,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ecore_rs::{ctx::Ctx, prelude::idx::Class};
+use ecore_rs::prelude::idx::Class;
 
-use crate::codegen::classifier::{
-    has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+use crate::codegen::{
+    analysis::ModelIndex,
+    classifier::{
+        has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+    },
 };
 
 type ClassIdx = Class;
@@ -51,7 +54,7 @@ pub enum BoxingStrategy {
 }
 
 impl CycleAnalysis {
-    pub fn analyze(ctx: &Ctx) -> anyhow::Result<Self> {
+    pub fn analyze(ctx: &ModelIndex<'_>) -> anyhow::Result<Self> {
         CycleAnalyzer::new(ctx).analyze()
     }
 
@@ -73,11 +76,11 @@ impl CycleAnalysis {
 }
 
 struct CycleAnalyzer<'a> {
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
 }
 
 impl<'a> CycleAnalyzer<'a> {
-    fn new(ctx: &'a Ctx) -> Self {
+    fn new(ctx: &'a ModelIndex<'a>) -> Self {
         Self { ctx }
     }
 
@@ -115,7 +118,7 @@ impl<'a> CycleAnalyzer<'a> {
                 }
 
                 if has_codegen_polymorphic_family(self.ctx, target_class) {
-                    for member in self.polymorphic_family_members(target) {
+                    for &member in self.polymorphic_family_members(target) {
                         edges.push(ContainmentEdge {
                             source,
                             target: member,
@@ -289,7 +292,7 @@ impl<'a> CycleAnalyzer<'a> {
                 }
 
                 let family_members = self.polymorphic_family_members(target_idx);
-                let closes_family_cycle = family_members.into_iter().any(|member| {
+                let closes_family_cycle = family_members.iter().copied().any(|member| {
                     let mut visited = HashSet::new();
                     Self::path_exists(&adj_list, member, class.idx, &mut visited)
                 });
@@ -310,26 +313,8 @@ impl<'a> CycleAnalyzer<'a> {
         boxing_requirements
     }
 
-    fn polymorphic_family_members(&self, root: ClassIdx) -> HashSet<ClassIdx> {
-        let mut members = HashSet::new();
-        let mut visited = HashSet::new();
-        let mut stack = vec![root];
-
-        while let Some(class_idx) = stack.pop() {
-            if !visited.insert(class_idx) {
-                continue;
-            }
-
-            let class = &self.ctx.classes()[*class_idx];
-            if is_uninhabited_polymorphic_class(self.ctx, class) {
-                continue;
-            }
-
-            members.insert(class_idx);
-            stack.extend(class.sub().iter().copied());
-        }
-
-        members
+    fn polymorphic_family_members(&self, root: ClassIdx) -> &[ClassIdx] {
+        &self.ctx.info(root).family
     }
 
     fn path_exists(
@@ -377,6 +362,6 @@ impl<'a> CycleAnalyzer<'a> {
 }
 
 /// Analyzes the Ecore model and detects cycles requiring Box wrappers
-pub fn analyze_cycles(ctx: &Ctx) -> anyhow::Result<CycleAnalysis> {
+pub fn analyze_cycles(ctx: &ModelIndex<'_>) -> anyhow::Result<CycleAnalysis> {
     CycleAnalysis::analyze(ctx)
 }

@@ -1,7 +1,16 @@
-use ecore_rs::{ctx::Ctx, prelude::idx, repr::structural};
-use log::warn;
+use std::collections::BTreeSet;
 
-use crate::{codegen::classifier::is_instantiable_class, utils::hash::HashSet};
+use ecore_rs::{prelude::idx, repr::structural};
+use log::warn;
+use syn::Ident;
+
+use crate::{
+    codegen::{
+        analysis::ModelIndex,
+        ident::{rust_ident, type_ident},
+    },
+    utils::hash::{HashMap, HashSet},
+};
 
 /// A non-containment reference in the Ecore model.
 #[derive(Debug, Clone)]
@@ -26,6 +35,10 @@ pub struct ReferenceAnalysis {
     /// Classes that need vertex ID types (sources ∪ targets of non-containment refs).
     /// Ordered deterministically for stable code generation.
     pub referenceable_classes: Vec<idx::Class>,
+    /// Edge type names corresponding to `refs`; repeated targets may share an edge type.
+    pub edge_names: Vec<Ident>,
+    /// Unique arc names corresponding to `refs`, shared by the graph and XMI generators.
+    pub connection_names: Vec<Ident>,
 }
 
 impl ReferenceAnalysis {
@@ -44,13 +57,16 @@ impl ReferenceAnalysis {
     /// - `Reference -> DataType`
     ///
     /// restricted to the classes that are part of the generated package slice.
-    pub fn analyze(ctx: &Ctx, package_classes: &[idx::Class]) -> Self {
-        let package_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
+    pub fn analyze(
+        ctx: &ModelIndex<'_>,
+        reachable_classes: &BTreeSet<idx::Class>,
+        families: &[Vec<idx::Class>],
+    ) -> Self {
         let mut refs = Vec::new();
         let mut seen_refs = HashSet::default();
         let mut referenceable_set = HashSet::default();
 
-        for &class_idx in package_classes {
+        for &class_idx in reachable_classes {
             let class = &ctx.classes()[*class_idx];
 
             for feature in class.structural() {
@@ -66,7 +82,7 @@ impl ReferenceAnalysis {
                     None => continue,
                 };
 
-                if !package_set.contains(&target_idx) {
+                if !reachable_classes.contains(&target_idx) {
                     warn!(
                         "Reference `{}` in class `{}` points to a target class `{}` outside the package slice. Skipping.",
                         feature.name,
@@ -76,13 +92,11 @@ impl ReferenceAnalysis {
                     continue;
                 }
 
-                let concrete_sources =
-                    Self::concrete_classes_in_package(ctx, class_idx, &package_set);
-                let concrete_targets =
-                    Self::concrete_classes_in_package(ctx, target_idx, &package_set);
+                let concrete_sources = &families[*class_idx];
+                let concrete_targets = &families[*target_idx];
 
-                for source_class in &concrete_sources {
-                    for target_class in &concrete_targets {
+                for source_class in concrete_sources {
+                    for target_class in concrete_targets {
                         let key = (
                             *source_class,
                             *target_class,
@@ -123,52 +137,29 @@ impl ReferenceAnalysis {
         let mut referenceable_classes: Vec<idx::Class> = referenceable_set.into_iter().collect();
         referenceable_classes.sort_by_key(|c| *c);
 
+        let mut edge_names = Vec::with_capacity(refs.len());
+        let mut connection_names = Vec::with_capacity(refs.len());
+        let mut counts: HashMap<String, usize> = HashMap::default();
+        for reference in &refs {
+            let source = ctx.classifier_name(reference.source_class);
+            let target = ctx.classifier_name(reference.target_class);
+            let feature = type_ident(&reference.reference_name);
+            edge_names.push(rust_ident(format!("{source}{feature}Edge")));
+            let base = format!("{source}To{target}");
+            let suffix = counts.entry(base.clone()).or_insert(0);
+            let name = if *suffix == 0 {
+                base
+            } else {
+                format!("{base}{}", *suffix + 1)
+            };
+            *suffix += 1;
+            connection_names.push(rust_ident(name));
+        }
         Self {
             refs,
             referenceable_classes,
+            edge_names,
+            connection_names,
         }
     }
-
-    fn concrete_classes_in_package(
-        ctx: &Ctx,
-        class_idx: idx::Class,
-        package_set: &HashSet<idx::Class>,
-    ) -> Vec<idx::Class> {
-        let mut visited = HashSet::default();
-        let mut classes = Self::find_concrete_descendants(ctx, class_idx, &mut visited);
-
-        classes.retain(|class_idx| package_set.contains(class_idx));
-        classes.sort_by_key(|class_idx| *class_idx);
-        classes.dedup();
-        classes
-    }
-
-    /// Find all concrete classes in the substitution family of a class.
-    /// If the class itself is concrete, it is included alongside its concrete descendants.
-    fn find_concrete_descendants(
-        ctx: &Ctx,
-        class_idx: idx::Class,
-        visited: &mut HashSet<idx::Class>,
-    ) -> Vec<idx::Class> {
-        if !visited.insert(class_idx) {
-            return Vec::new();
-        }
-
-        let class = &ctx.classes()[*class_idx];
-
-        let mut result = Vec::new();
-
-        if is_instantiable_class(class) {
-            result.push(class_idx);
-        }
-
-        for sub_idx in class.sub() {
-            result.extend(Self::find_concrete_descendants(ctx, *sub_idx, visited));
-        }
-        result
-    }
-}
-
-pub fn analyze_references(ctx: &Ctx, package_classes: &[idx::Class]) -> ReferenceAnalysis {
-    ReferenceAnalysis::analyze(ctx, package_classes)
 }

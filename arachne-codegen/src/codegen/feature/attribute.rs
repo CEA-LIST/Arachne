@@ -1,22 +1,22 @@
-use ecore_rs::{ctx::Ctx, repr::Structural};
+use ecore_rs::repr::Structural;
 
+use super::plan::FeaturePlan;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
+        analysis::ModelIndex,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
     },
 };
 
-use super::plan::FeaturePlan;
-
 pub struct AttributeGenerator<'a> {
     attribute: &'a Structural,
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
 }
 
 impl<'a> AttributeGenerator<'a> {
-    pub fn new(attribute: &'a Structural, ctx: &'a Ctx) -> Self {
+    pub fn new(attribute: &'a Structural, ctx: &'a ModelIndex<'a>) -> Self {
         Self { attribute, ctx }
     }
 }

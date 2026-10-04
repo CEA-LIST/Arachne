@@ -1,9 +1,8 @@
 //! Generates the read-only projection from a package CRDT to Ecore XMI.
 
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Class, Structural, idx, structural},
-};
+use std::collections::BTreeSet;
+
+use ecore_rs::repr::{Class, Structural, idx};
 use heck::ToSnakeCase;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -18,11 +17,8 @@ mod visitors;
 use crate::{
     READ_AS_ECORE_PATH_MOD,
     codegen::{
-        annotation::{transparent_field, uw_map_spec},
-        classifier::{
-            classifier_ident, has_codegen_polymorphic_family, is_instantiable_class,
-            is_uninhabited_polymorphic_class, polymorphic_kind_ident,
-        },
+        analysis::{GenerationPlan, ModelIndex},
+        classifier::{classifier_ident, has_codegen_polymorphic_family, polymorphic_kind_ident},
         cycles::CycleAnalysis,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
@@ -33,30 +29,26 @@ use crate::{
 };
 
 pub struct ReadAsEcoreGenerator<'a> {
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
     pack_idx: idx::Pack,
-    package_classes: Vec<idx::Class>,
-    root_class_indices: Vec<idx::Class>,
+    /// Shared package membership and class-ID order for visitors and reference filtering.
+    reachable_classes: &'a BTreeSet<idx::Class>,
+    concrete_families: &'a [Vec<idx::Class>],
+    root_class_indices: &'a [idx::Class],
     ref_analysis: &'a ReferenceAnalysis,
     cycle_analysis: &'a CycleAnalysis,
 }
 
 impl<'a> ReadAsEcoreGenerator<'a> {
-    pub fn new(
-        ctx: &'a Ctx,
-        pack_idx: idx::Pack,
-        package_classes: Vec<idx::Class>,
-        root_class_indices: Vec<idx::Class>,
-        ref_analysis: &'a ReferenceAnalysis,
-        cycle_analysis: &'a CycleAnalysis,
-    ) -> Self {
+    pub fn new(plan: &'a GenerationPlan<'a>) -> Self {
         Self {
-            ctx,
-            pack_idx,
-            package_classes,
-            root_class_indices,
-            ref_analysis,
-            cycle_analysis,
+            ctx: &plan.model,
+            pack_idx: plan.pack_idx,
+            reachable_classes: &plan.reachable_classes,
+            concrete_families: &plan.concrete_families,
+            root_class_indices: &plan.roots,
+            ref_analysis: &plan.references,
+            cycle_analysis: &plan.cycles,
         }
     }
 
@@ -122,35 +114,8 @@ impl<'a> ReadAsEcoreGenerator<'a> {
         &self.ctx.classes()[*class_idx]
     }
 
-    fn package_class_set(&self) -> std::collections::HashSet<idx::Class> {
-        self.package_classes.iter().copied().collect()
-    }
-
-    fn is_uw_map_entry_helper(&self, class: &Class) -> bool {
-        if !is_instantiable_class(class) {
-            return false;
-        }
-
-        let incoming_features = self
-            .ctx
-            .classes()
-            .iter()
-            .flat_map(|source| source.structural().iter())
-            .filter(|feature| feature.typ == Some(class.idx))
-            .collect::<Vec<_>>();
-
-        !incoming_features.is_empty()
-            && incoming_features.iter().all(|feature| {
-                feature.kind == structural::Typ::EReference
-                    && feature.containment
-                    && uw_map_spec(feature).is_some()
-            })
-    }
-
     fn generates_concrete_wrapper(&self, class: &Class) -> bool {
-        is_instantiable_class(class)
-            && transparent_field(class).is_none()
-            && !self.is_uw_map_entry_helper(class)
+        self.ctx.info(class.idx).wrapper
     }
 
     fn union_is_generated(&self, class: &Class) -> bool {
@@ -193,44 +158,17 @@ impl<'a> ReadAsEcoreGenerator<'a> {
         self.xmi_type(class)
     }
 
-    fn concrete_family(&self, class_idx: idx::Class) -> Vec<idx::Class> {
-        let package_set = self.package_class_set();
-        let mut result = Vec::new();
-        let mut stack = vec![class_idx];
-
-        while let Some(candidate) = stack.pop() {
-            if !package_set.contains(&candidate) {
-                continue;
-            }
-
-            let class = self.class(candidate);
-            if is_instantiable_class(class) {
-                result.push(candidate);
-            }
-            stack.extend(class.sub().iter().copied());
-        }
-
-        result.sort_by_key(|idx| **idx);
-        result.dedup();
-        result
+    fn concrete_family(&self, class_idx: idx::Class) -> &[idx::Class] {
+        &self.concrete_families[*class_idx]
     }
 
-    fn union_variants<'b>(&'b self, class: &'b Class) -> Vec<&'b Class> {
-        let mut variants = Vec::new();
-
-        if is_instantiable_class(class) {
-            variants.push(class);
-        }
-
-        variants.extend(
-            class
-                .sub()
-                .iter()
-                .map(|idx| self.class(*idx))
-                .filter(|subclass| !is_uninhabited_polymorphic_class(self.ctx, subclass)),
-        );
-
-        variants
+    fn union_variants(&self, class: &Class) -> Vec<&Class> {
+        self.ctx
+            .info(class.idx)
+            .variants
+            .iter()
+            .map(|idx| self.class(*idx))
+            .collect()
     }
 }
 
@@ -240,12 +178,12 @@ impl Generate for ReadAsEcoreGenerator<'_> {
         let reference_resolver = self.generate_reference_resolver();
 
         let class_visitors = self
-            .package_classes
+            .reachable_classes
             .iter()
             .map(|class_idx| self.generate_class_visitor(self.class(*class_idx)))
             .collect::<anyhow::Result<Vec<_>>>()?;
         let union_visitors = self
-            .package_classes
+            .reachable_classes
             .iter()
             .map(|class_idx| self.generate_union_visitor(self.class(*class_idx)))
             .collect::<anyhow::Result<Vec<_>>>()?;

@@ -1,12 +1,11 @@
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Structural, idx},
-};
+use ecore_rs::repr::{Structural, idx};
 use proc_macro2::TokenStream;
 
+use super::plan::FeaturePlan;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
+        analysis::ModelIndex,
         classifier::is_uninhabited_polymorphic_class,
         cycles::CycleAnalysis,
         generate::{Fragment, Generate},
@@ -14,12 +13,10 @@ use crate::{
     },
 };
 
-use super::plan::FeaturePlan;
-
 pub struct ContainmentGenerator<'a> {
     reference: &'a Structural,
     source_class: idx::Class,
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
     cycle_analysis: &'a CycleAnalysis,
 }
 
@@ -27,7 +24,7 @@ impl<'a> ContainmentGenerator<'a> {
     pub fn new(
         reference: &'a Structural,
         source_class: idx::Class,
-        ctx: &'a Ctx,
+        ctx: &'a ModelIndex<'a>,
         cycle_analysis: &'a CycleAnalysis,
     ) -> Self {
         Self {

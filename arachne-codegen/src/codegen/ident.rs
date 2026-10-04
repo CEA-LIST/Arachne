@@ -1,12 +1,11 @@
-/// This module contains functions for generating valid Rust identifiers from arbitrary strings,
-/// ensuring that they do not conflict with Rust keywords or other generated identifiers.
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Class, idx},
-};
+//! Rust identifiers and deterministic classifier-name collision resolution.
+
+use ecore_rs::{ctx::Ctx, repr::Class};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::Span;
 use syn::Ident;
+
+use super::analysis::ModelIndex;
 
 const RUST_KEYWORDS: &[&str] = &[
     "as", "async", "await", "abstract", "become", "box", "break", "const", "continue", "crate",
@@ -63,16 +62,16 @@ pub fn type_ident_with_suffix(name: &str, suffix: &str) -> Ident {
     rust_ident(format!("{name}{suffix}"))
 }
 
-pub fn classifier_type_ident(ctx: &Ctx, class: &Class) -> Ident {
-    rust_ident(classifier_type_name(ctx, class.idx))
+pub fn classifier_type_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
+    ctx.classifier_name(class.idx).clone()
 }
 
-pub fn classifier_type_ident_with_suffix(ctx: &Ctx, class: &Class, suffix: &str) -> Ident {
-    rust_ident(format!(
-        "{}{}",
-        classifier_type_name(ctx, class.idx),
-        suffix
-    ))
+pub fn classifier_type_ident_with_suffix(
+    ctx: &ModelIndex<'_>,
+    class: &Class,
+    suffix: &str,
+) -> Ident {
+    rust_ident(format!("{}{}", ctx.classifier_name(class.idx), suffix))
 }
 
 pub fn value_ident(name: &str) -> Ident {
@@ -123,11 +122,11 @@ fn sanitize_ident(name: &str) -> String {
     out
 }
 
-fn classifier_type_name(ctx: &Ctx, class_idx: idx::Class) -> String {
+pub(crate) fn classifier_type_names(ctx: &Ctx) -> Vec<Ident> {
     let mut names = ctx
         .classes()
         .iter()
-        .map(|class| (class.idx, type_ident(class.name()).to_string()))
+        .map(|class| type_ident(class.name()).to_string())
         .collect::<Vec<_>>();
 
     let mut changed = true;
@@ -135,8 +134,8 @@ fn classifier_type_name(ctx: &Ctx, class_idx: idx::Class) -> String {
         changed = false;
 
         for i in 0..names.len() {
-            let original = names[i].1.clone();
-            let mut candidate = names[i].1.clone();
+            let original = names[i].clone();
+            let mut candidate = names[i].clone();
             let mut attempt = 0;
 
             while classifier_name_conflicts(i, &candidate, &names) {
@@ -148,29 +147,22 @@ fn classifier_type_name(ctx: &Ctx, class_idx: idx::Class) -> String {
                 };
             }
 
-            if names[i].1 != candidate {
-                names[i].1 = candidate;
+            if names[i] != candidate {
+                names[i] = candidate;
                 changed = true;
             }
         }
     }
 
-    names
-        .into_iter()
-        .find_map(|(idx, name)| (idx == class_idx).then_some(name))
-        .unwrap_or_else(|| "Unnamed".to_string())
+    names.into_iter().map(rust_ident).collect()
 }
 
-fn classifier_name_conflicts(
-    candidate_index: usize,
-    candidate: &str,
-    names: &[(idx::Class, String)],
-) -> bool {
+fn classifier_name_conflicts(candidate_index: usize, candidate: &str, names: &[String]) -> bool {
     names
         .iter()
         .enumerate()
         .filter(|(index, _)| *index != candidate_index)
-        .any(|(_, (_, name))| {
+        .any(|(_, name)| {
             candidate == name
                 || MACRO_GENERATED_TYPE_SUFFIXES
                     .iter()
@@ -222,6 +214,7 @@ mod tests {
         )
         .expect("ecore should parse");
 
+        let index = super::ModelIndex::new(&ctx).expect("model index should build");
         let query = ctx
             .classes()
             .iter()
@@ -233,13 +226,13 @@ mod tests {
             .find(|class| class.name() == "QueryValue")
             .expect("QueryValue should exist");
 
-        assert_eq!(classifier_type_ident(&ctx, query).to_string(), "Query");
+        assert_eq!(classifier_type_ident(&index, query).to_string(), "Query");
         assert_eq!(
-            classifier_type_ident(&ctx, query_value).to_string(),
+            classifier_type_ident(&index, query_value).to_string(),
             "QueryValueModel"
         );
         assert_eq!(
-            classifier_type_ident_with_suffix(&ctx, query_value, "Log").to_string(),
+            classifier_type_ident_with_suffix(&index, query_value, "Log").to_string(),
             "QueryValueModelLog"
         );
     }

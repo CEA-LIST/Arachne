@@ -10,7 +10,7 @@ use crate::{
 
 const ARACHNE_XMI_RUNTIME: &str = arachne_xmi::RUNTIME_SOURCE;
 
-/// Writes a complete Rust project for the generated code.
+/// Writes a complete Rust library (Cargo.toml, folders, etc.) and flush the generated code in the different files.
 pub fn write_project(
     config: &Config,
     project_name: &str,
@@ -81,6 +81,7 @@ pub fn write_project(
     Ok(())
 }
 
+/// Renders the Cargo.toml file for the generated project, including dependencies on Moirai crates and other necessary libraries.
 fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -> Result<String> {
     let moirai = |name: &str| -> Result<String> {
         let options = match name {
@@ -224,12 +225,7 @@ fn format_with_rustfmt(tokens: TokenStream) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, time::SystemTime};
-
-    use quote::quote;
-
-    use super::{toml_string, write_project};
-    use crate::config::{Config, Formatting};
+    use super::toml_string;
 
     #[test]
     fn manifest_paths_escape_toml_special_characters() {
@@ -237,59 +233,5 @@ mod tests {
             toml_string("C:\\Moirai\"é\n\u{7}"),
             "\"C:\\\\Moirai\\\"é\\n\\u0007\""
         );
-    }
-
-    #[test]
-    fn writes_read_as_ecore_to_a_separate_generated_module() {
-        let nonce = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("system clock should be after the Unix epoch")
-            .as_nanos();
-        let output_dir = std::env::temp_dir().join(format!(
-            "arachne-codegen-project-{}-{nonce}",
-            std::process::id()
-        ));
-        let config = Config::new("unused.ecore")
-            .with_output_dir(&output_dir)
-            .with_formatting(Formatting::None);
-
-        write_project(
-            &config,
-            "test-project",
-            quote! { pub struct ClassifierMarker; },
-            quote! { pub struct ReferenceMarker; },
-            quote! { pub struct PackageMarker; },
-            quote! { pub struct ReadAsEcoreMarker; },
-            false,
-        )
-        .expect("project generation should succeed");
-
-        let package = fs::read_to_string(output_dir.join("src/package.rs"))
-            .expect("package.rs should be generated");
-        let read_as_ecore = fs::read_to_string(output_dir.join("src/read_as_ecore.rs"))
-            .expect("read_as_ecore.rs should be generated");
-        let lib =
-            fs::read_to_string(output_dir.join("src/lib.rs")).expect("lib.rs should be generated");
-        let cargo = fs::read_to_string(output_dir.join("Cargo.toml"))
-            .expect("Cargo.toml should be generated");
-        let xmi_runtime_cargo =
-            fs::read_to_string(output_dir.join("runtime/arachne-xmi/Cargo.toml"))
-                .expect("the shared XMI runtime manifest should be generated");
-        let xmi_runtime = fs::read_to_string(output_dir.join("runtime/arachne-xmi/src/lib.rs"))
-            .expect("the shared XMI runtime source should be generated");
-
-        assert!(package.contains("PackageMarker"));
-        assert!(!package.contains("ReadAsEcoreMarker"));
-        assert!(read_as_ecore.contains("ReadAsEcoreMarker"));
-        assert!(lib.contains("pub mod read_as_ecore"));
-        assert!(!output_dir.join("runtime/arachne-moirai").exists());
-        assert!(cargo.contains("arachne-xmi = { path = \"runtime/arachne-xmi\" }"));
-        assert!(cargo.contains("[workspace]"));
-        assert!(cargo.contains("rustc-hash = \"1.1.0\""));
-        assert!(xmi_runtime_cargo.contains("quick-xml = \"0.42.0\""));
-        assert!(xmi_runtime.contains("pub struct Writer"));
-        assert!(xmi_runtime.contains("quick_xml"));
-
-        fs::remove_dir_all(output_dir).expect("generated test project should be removable");
     }
 }

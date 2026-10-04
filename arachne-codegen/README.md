@@ -6,6 +6,23 @@ For example, while it is not a challenge in itself from a CRDT or Ecore semantic
 
 _Note: we assume the reader is familiar with the concepts of CRDTs and Ecore. For an introduction to CRDTs, see [Approaches to Conflict-Free Replicated Data Types](https://dl.acm.org/doi/10.1145/3695249). Our implementation is based on the [pure operation-based CRDTs](https://arxiv.org/abs/1710.04469) framework._
 
+## Generation pipeline
+
+Each generation run builds one [`GenerationPlan`](./src/codegen/analysis.rs).
+Its `ModelIndex` resolves classifier names and caches inheritance families,
+uninhabited classes, wrappers, map helpers and transparent fields. Inheritance
+cycles produce a generation error.
+
+The plan selects package roots and reachable classes, then computes containment
+boxing and non-containment references once. `reachable_classes` is one
+`BTreeSet` for membership checks and iteration in class-ID order.
+`generation_order` is a separate vector that preserves parent-before-subclass
+order and also includes model-wide enum classifiers. Classifier, reference,
+package and XMI generators borrow these shared results, including edge and arc names. The
+cache belongs to the run, so a later model starts with a fresh plan.
+[`FeaturePlan`](./src/codegen/feature/plan.rs)
+supplies the storage decisions shared by field generation and XMI traversal.
+
 ## Mapping validity
 
 We outline the principles that guided the design of the mapping from Ecore to CRDTs. Considering metamodels conforming to the supported subset of Ecore:

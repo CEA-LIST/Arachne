@@ -1,4 +1,4 @@
-use ecore_rs::{ctx::Ctx, repr::idx};
+use ecore_rs::repr::idx;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
@@ -6,6 +6,7 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD, PACKAGE_PATH_MOD,
     codegen::{
+        analysis::{GenerationPlan, ModelIndex},
         classifier::{
             has_codegen_polymorphic_family, polymorphic_kind_ident, polymorphic_kind_log_ident,
         },
@@ -31,33 +32,27 @@ fn classifiers_path() -> syn::Path {
 }
 
 pub struct PackageGenerator<'a> {
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
     pack_idx: idx::Pack,
-    root_class_indices: Vec<idx::Class>,
+    root_class_indices: &'a [idx::Class],
     ref_analysis: &'a ReferenceAnalysis,
 }
 
 impl<'a> PackageGenerator<'a> {
-    pub fn new(
-        ctx: &'a Ctx,
-        pack_idx: idx::Pack,
-        root_class_indices: Vec<idx::Class>,
-        ref_analysis: &'a ReferenceAnalysis,
-    ) -> Self {
+    pub fn new(plan: &'a GenerationPlan<'a>) -> Self {
         Self {
-            ctx,
-            pack_idx,
-            root_class_indices,
-            ref_analysis,
+            ctx: &plan.model,
+            pack_idx: plan.pack_idx,
+            root_class_indices: &plan.roots,
+            ref_analysis: &plan.references,
         }
     }
 
-    fn roots(&self) -> Vec<RootMeta> {
+    fn roots(&self) -> impl Iterator<Item = RootMeta> + '_ {
         self.root_class_indices
             .iter()
             .copied()
             .map(|class_idx| RootMeta { class_idx })
-            .collect()
     }
 
     fn root_class_name(&self, root: RootMeta) -> &str {
@@ -127,7 +122,7 @@ impl<'a> PackageGenerator<'a> {
         let package_name = self.package_name();
         let package_ident = type_ident(package_name);
         let classifiers = classifiers_path();
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             quote! { #variant(#classifiers::#variant) }
         });
@@ -154,14 +149,14 @@ impl<'a> PackageGenerator<'a> {
         let reference_log_ty = quote! { #path::VecLog<#path::ReferenceManager<#path::FairPolicy>> };
         let classifiers = classifiers_path();
 
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! {
                 #variant(<#classifiers::#log_ty as #path::IsLog>::Rejection)
             }
         });
-        let root_display_arms = self.roots().into_iter().map(|root| {
+        let root_display_arms = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let label = variant.to_string();
             quote! {
@@ -209,7 +204,7 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let classifiers = classifiers_path();
-        let root_fields = self.roots().into_iter().map(|root| {
+        let root_fields = self.roots().map(|root| {
             let field = value_ident(self.root_class_name(root));
             let value_ty = self.root_value_ident(root);
             quote! { pub #field: #classifiers::#value_ty }
@@ -238,12 +233,12 @@ impl<'a> PackageGenerator<'a> {
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let classifiers = classifiers_path();
 
-        let root_fields = self.roots().into_iter().map(|root| {
+        let root_fields = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! { #field: #classifiers::#log_ty }
         });
-        let root_getters = self.roots().into_iter().map(|root| {
+        let root_getters = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! {
@@ -291,7 +286,7 @@ impl<'a> PackageGenerator<'a> {
         let package_ident = type_ident(package_name);
         let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
 
-        let enabled_root_arms = self.roots().into_iter().map(|root| {
+        let enabled_root_arms = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let field = self.root_field_ident(root);
             quote! {
@@ -301,15 +296,15 @@ impl<'a> PackageGenerator<'a> {
                     .map_err(#package_rejection_name::#variant)
             }
         });
-        let stabilize_roots = self.roots().into_iter().map(|root| {
+        let stabilize_roots = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             quote! { self.#field.stabilize(frontier); }
         });
-        let redundant_roots = self.roots().into_iter().map(|root| {
+        let redundant_roots = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             quote! { self.#field.redundant_by_parent(version, conservative); }
         });
-        let default_checks = self.roots().into_iter().map(|root| {
+        let default_checks = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             quote! { self.#field.is_default() }
         });
@@ -343,7 +338,7 @@ impl<'a> PackageGenerator<'a> {
         } else {
             quote! {}
         };
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
             let field_stringify = value_ident(self.root_class_name(root)).to_string();
@@ -473,7 +468,7 @@ impl<'a> PackageGenerator<'a> {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
-        let root_reads = self.roots().into_iter().map(|root| {
+        let root_reads = self.roots().map(|root| {
             let field_name = value_ident(self.root_class_name(root));
             let log_field = self.root_field_ident(root);
             let value_ty = self.root_value_ident(root);

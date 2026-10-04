@@ -6,7 +6,6 @@ use quote::quote;
 
 use super::ReadAsEcoreGenerator;
 use crate::codegen::{
-    annotation::transparent_field,
     classifier::{classifier_ident, classifier_log_ident, polymorphic_kind_log_ident},
     ident::classifier_type_ident_with_suffix,
 };
@@ -134,62 +133,66 @@ impl ReadAsEcoreGenerator<'_> {
                 let subclass_type = self.xmi_type(subclass);
                 let root_element = self.root_element(subclass);
 
-                Ok(if let Some(field_name) = transparent_field(subclass) {
-                    let field = subclass
-                        .structural()
-                        .iter()
-                        .find(|feature| feature.name == field_name)
-                        .expect("transparent field should exist");
-                    let body = self.generate_transparent_variant_visit(
-                        subclass,
-                        field,
-                        quote! { writer },
-                        quote! { element_name },
-                        quote! { emit_xmi_type },
-                        quote! { path.clone().variant(#variant_path) },
-                        quote! { child_log },
-                    )?;
-                    quote! {
-                        #path::#child_ty::#variant(child_log) => {
-                            let (element_name, emit_xmi_type) = match element_name {
-                                Some(name) => (name, true),
-                                None => (#root_element, false),
-                            };
-                            #body
+                Ok(
+                    if let Some(field_name) =
+                        self.ctx.info(subclass.idx).transparent_field.as_deref()
+                    {
+                        let field = subclass
+                            .structural()
+                            .iter()
+                            .find(|feature| feature.name == field_name)
+                            .expect("transparent field should exist");
+                        let body = self.generate_transparent_variant_visit(
+                            subclass,
+                            field,
+                            quote! { writer },
+                            quote! { element_name },
+                            quote! { emit_xmi_type },
+                            quote! { path.clone().variant(#variant_path) },
+                            quote! { child_log },
+                        )?;
+                        quote! {
+                            #path::#child_ty::#variant(child_log) => {
+                                let (element_name, emit_xmi_type) = match element_name {
+                                    Some(name) => (name, true),
+                                    None => (#root_element, false),
+                                };
+                                #body
+                            }
                         }
-                    }
-                } else if subclass.idx != class.idx && self.union_is_generated(subclass) {
-                    let visitor = self.union_visitor_ident(subclass);
-                    quote! {
-                        #path::#child_ty::#variant(child_log) => {
-                            #visitor(
-                                writer,
-                                element_name,
-                                path.clone().variant(#variant_path),
-                                child_log,
-                                #refs_arg
-                            );
+                    } else if subclass.idx != class.idx && self.union_is_generated(subclass) {
+                        let visitor = self.union_visitor_ident(subclass);
+                        quote! {
+                            #path::#child_ty::#variant(child_log) => {
+                                #visitor(
+                                    writer,
+                                    element_name,
+                                    path.clone().variant(#variant_path),
+                                    child_log,
+                                    #refs_arg
+                                );
+                            }
                         }
-                    }
-                } else {
-                    let visitor = self.class_visitor_ident(subclass);
-                    quote! {
-                        #path::#child_ty::#variant(child_log) => {
-                            let (element_name, xmi_type) = match element_name {
-                                Some(name) => (name, Some(#subclass_type)),
-                                None => (#root_element, None),
-                            };
-                            #visitor(
-                                writer,
-                                element_name,
-                                xmi_type,
-                                path.clone().variant(#variant_path),
-                                child_log,
-                                #refs_arg
-                            );
+                    } else {
+                        let visitor = self.class_visitor_ident(subclass);
+                        quote! {
+                            #path::#child_ty::#variant(child_log) => {
+                                let (element_name, xmi_type) = match element_name {
+                                    Some(name) => (name, Some(#subclass_type)),
+                                    None => (#root_element, None),
+                                };
+                                #visitor(
+                                    writer,
+                                    element_name,
+                                    xmi_type,
+                                    path.clone().variant(#variant_path),
+                                    child_log,
+                                    #refs_arg
+                                );
+                            }
                         }
-                    }
-                })
+                    },
+                )
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 

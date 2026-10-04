@@ -1,7 +1,4 @@
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Class, Structural, structural},
-};
+use ecore_rs::repr::Class;
 use log::debug;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -10,7 +7,7 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{transparent_field, uw_map_spec},
+        analysis::ModelIndex,
         cycles::CycleAnalysis,
         feature::{
             attribute::AttributeGenerator,
@@ -40,45 +37,41 @@ pub fn is_instantiable_class(class: &Class) -> bool {
     class.is_concrete() && !class.is_interface() && !class.is_enum()
 }
 
-pub fn has_instantiable_descendant(ctx: &Ctx, class: &Class) -> bool {
-    class.sub().iter().any(|idx| {
-        let subclass = &ctx.classes()[**idx];
-        is_instantiable_class(subclass) || has_instantiable_descendant(ctx, subclass)
-    })
+pub fn has_instantiable_descendant(ctx: &ModelIndex<'_>, class: &Class) -> bool {
+    ctx.info(class.idx)
+        .concrete_family
+        .iter()
+        .any(|idx| *idx != class.idx)
 }
 
-pub fn is_uninhabited_polymorphic_class(ctx: &Ctx, class: &Class) -> bool {
-    (class.is_abstract() || class.is_interface()) && !has_instantiable_descendant(ctx, class)
+pub fn is_uninhabited_polymorphic_class(ctx: &ModelIndex<'_>, class: &Class) -> bool {
+    ctx.info(class.idx).uninhabited
 }
 
-pub fn has_codegen_subclasses(ctx: &Ctx, class: &Class) -> bool {
-    class.sub().iter().any(|idx| {
-        let subclass = &ctx.classes()[**idx];
-        !is_uninhabited_polymorphic_class(ctx, subclass)
-    })
+pub fn has_codegen_subclasses(ctx: &ModelIndex<'_>, class: &Class) -> bool {
+    ctx.info(class.idx)
+        .variants
+        .iter()
+        .any(|idx| *idx != class.idx)
 }
 
-pub fn has_codegen_polymorphic_family(ctx: &Ctx, class: &Class) -> bool {
-    if class.is_abstract() || class.is_interface() {
-        !is_uninhabited_polymorphic_class(ctx, class)
-    } else {
-        has_codegen_subclasses(ctx, class)
-    }
+pub fn has_codegen_polymorphic_family(ctx: &ModelIndex<'_>, class: &Class) -> bool {
+    ctx.info(class.idx).polymorphic
 }
 
-pub fn classifier_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn classifier_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     classifier_type_ident(ctx, class)
 }
 
-pub fn classifier_log_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn classifier_log_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     classifier_type_ident_with_suffix(ctx, class, "Log")
 }
 
-pub fn classifier_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn classifier_value_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     classifier_type_ident_with_suffix(ctx, class, "Value")
 }
 
-pub fn polymorphic_kind_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn polymorphic_kind_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, POLYMORPHIC_KIND_SUFFIX)
     } else {
@@ -86,7 +79,7 @@ pub fn polymorphic_kind_ident(ctx: &Ctx, class: &Class) -> Ident {
     }
 }
 
-pub fn polymorphic_kind_log_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn polymorphic_kind_log_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, &format!("{POLYMORPHIC_KIND_SUFFIX}Log"))
     } else {
@@ -94,7 +87,7 @@ pub fn polymorphic_kind_log_ident(ctx: &Ctx, class: &Class) -> Ident {
     }
 }
 
-pub fn polymorphic_kind_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn polymorphic_kind_value_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     if has_codegen_polymorphic_family(ctx, class) {
         classifier_type_ident_with_suffix(ctx, class, &format!("{POLYMORPHIC_KIND_SUFFIX}Value"))
     } else {
@@ -102,15 +95,15 @@ pub fn polymorphic_kind_value_ident(ctx: &Ctx, class: &Class) -> Ident {
     }
 }
 
-pub fn containment_target_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn containment_target_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     polymorphic_kind_ident(ctx, class)
 }
 
-pub fn containment_target_log_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn containment_target_log_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     polymorphic_kind_log_ident(ctx, class)
 }
 
-pub fn containment_target_value_ident(ctx: &Ctx, class: &Class) -> Ident {
+pub fn containment_target_value_ident(ctx: &ModelIndex<'_>, class: &Class) -> Ident {
     polymorphic_kind_value_ident(ctx, class)
 }
 
@@ -120,7 +113,7 @@ pub fn inherited_field_ident(class: &Class) -> Ident {
 
 pub struct ClassGenerator<'a> {
     class: &'a Class,
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
     cycle_analysis: &'a CycleAnalysis,
 }
 
@@ -134,7 +127,11 @@ struct TransparentVariantSpec {
 }
 
 impl<'a> ClassGenerator<'a> {
-    pub fn new(class: &'a Class, ctx: &'a Ctx, cycle_analysis: &'a CycleAnalysis) -> Self {
+    pub fn new(
+        class: &'a Class,
+        ctx: &'a ModelIndex<'a>,
+        cycle_analysis: &'a CycleAnalysis,
+    ) -> Self {
         Self {
             class,
             ctx,
@@ -219,44 +216,14 @@ impl<'a> ClassGenerator<'a> {
     }
 
     fn is_uw_map_entry_helper(&self) -> bool {
-        if !is_instantiable_class(self.class) {
-            return false;
-        }
-
-        let incoming_features: Vec<&Structural> = self
-            .ctx
-            .classes()
-            .iter()
-            .flat_map(|class| class.structural().iter())
-            .filter(|feature| feature.typ == Some(self.class.idx))
-            .collect();
-
-        !incoming_features.is_empty()
-            && incoming_features.iter().all(|feature| {
-                feature.kind == structural::Typ::EReference
-                    && feature.containment
-                    && uw_map_spec(feature).is_some()
-            })
-    }
-
-    fn generates_concrete_wrapper(&self, class: &Class) -> bool {
-        is_instantiable_class(class)
-            && transparent_field(class).is_none()
-            && !ClassGenerator::new(class, self.ctx, self.cycle_analysis).is_uw_map_entry_helper()
-    }
-
-    fn has_wrapper_descendant(&self, class: &Class) -> bool {
-        class.sub().iter().any(|idx| {
-            let sub = &self.ctx.classes()[**idx];
-            self.generates_concrete_wrapper(sub) || self.has_wrapper_descendant(sub)
-        })
+        self.ctx.info(self.class.idx).map_entry
     }
 
     fn transparent_variant_spec(
         &self,
         subclass: &Class,
     ) -> anyhow::Result<Option<TransparentVariantSpec>> {
-        let Some(field_name) = transparent_field(subclass) else {
+        let Some(field_name) = self.ctx.info(subclass.idx).transparent_field.as_deref() else {
             return Ok(None);
         };
 
@@ -324,7 +291,7 @@ impl<'a> ClassGenerator<'a> {
         let should_emit_feat = !inherited_field_names.is_empty()
             || !attribute_tokens.is_empty()
             || !reference_tokens.is_empty()
-            || self.has_wrapper_descendant(self.class);
+            || self.ctx.info(self.class.idx).wrapper_descendant;
 
         // Collect subclass names for the union type
         let mut union_aliases = Vec::new();
@@ -414,7 +381,9 @@ impl<'a> ClassGenerator<'a> {
     }
 
     fn generate_concrete_class(&self) -> anyhow::Result<Fragment> {
-        if transparent_field(self.class).is_some() || self.is_uw_map_entry_helper() {
+        if self.ctx.info(self.class.idx).transparent_field.is_some()
+            || self.is_uw_map_entry_helper()
+        {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 

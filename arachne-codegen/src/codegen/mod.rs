@@ -1,3 +1,4 @@
+pub mod analysis;
 pub(crate) mod annotation;
 pub mod classifier;
 pub mod cycles;

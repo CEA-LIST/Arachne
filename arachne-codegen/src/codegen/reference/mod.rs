@@ -1,6 +1,6 @@
+use crate::codegen::analysis::{GenerationPlan, ModelIndex};
 pub mod analysis;
 
-use ecore_rs::{ctx::Ctx, prelude::idx};
 use log::debug;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -9,48 +9,43 @@ use syn::Ident;
 use crate::{
     REFERENCES_PATH_MOD,
     codegen::{
-        cycles::CycleAnalysis,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
-        ident::{classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident},
+        ident::{classifier_type_ident, classifier_type_ident_with_suffix},
         import::{Import, Macros, Protocol},
-        reference::analysis::{ReferenceAnalysis, analyze_references},
+        reference::analysis::ReferenceAnalysis,
     },
-    utils::hash::HashMap,
 };
 
 /// Top-level generator for non-containment reference support.
 pub struct ReferenceGenerator<'a> {
-    ctx: &'a Ctx,
-    pack_classes: Vec<idx::Class>,
+    ctx: &'a ModelIndex<'a>,
+    analysis: &'a ReferenceAnalysis,
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    pub fn new(
-        ctx: &'a Ctx,
-        pack_classes: Vec<idx::Class>,
-        _root_class_indices: Vec<idx::Class>,
-        _cycle_analysis: &'a CycleAnalysis,
-    ) -> Self {
-        Self { ctx, pack_classes }
+    pub fn new(plan: &'a GenerationPlan<'a>) -> Self {
+        Self {
+            ctx: &plan.model,
+            analysis: &plan.references,
+        }
     }
 }
 
 impl<'a> Generate for ReferenceGenerator<'a> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        debug!("Analyzing references...");
-        let analysis = analyze_references(self.ctx, &self.pack_classes);
+        let analysis = self.analysis;
 
         if !analysis.has_references() {
             return Ok(Fragment::new(TokenStream::new(), vec![], vec![]));
         }
 
         debug!("Generating instance_from_sink_kind...");
-        let instance_from_sink_kind = self.generate_instance_from_sink_kind(&analysis);
+        let instance_from_sink_kind = self.generate_instance_from_sink_kind(analysis);
         debug!("Generating edge structs...");
-        let edge_structs = self.generate_edge_structs(&analysis);
+        let edge_structs = self.generate_edge_structs(analysis);
         debug!("Generating typed graph...");
-        let typed_graph = self.generate_typed_graph(&analysis);
+        let typed_graph = self.generate_typed_graph(analysis);
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
@@ -121,48 +116,10 @@ impl<'a> ReferenceGenerator<'a> {
         }
     }
 
-    fn edge_type_names(&self, analysis: &ReferenceAnalysis) -> Vec<Ident> {
-        analysis
-            .refs
-            .iter()
-            .map(|r| {
-                let source_class = &self.ctx.classes()[*r.source_class];
-                let source_name = classifier_type_ident(self.ctx, source_class);
-                let reference_name = type_ident(&r.reference_name);
-                rust_ident(format!("{source_name}{reference_name}Edge"))
-            })
-            .collect()
-    }
-
-    fn connection_names(&self, analysis: &ReferenceAnalysis) -> Vec<Ident> {
-        let mut counts: HashMap<String, usize> = HashMap::default();
-
-        analysis
-            .refs
-            .iter()
-            .map(|r| {
-                let source_class = &self.ctx.classes()[*r.source_class];
-                let target_class = &self.ctx.classes()[*r.target_class];
-                let source_name = classifier_type_ident(self.ctx, source_class);
-                let target_name = classifier_type_ident(self.ctx, target_class);
-                let base_name = format!("{source_name}To{target_name}");
-                let suffix = counts.entry(base_name.clone()).or_insert(0);
-                let unique_name = if *suffix == 0 {
-                    base_name
-                } else {
-                    format!("{base_name}{}", *suffix + 1)
-                };
-                *suffix += 1;
-
-                rust_ident(unique_name)
-            })
-            .collect()
-    }
-
     /// Generate an edge marker struct for each non-containment reference.
     fn generate_edge_structs(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let mut seen = std::collections::HashSet::new();
-        let edge_names = self.edge_type_names(analysis);
+        let edge_names = &analysis.edge_names;
         let structs: Vec<TokenStream> = analysis
             .refs
             .iter()
@@ -187,8 +144,8 @@ impl<'a> ReferenceGenerator<'a> {
     fn generate_typed_graph(&self, analysis: &ReferenceAnalysis) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD)).unwrap();
-        let edge_names = self.edge_type_names(analysis);
-        let connection_names = self.connection_names(analysis);
+        let edge_names = &analysis.edge_names;
+        let connection_names = &analysis.connection_names;
 
         // Vertices: one per referenceable class
         let vertices: Vec<Ident> = analysis
