@@ -1273,14 +1273,14 @@ fn json_cells() -> Vec<Cell<Edit>> {
             json_beat(),
         )
         .expect("/1/k", json!({CONFLICT: [1.0, "s"]})),
-        // A removed key is not dropped on either path: `UWMap::Remove` resets
-        // the entry rather than tombstoning it, and a reset `Number` is still a
-        // `Number`, so both read `0.0` where the key was. `moirai-interp`'s
-        // `a_key_removed_with_nothing_concurrent_keeps_the_emptied_entry` says
-        // the same of a string.
+        // A key both removals had seen every write to is absent on both paths
+        // (ST.10, `cea-cdrt-knowledge/spec/items/ST.10.md`, B2): the object
+        // reads `{"seed": "s"}`, where both read `0.0` at `k` before ST.10.
         Cell::new(row, p::REMOVE_REMOVE_KEY, holding_k(), vec![remove_k(), remove_k()], json_beat())
-            .expect("/1/k", json!(0.0))
+            .expect("/1", json!({"seed": "s"}))
             .expect("/1/seed", json!("s")),
+        // The clear had seen every write to `seed`, which is absent (ST.10;
+        // it read `""` before), and not the concurrent increment of `k`.
         Cell::new(
             row,
             p::UPDATE_CLEAR,
@@ -1289,7 +1289,7 @@ fn json_cells() -> Vec<Cell<Edit>> {
             json_beat(),
         )
         .expect("/1/k", json!(10.0))
-        .expect("/1/seed", json!("")),
+        .expect("/1", json!({"k": 10.0})),
         Cell::new(
             row,
             p::TWO_KEYS,

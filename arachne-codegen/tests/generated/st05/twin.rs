@@ -829,8 +829,9 @@ fn formed_doc(place: Place) -> Value {
 
 /// The rule's value once every seat has delivered T, X, Y, U and W, W's
 /// target holding `w` (spec section 2): what U emptied and W did not reach
-/// is left out at a key of a class with no subclass and by an optional, and
-/// stays, emptied, at a key of a class with subclasses.
+/// is left out at a key of a class with no subclass and by an optional, and,
+/// at a key of a class with subclasses, is absent (ST.10's re-pin of "stays,
+/// emptied": a member every write to which the removal had seen is absent).
 fn race_value(schedule: &Schedule, w: i64) -> Value {
     let content = match (schedule.place, schedule.target) {
         (Place::Record, Target::Member) => boxed(w, None, None, &[]),
@@ -838,8 +839,8 @@ fn race_value(schedule: &Schedule, w: i64) -> Value {
         (Place::RecordDeep, Target::Sub) => boxed(0, None, None, &[("j", mid(w))]),
         (Place::RecordDeep, Target::Mid) => boxed(0, None, Some(mid(w)), &[]),
         (Place::RecordInner, Target::Member) => boxed(2, None, None, &[("j", mid(w))]),
-        (Place::Union, Target::Member) => conflict(shape("A", w, &[]), shape("B", 0, &[])),
-        (Place::Union, Target::Other) => conflict(shape("A", 0, &[]), shape("B", w, &[])),
+        (Place::Union, Target::Member) => shape("A", w, &[]),
+        (Place::Union, Target::Other) => shape("B", w, &[]),
         (Place::UnionOne, Target::Member) => shape("A", w, &[]),
         (Place::UnionDeep, Target::Member) => shape("A", w, &[]),
         (Place::UnionDeep, Target::Sub) => shape("A", 0, &[("j", mid(w))]),
@@ -853,14 +854,13 @@ fn expected(schedule: &Schedule) -> Value {
     race_value(schedule, 10)
 }
 
-/// What the removal alone leaves (spec section 2).
+/// What the removal alone leaves (spec section 2; at a key of a class with
+/// subclasses, nothing, ST.10's re-pin).
 fn alone(place: Place) -> Value {
     let content = match place {
         Place::Record | Place::RecordDeep => None,
         Place::RecordInner => Some(boxed(2, None, None, &[])),
-        Place::Union => Some(conflict(shape("A", 0, &[]), shape("B", 0, &[]))),
-        Place::UnionOne | Place::UnionDeep => Some(shape("A", 0, &[])),
-        Place::Family => Some(bin(0)),
+        Place::Union | Place::UnionOne | Place::UnionDeep | Place::Family => None,
     };
     document(place, content)
 }
@@ -896,8 +896,7 @@ fn later_writes_alone(ops: &Ops, place: Place) -> Vec<(Op, Value)> {
         let content = match place {
             Place::Record | Place::RecordDeep => boxed(m, None, None, &[]),
             Place::RecordInner => boxed(2, None, None, &[("j", mid(m))]),
-            Place::Union => conflict(shape("A", m, &[]), shape("B", 0, &[])),
-            Place::UnionOne | Place::UnionDeep => shape("A", m, &[]),
+            Place::Union | Place::UnionOne | Place::UnionDeep => shape("A", m, &[]),
             Place::Family => bin(m),
         };
         document(place, Some(content))

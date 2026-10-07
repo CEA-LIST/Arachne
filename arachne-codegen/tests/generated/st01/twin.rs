@@ -21,8 +21,9 @@
 //! counts the differences). At the end of every schedule the generated
 //! replicas must also serve the decided value, V1, which the spec derives by
 //! hand: the reached member alone, holding W's +10. The keyed collection's
-//! race is the guard: both runtimes serve today, and must keep serving, both
-//! members at the removed key.
+//! race serves the same under ST.10's rule (`cea-cdrt-knowledge/spec/items/
+//! ST.10.md`, B2: a member every write to which the removal had seen is
+//! absent), which re-pinned it from both members at the removed key.
 //!
 //! The canonical form of the interpreted side is its default read, what
 //! `GET /api/model/{id}/state` serves: `Replica::query(&Read::<Value>::new())`.
@@ -549,10 +550,6 @@ fn shape(class: &str, n: i64) -> Value {
     json!({"eClass": class, "n": n})
 }
 
-fn conflict(a: i64, b: i64) -> Value {
-    json!({"__conflict": [shape("A", a), shape("B", b)]})
-}
-
 fn document(place: Place, content: Option<Value>) -> Value {
     let mut doc = json!({"bag": {}, "eClass": "Holder", "tick": 1});
     if let Some(content) = content {
@@ -565,43 +562,22 @@ fn document(place: Place, content: Option<Value>) -> Value {
     doc
 }
 
-/// V1 on an optional place; on the keyed collection, what it serves today.
+/// V1, on an optional place and, under ST.10's rule, on the keyed
+/// collection too.
 fn expected(schedule: &Schedule) -> Value {
-    match schedule.place {
-        Place::Keyed => {
-            let (a, b) = if schedule.member == "A" {
-                (10, 0)
-            } else {
-                (0, 10)
-            };
-            document(Place::Keyed, Some(conflict(a, b)))
-        }
-        place => document(place, Some(shape(schedule.member, 10))),
-    }
+    document(schedule.place, Some(shape(schedule.member, 10)))
 }
 
 /// The later writes of the spec's O2, from one writer: the reached member's
 /// class +1, then the place removed and the emptied member's class +5. Each
 /// is followed by what every seat must then serve: the reached member alone
-/// holding 11, then the emptied class alone holding 5. On the keyed
-/// collection, where the emptied member stays, the +1 leaves both members,
-/// and the removal and the +5 leave both, the reached one emptied.
+/// holding 11, then the emptied class alone holding 5, in every place: on
+/// the keyed collection too since ST.10, where a member every write to which
+/// a removal had seen is absent.
 fn later_writes(ops: &Ops, schedule: &Schedule) -> Vec<(Op, Option<Value>)> {
     let (place, member, other) = (schedule.place, schedule.member, schedule.other());
-    let after_one = match place {
-        Place::Keyed => {
-            let (a, b) = if member == "A" { (11, 0) } else { (0, 11) };
-            document(place, Some(conflict(a, b)))
-        }
-        _ => document(place, Some(shape(member, 11))),
-    };
-    let after_again = match place {
-        Place::Keyed => {
-            let (a, b) = if member == "A" { (0, 5) } else { (5, 0) };
-            document(place, Some(conflict(a, b)))
-        }
-        _ => document(place, Some(shape(other, 5))),
-    };
+    let after_one = document(place, Some(shape(member, 11)));
+    let after_again = document(place, Some(shape(other, 5)));
     vec![
         (ops.write(place, member, 1), Some(after_one)),
         (ops.removal(place), None),
@@ -609,11 +585,9 @@ fn later_writes(ops: &Ops, schedule: &Schedule) -> Vec<(Op, Option<Value>)> {
     ]
 }
 
+/// U alone: every place reads unset, the removed key absent (ST.10).
 fn unset_alone(place: Place) -> Value {
-    match place {
-        Place::Keyed => document(Place::Keyed, Some(conflict(0, 0))),
-        place => document(place, None),
-    }
+    document(place, None)
 }
 
 /// Every generated seat's read against `want`; one line per seat that
@@ -676,9 +650,9 @@ fn verdict(test: &str, runs: usize, differences: &[String], values: &[String]) {
 // O5
 // ---------------------------------------------------------------------------
 
-/// Every schedule of the claim (864) and of the keyed guard (288): twin
+/// Every schedule of the claim (864) and of the keyed collection (288): twin
 /// equality after every step once T is everywhere, and at the end the
-/// generated replicas serve V1 (the guard: what it serves today).
+/// generated replicas serve V1 (on the keyed collection, ST.10's re-pin).
 #[test]
 fn st01_o5_every_schedule_both_runtimes_agree_after_every_step_and_serve_v1() {
     let desc = descriptor();
