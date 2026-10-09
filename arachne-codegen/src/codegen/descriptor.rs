@@ -346,7 +346,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structural::Structural) {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
     entry["facets"] = semantics::facets_json(feature);
-    entry["annotation"] = semantics::datatype_annotation(feature)
+    entry["annotation"] = semantics::feature_datatype(feature, class, ctx)
         .map(|value| json!(value))
         .unwrap_or(Value::Null);
     entry["merge"] = semantics::merge_json(&merge, ctx);

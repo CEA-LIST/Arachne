@@ -9,7 +9,7 @@ use quote::quote;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{DatatypeOverride, datatype_override},
+        annotation::{DatatypeOverride, datatype_override_in},
         datatype::{
             crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
             to_crdt::ToCrdt,
@@ -67,7 +67,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
             (ToCrdt::to_rust_type(&typ), ToCrdt::to_crdt_container(&typ))
         };
 
-        if let Some(override_typ) = datatype_override(self.attribute) {
+        if let Some(override_typ) = datatype_override_in(self.ctx, self.attribute) {
             match override_typ {
                 DatatypeOverride::Primitive(primitive) => {
                     crdt = primitive;
@@ -171,7 +171,7 @@ impl<'a> Generate for AttributeGenerator<'a> {
                 )))],
             ),
             (BoundKind::Many, true, false) => {
-                let set_typ = match datatype_override(self.attribute) {
+                let set_typ = match datatype_override_in(self.ctx, self.attribute) {
                     Some(DatatypeOverride::Set(set)) => set,
                     _ => Set::AWSet,
                 };

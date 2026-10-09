@@ -99,7 +99,7 @@ use moirai_semantics::{
 };
 use serde_json::{Value, json};
 
-use crate::codegen::annotation::map_spec;
+use crate::codegen::annotation::{ecore_feature_datatype, map_spec};
 use crate::codegen::ecore::is_eobject;
 
 /// The annotation source a `datatype` override is written under.
@@ -199,8 +199,9 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
             },
         ),
         structural::Typ::EAttribute => {
-            let (leaf, leaf_source) = leaf_rule(feature, ctx);
-            let (shape, ordered, unique) = attribute_shape(feature, presence);
+            let datatype = feature_datatype(feature, class, ctx);
+            let (leaf, leaf_source) = leaf_rule(feature, datatype, ctx);
+            let (shape, ordered, unique) = attribute_shape(feature, presence, datatype);
             (
                 MergeRule::Attribute { shape, leaf },
                 Provenance {
@@ -263,6 +264,20 @@ pub fn datatype_annotation(feature: &Structural) -> Option<&Val> {
         .iter()
         .find(|annot| annot.source() == SEMANTICS_SOURCE)
         .and_then(|annot| annot.details().get(DATATYPE_KEY))
+}
+
+/// The `urn:arachne:semantics` `datatype` value that governs an attribute of
+/// `class`, the class declaring it: its own annotation, or, for a feature of
+/// one of Ecore's own classes, which no metamodel file declares, the detail a
+/// package annotation of the metamodel names it by
+/// (`annotation.rs`'s `ecore_feature_datatype`). What the descriptor writes
+/// under the entry's `annotation` key, and what [`merge_rule`] reads.
+pub fn feature_datatype<'a>(
+    feature: &'a Structural,
+    class: &Class,
+    ctx: &'a Ctx,
+) -> Option<&'a Val> {
+    datatype_annotation(feature).or_else(|| ecore_feature_datatype(ctx, class, feature))
 }
 
 /// The feature a `urn:arachne:representation` `kind="transparent"` class is
@@ -421,7 +436,8 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
             ))
         }
         structural::Typ::EAttribute => {
-            let (leaf, leaf_source) = leaf_rule(value_feature, ctx);
+            let (leaf, leaf_source) =
+                leaf_rule(value_feature, datatype_annotation(value_feature), ctx);
             Some((
                 MergeRule::Attribute { shape, leaf },
                 Provenance {
@@ -568,8 +584,9 @@ fn slot(index: idx::Class) -> ClassSlot {
 /// The innermost CRDT of an attribute, and where it came from.
 ///
 /// This is `to_crdt.rs`'s builtin match, then `annotation.rs`'s thirteen
-/// outcomes on top of it, as data.
-fn leaf_rule(feature: &Structural, ctx: &Ctx) -> (LeafRule, FacetSource) {
+/// outcomes on top of it, as data. `datatype` is the annotation's spelling
+/// that governs the feature, if any ([`feature_datatype`]).
+fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRule, FacetSource) {
     let typ = feature
         .typ
         .expect("the descriptor omits an attribute with no resolved type");
@@ -622,7 +639,7 @@ fn leaf_rule(feature: &Structural, ctx: &Ctx) -> (LeafRule, FacetSource) {
     // `annotation.rs`'s `parse_datatype_override`, restated. The `aw-set` and
     // `rw-set` spellings name a collection rather than a leaf and are read by
     // `attribute_shape`; `list` is accepted on an attribute only.
-    let Some(spelling) = datatype_annotation(feature) else {
+    let Some(spelling) = datatype else {
         return (from_type, from_type_source);
     };
     let overridden = match spelling.trim().to_ascii_lowercase().as_str() {
@@ -682,7 +699,11 @@ const fn register(from_type: LeafRule, tie: TieBreak) -> LeafRule {
 
 /// The wrapper `attribute.rs:155-218` picks, and the sources of the two facets
 /// that pick it.
-fn attribute_shape(feature: &Structural, presence: Presence) -> (Shape, FacetSource, FacetSource) {
+fn attribute_shape(
+    feature: &Structural,
+    presence: Presence,
+    datatype: Option<&Val>,
+) -> (Shape, FacetSource, FacetSource) {
     let Presence::Many = presence else {
         // `raw.rs:1017-1030` already warns that `ordered` and `unique` on a
         // single-valued feature say nothing; the rule agrees.
@@ -705,7 +726,7 @@ fn attribute_shape(feature: &Structural, presence: Presence) -> (Shape, FacetSou
         (true, true) => Shape::OrderedSet,
         (false, false) => Shape::Bag,
         (true, false) => Shape::Set {
-            tie: set_tie(feature),
+            tie: set_tie(datatype),
         },
     };
     let ordered_source = if feature.ordered.is_some() {
@@ -728,8 +749,8 @@ fn attribute_shape(feature: &Structural, presence: Presence) -> (Shape, FacetSou
 
 /// Which side of a concurrent add and remove wins, from the `aw-set` and
 /// `rw-set` spellings; add-wins when the file names neither.
-fn set_tie(feature: &Structural) -> SetTie {
-    match datatype_annotation(feature).map(|value| value.trim().to_ascii_lowercase()) {
+fn set_tie(datatype: Option<&Val>) -> SetTie {
+    match datatype.map(|value| value.trim().to_ascii_lowercase()) {
         Some(spelling) if spelling == "rw-set" => SetTie::RemoveWins,
         _ => SetTie::AddWins,
     }
