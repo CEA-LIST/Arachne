@@ -77,7 +77,10 @@
 //! `rw-set` annotation chose. [`Provenance`] names four facets and the set
 //! tie-break is not one of them; `unique` is `Declared` there, because a set
 //! shape is only reachable with `unique="true"` written in the file, and the
-//! annotation itself is carried verbatim under the entry's `annotation` key.
+//! annotation itself is carried verbatim under the entry's `annotation` key:
+//! the `datatype` value [`feature_datatype`] answers, which is the feature's
+//! own detail or, for an attribute of one of Ecore's own classes, the
+//! package-level detail that names it.
 //!
 //! # Slots in this crate address the Ecore context
 //!

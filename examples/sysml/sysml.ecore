@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="ASCII"?>
 <!--
-  SysON's SysML v2 metamodel (org.eclipse.syson.sysml, sysml.ecore), byte for byte but for
-  urn:arachne:semantics annotations. Every replicated string attribute but Comment.body and
+  SysON's SysML v2 metamodel (org.eclipse.syson.sysml, sysml.ecore) with urn:arachne:semantics
+  annotations added. It is not byte for byte SysON's file: it is XML-equal to it once those
+  annotations are removed, and 12 self-closing eStructuralFeatures were opened into a start and
+  an end tag to hold one. Every replicated string attribute but Comment.body and
   TextualRepresentation.body, and LiteralInteger.value and LiteralRational.value, carry
   datatype="mv-register": a concurrent rename or literal edit stays visible as a conflict
   instead of interleaving characters or summing. The package annotation gives Ecore's own

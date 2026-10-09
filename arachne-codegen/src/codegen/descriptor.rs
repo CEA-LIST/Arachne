@@ -336,9 +336,14 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 }
 
 /// Adds the four `formatVersion` 2 keys to one feature entry: the facets as
-/// the `.ecore` file wrote them, the `urn:arachne:semantics` `datatype` string
-/// it wrote or `null`, the merge rule the generator would compile, and where
-/// each facet of that rule came from.
+/// the `.ecore` file wrote them, the `urn:arachne:semantics` `datatype` value
+/// that governs the feature or `null`, the merge rule the generator would
+/// compile, and where each facet of that rule came from.
+///
+/// The `annotation` value is what `semantics::feature_datatype` answers: the
+/// feature's own `datatype` detail, or, for an attribute of one of Ecore's own
+/// classes, which no metamodel file declares, the package-level detail that
+/// names it (`ecore::EAnnotation.source`, say).
 ///
 /// Nothing is removed and nothing existing moves, which is what keeps the
 /// phase 4 `Schema` parser (`deployment/conformance.rs`) and the model editor
