@@ -1043,6 +1043,9 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         "umlclass.metamodel.json",
         "notation.ecore",
     ];
+    // AR.04 (spec/items/AR.04.md, section 6): the annotated SysML metamodel and its descriptor
+    // are added under `examples/sysml/`, a directory no node's METAMODEL_DIR reads.
+    const AR04_ADDED: [&str; 2] = ["sysml/sysml.ecore", "sysml/sysml.metamodel.json"];
     let examples = repo().join("examples");
     let mut differing = Vec::new();
     for (file, today) in TODAY {
@@ -1093,6 +1096,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
             p.as_str() != "README.md"
                 && !TODAY.iter().any(|(f, _)| f == p)
                 && !NEW.contains(&p.as_str())
+                && !AR04_ADDED.contains(&p.as_str())
         })
         .collect();
     println!(
