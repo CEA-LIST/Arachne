@@ -4,9 +4,11 @@
 //!
 //! The generator decides a feature's CRDT once, at generation, by three
 //! matches: `datatype/to_crdt.rs` maps the Ecore builtin to a CRDT family and
-//! a Rust width, `annotation.rs`'s `datatype_override` lets a
-//! `urn:arachne:semantics` `datatype` replace that family from a closed set of
-//! spellings, and `feature/attribute.rs` combines the result with the triple
+//! a Rust width, `annotation.rs`'s `datatype_override_in` replaces that family
+//! from a closed set of spellings when a `urn:arachne:semantics` `datatype`
+//! governs the feature (its own detail or, for an attribute of one of Ecore's
+//! own classes, the package-level detail that names it), and
+//! `feature/attribute.rs` combines the result with the triple
 //! `(bound_kind, unique.unwrap_or(true), ordered.unwrap_or(true))` to pick the
 //! wrapper — `feature/containment.rs` doing the same for a containment over
 //! its target's family log. The outcome is a Rust type, which is exactly the

@@ -75,8 +75,11 @@
 //!
 //! - `facets` — `ordered` and `unique` exactly as the `.ecore` file wrote
 //!   them, `null` where it was silent.
-//! - `annotation` — the `urn:arachne:semantics` `datatype` string it wrote,
-//!   or `null`.
+//! - `annotation` — the `urn:arachne:semantics` `datatype` value that governs
+//!   the feature, or `null`: what
+//!   [`feature_datatype`](crate::codegen::semantics::feature_datatype)
+//!   answers, the feature's own detail or, for an attribute of one of Ecore's
+//!   own classes, the package-level detail of the metamodel that names it.
 //! - `merge` — the CRDT construction the generator compiles for this feature,
 //!   as data, in the closed vocabulary of `moirai_semantics::MergeRule`.
 //! - `provenance` — where each of the four facets of that rule came from:
