@@ -20,9 +20,13 @@
 //!   resolves nothing.
 //! - `ed12_oracle_*`: checks of the instrument itself, green before any implementation.
 //!
+//! AR.06 (`cea-cdrt-knowledge/spec/items/AR.06.md`) re-pins the descriptor to AR.04's annotated
+//! SysML (`demo/sysml.json`, digest `2df00538`), under which names, ids and the annotation's
+//! `source` are multi-value registers, and adds `ed12_l1_register_*`: every text leaf of the
+//! excerpt is one whole register write, and no character is inserted one by one.
+//!
 //! ```bash
-//! ED12_DESCRIPTOR=/volatile/home/vp242103/Documents/Projects/cea-crdt/demo/sysml.json \
-//! ED12_NODE_BIN=/volatile/home/vp242103/.cache/cea-crdt-scratch/bin/model_node-1cf5d55 \
+//! ED12_NODE_BIN=/volatile/home/vp242103/.cache/cea-crdt-scratch/bin/model_node-04f5085 \
 //!   nice -n 10 cargo test -j 2 -p arachne-cli --test ed12_import_sirius -- --test-threads=1 --nocapture
 //! ```
 //!
@@ -39,8 +43,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-/// `arachne digest demo/sysml.json`: SysON's SysML v2 descriptor as AR.02 describes it.
-const DESCRIPTOR_DIGEST: &str = "ebd580696f97d9339c148f5b29db5d0ff7b0928d78fb05efc7c206811405e627";
+/// `arachne digest demo/sysml.json`: SysON's SysML v2 descriptor as AR.04 annotated it, names,
+/// ids and literals as multi-value registers (it was `ebd58069` before AR.06, now kept as
+/// `demo/sysml-ebd58069.json`).
+const DESCRIPTOR_DIGEST: &str = "2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457";
 /// The one reference of the fixture whose target is outside the project.
 const LIBRARY_VALUE: &str = "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66";
 /// The `elementId` of the FeatureTyping that holds it, under `type`.
@@ -48,6 +54,10 @@ const LIBRARY_HOLDER: &str = "2c09fb6d";
 const LIBRARY_FEATURE: &str = "type";
 /// References of the fixture whose target is in the project, counted by hand (spec section 4).
 const LOCAL_REFERENCES: usize = 13;
+/// The batch under `2df00538`, counted by hand from the fixture (AR.06 spec): one `New` for the
+/// root, 32 containment `Insert`s, 59 register `Write`s (32 `elementId`s, 12 `declaredName`s,
+/// the annotation's `source`, 14 references) and 7 `Enable`s (6 `isComposite`, 1 `isAbstract`).
+const REGISTER_BATCH_OPS: usize = 99;
 const LOG_ID: &str = "ed12ed12ed12ed12ed12ed12ed12ed12";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
@@ -475,6 +485,115 @@ fn ed12_l1_import_prints_one_batch_and_reports_the_library_reference() {
     assert!(
         stderr.lines().any(|line| line == summary),
         "ED12 claim: stderr has no line `{summary}`"
+    );
+}
+
+/// Every string a leaf operation carries whole, as `(op, value)`: `Write`, `Add` or `Insert` of a
+/// `Str`; and how many `InsertChar`s the batch holds.
+fn whole_strings(value: &Value, out: &mut Vec<(String, String)>, chars: &mut usize) {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::Object(leaf)) = map.get("Leaf") {
+                for (op, arg) in leaf {
+                    if op == "InsertChar" {
+                        *chars += 1;
+                    }
+                    let text = arg["Str"].as_str().or_else(|| arg["value"]["Str"].as_str());
+                    if let Some(text) = text {
+                        out.push((op.clone(), text.to_string()));
+                    }
+                }
+            }
+            map.values().for_each(|v| whole_strings(v, out, chars));
+        }
+        Value::Array(items) => items.iter().for_each(|v| whole_strings(v, out, chars)),
+        _ => {}
+    }
+}
+
+/// Every string the expected state holds but `eClass`: the excerpt's names, ids, the annotation's
+/// `source` and the reference values, each once per place it is written.
+fn expected_strings(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            for (key, v) in map {
+                match v {
+                    Value::String(s) if key != "eClass" => out.push(s.clone()),
+                    _ => expected_strings(v, out),
+                }
+            }
+        }
+        Value::Array(items) => {
+            for v in items {
+                match v {
+                    Value::String(s) => out.push(s.clone()),
+                    _ => expected_strings(v, out),
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn ed12_l1_register_text_leaves_are_whole_register_writes() {
+    let (path, _, _) = match descriptor() {
+        Ok(d) => d,
+        Err(why) => {
+            eprintln!("\nE2E-SKIP ed12: {why}");
+            return;
+        }
+    };
+    let output = run_import(&path);
+    assert!(
+        output.status.success(),
+        "ED12 claim: `arachne import-sirius` did not succeed on the excerpt: {:?}\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let batch: Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|e| panic!("ED12 claim: stdout is not one JSON value: {e}"));
+    let count = batch["ops"].as_array().map_or(0, Vec::len);
+    let mut whole = Vec::new();
+    let mut chars = 0;
+    whole_strings(&batch, &mut whole, &mut chars);
+    let mut written: Vec<String> = whole
+        .iter()
+        .filter(|(op, _)| op == "Write")
+        .map(|(_, text)| text.clone())
+        .collect();
+    let others: Vec<&(String, String)> = whole.iter().filter(|(op, _)| op != "Write").collect();
+    let mut want = Vec::new();
+    expected_strings(&read_json(&fixture("survey.expected.json")), &mut want);
+    written.sort();
+    want.sort();
+    println!(
+        "\nED12 L1 register: ops {count}, InsertChar {chars}, whole Write {}, other whole {}, \
+         expected strings {}",
+        written.len(),
+        others.len(),
+        want.len()
+    );
+    let mut failures = Vec::new();
+    if chars != 0 {
+        failures.push(format!("{chars} characters inserted one by one"));
+    }
+    if !others.is_empty() {
+        failures.push(format!("strings carried by other ops: {others:?}"));
+    }
+    if written != want {
+        failures.push(format!(
+            "the whole Writes are not the expected state's strings, once each: \
+             written {written:?}, expected {want:?}"
+        ));
+    }
+    if count != REGISTER_BATCH_OPS {
+        failures.push(format!("{count} ops, {REGISTER_BATCH_OPS} counted by hand"));
+    }
+    assert!(
+        failures.is_empty(),
+        "ED12 claim: the text leaves are not one register write each:\n  {}",
+        failures.join("\n  ")
     );
 }
 
