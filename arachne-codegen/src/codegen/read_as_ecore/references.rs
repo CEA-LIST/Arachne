@@ -19,7 +19,7 @@ impl ReadAsEcoreGenerator<'_> {
 
         for class_idx in self.reachable_classes {
             let class = self.class(*class_idx);
-            for feature in class.structural().iter().filter(|feature| {
+            for feature in self.ctx.supported_features(class.idx).filter(|feature| {
                 feature.kind == structural::Typ::EReference
                     && !feature.containment
                     && feature.transient != Some(true)

@@ -31,9 +31,10 @@ source positions.
 The adapter supports packages and `eSubpackages`, classifiers, structural
 features, operations and parameters, enum literals, and annotations with
 details and references. Type links, inheritance links, bounds, defaults and
-supported flags use the existing context and representation. Unsupported
-`unsettable` and `eOpposite` settings still produce warnings. Generics are
-not supported; generation has its own
+supported flags use the existing context and representation. `unsettable` is
+retained for code generation, which skips unsupported features and reports its
+warnings after generation. Unsupported `eOpposite` settings still produce parser
+warnings. Generics are not supported; generation has its own
 [supported subset](../arachne-codegen/README.md#supported-metalanguage).
 
 ```xml

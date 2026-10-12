@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Result, ensure};
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Pack, idx, structural},
+    repr::{Pack, Structural, idx, structural},
 };
 use syn::Ident;
 
@@ -16,8 +16,10 @@ use super::{
     annotation::{transparent_field, uw_map_spec},
     classifier::is_instantiable_class,
     cycles::{CycleAnalysis, analyze_cycles},
+    feature::typed_element::unsupported_feature_properties,
     ident::classifier_type_names,
     reference::analysis::ReferenceAnalysis,
+    warnings::Warning,
 };
 use crate::{ArachneError, utils::topo::topological_sort};
 
@@ -43,6 +45,83 @@ pub struct ModelIndex<'a> {
     ctx: &'a Ctx,
     names: Vec<Ident>,
     classes: Vec<ClassInfo>,
+    features: Vec<Vec<FeatureSupport>>,
+    representation_warnings: Vec<Vec<Warning>>,
+}
+
+struct FeatureSupport {
+    supported: bool,
+    warnings: Vec<Warning>,
+}
+
+fn feature_support(ctx: &Ctx) -> Vec<Vec<FeatureSupport>> {
+    let mut support = ctx
+        .classes()
+        .iter()
+        .map(|class| {
+            class
+                .structural()
+                .iter()
+                .map(|feature| {
+                    let mut warnings = Vec::new();
+                    let supported = unsupported_feature_properties(feature, &mut warnings);
+                    for warning in &mut warnings {
+                        if let Warning::UnsupportedFeatureProperty { feature, .. } = warning {
+                            *feature = format!("{}.{}", class.name(), feature);
+                        }
+                    }
+                    FeatureSupport {
+                        supported,
+                        warnings,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    // Map values can themselves be maps. Propagate skipped dependencies until stable.
+    loop {
+        let mut skipped = Vec::new();
+        for class in ctx.classes() {
+            for (position, feature) in class.structural().iter().enumerate() {
+                if !support[*class.idx][position].supported
+                    || feature.kind != structural::Typ::EReference
+                    || !feature.containment
+                {
+                    continue;
+                }
+                let (Some(spec), Some(target)) = (uw_map_spec(feature), feature.typ) else {
+                    continue;
+                };
+                let entry = ctx.class(target);
+                for name in [&spec.key_feature, &spec.value_feature] {
+                    if let Some(index) = entry
+                        .structural()
+                        .iter()
+                        .position(|field| field.name == *name)
+                        && !support[*target][index].supported
+                    {
+                        skipped.push((
+                            class.idx,
+                            position,
+                            Warning::UnsupportedFeatureDependency {
+                                feature: format!("{}.{}", class.name(), feature.name),
+                                dependency: format!("{}.{}", entry.name(), name),
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+        if skipped.is_empty() {
+            break;
+        }
+        for (class, position, warning) in skipped {
+            support[*class][position].supported = false;
+            support[*class][position].warnings.push(warning);
+        }
+    }
+    support
 }
 
 impl Deref for ModelIndex<'_> {
@@ -55,6 +134,8 @@ impl Deref for ModelIndex<'_> {
 impl<'a> ModelIndex<'a> {
     pub fn new(ctx: &'a Ctx) -> Result<Self> {
         let count = ctx.classes().len();
+        let features = feature_support(ctx);
+        let mut representation_warnings = vec![Vec::new(); count];
         let mut families = vec![None; count];
         let mut visiting = vec![false; count];
         for class in ctx.classes() {
@@ -81,7 +162,14 @@ impl<'a> ModelIndex<'a> {
         // One pass over incoming features replaces a complete model scan per classifier.
         let mut incoming = vec![false; count];
         let mut map_only = vec![true; count];
-        for feature in ctx.classes().iter().flat_map(Class::structural) {
+        for feature in ctx.classes().iter().flat_map(|class| {
+            class
+                .structural()
+                .iter()
+                .zip(&features[*class.idx])
+                .filter(|(_, support)| support.supported)
+                .map(|(feature, _)| feature)
+        }) {
             if let Some(target) = feature.typ {
                 incoming[*target] = true;
                 map_only[*target] &= feature.kind == structural::Typ::EReference
@@ -92,7 +180,19 @@ impl<'a> ModelIndex<'a> {
         let transparent = ctx
             .classes()
             .iter()
-            .map(transparent_field)
+            .map(|class| {
+                let field = transparent_field(class)?;
+                if let Some(position) = class.structural().iter().position(|feature| feature.name == field)
+                    && !features[*class.idx][position].supported {
+                    representation_warnings[*class.idx].push(Warning::UnsupportedAnnotation {
+                        feature: class.name().to_string(),
+                        annotation: "urn:arachne:representation".into(),
+                        reason: format!("transparent field `{field}` was skipped; generating an ordinary record instead"),
+                    });
+                    return None;
+                }
+                Some(field)
+            })
             .collect::<Vec<_>>();
         let wrappers = ctx
             .classes()
@@ -144,6 +244,8 @@ impl<'a> ModelIndex<'a> {
             ctx,
             names: classifier_type_names(ctx),
             classes,
+            features,
+            representation_warnings,
         })
     }
 
@@ -152,6 +254,27 @@ impl<'a> ModelIndex<'a> {
     }
     pub fn classifier_name(&self, class: idx::Class) -> &Ident {
         &self.names[*class]
+    }
+
+    /// The same declared feature selection used by every analysis and generator.
+    pub fn supported_features(
+        &self,
+        class: idx::Class,
+    ) -> impl Iterator<Item = &'a Structural> + '_ {
+        self.ctx
+            .class(class)
+            .structural()
+            .iter()
+            .zip(&self.features[*class])
+            .filter(|(_, support)| support.supported)
+            .map(|(feature, _)| feature)
+    }
+
+    pub(crate) fn feature_warnings(&self, class: idx::Class) -> impl Iterator<Item = &Warning> {
+        self.features[*class]
+            .iter()
+            .flat_map(|support| &support.warnings)
+            .chain(&self.representation_warnings[*class])
     }
 }
 
@@ -225,7 +348,7 @@ impl<'a> GenerationPlan<'a> {
                 }
             })
             .collect::<Vec<_>>();
-        let incoming = concrete_containment_incoming(ctx, &package_classes, &concrete_families);
+        let incoming = concrete_containment_incoming(&model, &package_classes, &concrete_families);
         let mut roots = package_classes
             .iter()
             .copied()
@@ -241,7 +364,7 @@ impl<'a> GenerationPlan<'a> {
                         && !class.is_enum()
                         && !concrete_families[**idx].is_empty()
                         && family_has_no_external_container(
-                            ctx,
+                            &model,
                             *idx,
                             &package_classes,
                             &package_set,
@@ -255,7 +378,7 @@ impl<'a> GenerationPlan<'a> {
         }
         let reachable_classes = roots
             .iter()
-            .flat_map(|root| reachable_classes(ctx, *root, &package_set))
+            .flat_map(|root| reachable_classes(&model, *root, &package_set))
             .collect::<BTreeSet<_>>();
         let generated = ctx
             .classes()
@@ -282,7 +405,7 @@ impl<'a> GenerationPlan<'a> {
 }
 
 fn reachable_classes(
-    ctx: &Ctx,
+    ctx: &ModelIndex<'_>,
     root: idx::Class,
     package: &HashSet<idx::Class>,
 ) -> HashSet<idx::Class> {
@@ -296,9 +419,7 @@ fn reachable_classes(
         stack.extend(class.sup().iter().copied());
         stack.extend(class.sub().iter().copied());
         stack.extend(
-            class
-                .structural()
-                .iter()
+            ctx.supported_features(class.idx)
                 .filter(|feature| {
                     feature.kind == structural::Typ::EReference && feature.containment
                 })
@@ -309,16 +430,14 @@ fn reachable_classes(
 }
 
 fn concrete_containment_incoming(
-    ctx: &Ctx,
+    ctx: &ModelIndex<'_>,
     classes: &[idx::Class],
     families: &[Vec<idx::Class>],
 ) -> HashSet<idx::Class> {
     let mut incoming = HashSet::new();
     for source in classes {
         for target in ctx
-            .class(*source)
-            .structural()
-            .iter()
+            .supported_features(*source)
             .filter(|feature| feature.kind == structural::Typ::EReference && feature.containment)
             .filter_map(|feature| feature.typ)
         {
@@ -333,7 +452,7 @@ fn concrete_containment_incoming(
 }
 
 fn family_has_no_external_container(
-    ctx: &Ctx,
+    ctx: &ModelIndex<'_>,
     class: idx::Class,
     classes: &[idx::Class],
     package: &HashSet<idx::Class>,
@@ -346,9 +465,7 @@ fn family_has_no_external_container(
             .iter()
             .any(|source| !context.contains(source))
             && ctx
-                .class(*source)
-                .structural()
-                .iter()
+                .supported_features(*source)
                 .filter(|feature| {
                     feature.kind == structural::Typ::EReference && feature.containment
                 })

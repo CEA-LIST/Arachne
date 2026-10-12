@@ -153,16 +153,31 @@ Non-containment reference bounds are not normalized by this helper. Their parsed
 
 ### Structural features
 
-| Ecore                 | Description                                                                      | Implemented? | Notes                                                  |
-| --------------------- | -------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------ |
-| `changeable`          | If `false`, then the feature is immutable.                                       | No.          | Ignored with a warning when explicitly set to `false`. |
-| `volatile`            | If `true`, the value is computed on access and never stored.                     | No.          | Ignored with a warning when present.                   |
-| `derived`             | If `true`, the value is computed from other features.                            | No.          | Ignored with a warning when present.                   |
-| `transient`           | If `true`, the value is not serialized.                                          | No.          | Ignored with a warning when present.                   |
-| `unsettable`          | If `true`, the feature distinguishes between "unset" and "set to default value". | No.          | Ignored with a warning when present.                   |
-| `defaultValue`        | The feature has a default value.                                                 | No.          | Parsed and ignored with a warning when present.        |
-| `defaultValueLiteral` | The feature has a serialized default value literal.                              | No.          | Parsed and ignored with a warning when present.        |
-| `resolveProxies`      | If `true`, proxy references are resolved on access.                              | No.          | Parsed and ignored with a warning when present.        |
+Unsupported structural-feature semantics cause the entire feature to be skipped,
+including its field, graph edges and XMI projection. Warnings identify the declaring
+class and feature and are retained for emission after token generation. Analyses
+of roots, reachability, map helpers and containment cycles use the same filtered
+feature selection.
+
+| Ecore                 | Value that causes the feature to be skipped |
+| --------------------- | ----------------------------------------- |
+| `changeable`          | `false`                                   |
+| `volatile`            | `true`                                    |
+| `derived`             | `true`                                    |
+| `transient`           | `true`                                    |
+| `unsettable`          | `true`                                    |
+| `defaultValue`        | Any explicitly supplied value             |
+| `defaultValueLiteral` | Any explicitly supplied value             |
+| `resolveProxies`      | `true`                                    |
+
+The opposite boolean values are accepted, as are omitted properties. In particular,
+`resolveProxies=false` requires no proxy resolution. Unsupported multiplicity bounds
+still use the best-effort normalization documented above.
+
+When a transparent class's projected field is skipped, its representation falls
+back to an ordinary record containing its remaining supported fields, with a
+warning. A UW-map feature whose key or value is skipped is also skipped, with a
+warning naming the dependency.
 
 #### Reference
 

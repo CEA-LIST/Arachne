@@ -69,7 +69,7 @@ impl ReferenceAnalysis {
         for &class_idx in reachable_classes {
             let class = &ctx.classes()[*class_idx];
 
-            for feature in class.structural() {
+            for feature in ctx.supported_features(class.idx) {
                 if feature.kind != structural::Typ::EReference {
                     continue;
                 }

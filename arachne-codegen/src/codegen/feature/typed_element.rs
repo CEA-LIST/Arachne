@@ -2,7 +2,12 @@ use ecore_rs::repr::Structural;
 
 use crate::codegen::warnings::Warning;
 
-pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<Warning>) {
+/// Checks for unsupported feature properties.
+/// Returns `false` if the feature is not supported and records its warnings.
+/// False flags require no additional semantics; `changeable=true` is supported.
+pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<Warning>) -> bool {
+    let warning_len = warnings.len();
+
     if let Some(changeable) = feature.changeable
         && !changeable
     {
@@ -13,7 +18,7 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
         })
     }
 
-    if let Some(transient) = feature.transient {
+    if let Some(transient @ true) = feature.transient {
         warnings.push(Warning::UnsupportedFeatureProperty {
             feature: feature.name.clone(),
             property: "transient".into(),
@@ -21,7 +26,7 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
         })
     }
 
-    if let Some(volatile) = feature.volatile {
+    if let Some(volatile @ true) = feature.volatile {
         warnings.push(Warning::UnsupportedFeatureProperty {
             feature: feature.name.clone(),
             property: "volatile".into(),
@@ -29,7 +34,7 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
         })
     }
 
-    if let Some(derived) = feature.derived {
+    if let Some(derived @ true) = feature.derived {
         warnings.push(Warning::UnsupportedFeatureProperty {
             feature: feature.name.clone(),
             property: "derived".into(),
@@ -37,7 +42,7 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
         })
     }
 
-    if let Some(unsettable) = feature.unsettable {
+    if let Some(unsettable @ true) = feature.unsettable {
         warnings.push(Warning::UnsupportedFeatureProperty {
             feature: feature.name.clone(),
             property: "unsettable".into(),
@@ -61,11 +66,13 @@ pub fn unsupported_feature_properties(feature: &Structural, warnings: &mut Vec<W
         })
     }
 
-    if let Some(resolve_proxies) = feature.resolve_proxies {
+    if let Some(resolve_proxies @ true) = feature.resolve_proxies {
         warnings.push(Warning::UnsupportedFeatureProperty {
             feature: feature.name.clone(),
             property: "resolveProxies".into(),
             value: resolve_proxies.to_string(),
         })
     }
+
+    warning_len == warnings.len()
 }

@@ -99,7 +99,7 @@ fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -
             Ok(format!("{{ path = {}{options} }}", toml_string(path)))
         } else {
             Ok(
-                "{ git = \"https://github.com/CEA-LIST/Moirai.git\", \"tag\" = \"v0.8\" }"
+                "{ git = \"https://github.com/CEA-LIST/Moirai.git\", \"tag\" = \"v0.8.1\" }"
                     .to_string(),
             )
         }

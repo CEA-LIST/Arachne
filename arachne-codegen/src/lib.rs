@@ -15,8 +15,13 @@ use log::{debug, info, warn};
 pub use parser::EcoreParser;
 
 use crate::codegen::{
-    analysis::GenerationPlan, classifier::ClassGenerator, generate::Generate, generator::Generator,
-    package::PackageGenerator, read_as_ecore::ReadAsEcoreGenerator, reference::ReferenceGenerator,
+    analysis::GenerationPlan,
+    classifier::ClassGenerator,
+    generate::{Fragment, Generate},
+    generator::Generator,
+    package::PackageGenerator,
+    read_as_ecore::ReadAsEcoreGenerator,
+    reference::ReferenceGenerator,
 };
 
 // Constants for module names used in code generation
@@ -148,6 +153,19 @@ pub fn generate_from_parser<'a>(
         plan.roots.len(),
         plan.reachable_classes.len()
     );
+
+    // Diagnostics belong to declared features, independent of generated fields or projections.
+    let warnings = plan
+        .generation_order
+        .iter()
+        .flat_map(|class| plan.model.feature_warnings(*class))
+        .cloned()
+        .collect();
+    classifiers.register(Fragment::new(
+        proc_macro2::TokenStream::new(),
+        vec![],
+        warnings,
+    ));
 
     info!("Generating classifiers...",);
     for class_idx in &plan.generation_order {

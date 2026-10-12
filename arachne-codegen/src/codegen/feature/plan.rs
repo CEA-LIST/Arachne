@@ -5,10 +5,7 @@ use ecore_rs::repr::{Class, Structural, builtin::Typ, idx, structural};
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::{
-    bounds::{BoundKind, normalize_bounds},
-    typed_element::unsupported_feature_properties,
-};
+use super::bounds::{BoundKind, normalize_bounds};
 use crate::codegen::{
     analysis::ModelIndex,
     annotation::{DatatypeOverride, datatype_override, uw_map_spec},
@@ -117,8 +114,7 @@ fn qualify(ident: TokenStream, namespace: Option<&syn::Path>) -> TokenStream {
 
 impl<'a> FeaturePlan<'a> {
     fn new(feature: &'a Structural, storage: Storage<'a>) -> Self {
-        let (bounds, mut warnings) = normalize_bounds(feature.bounds, &feature.name);
-        unsupported_feature_properties(feature, &mut warnings);
+        let (bounds, warnings) = normalize_bounds(feature.bounds, &feature.name);
         Self {
             feature,
             bounds,
@@ -204,9 +200,7 @@ impl<'a> FeaturePlan<'a> {
                 feature.name
             );
             let find = |name: &str| {
-                target
-                    .structural()
-                    .iter()
+                ctx.supported_features(target.idx)
                     .find(|field| field.name == name)
                     .with_context(|| {
                         format!("UWMap feature `{name}` not found in `{}`", target.name())

@@ -1082,10 +1082,9 @@ mod tests {
         (res, WARNINGS.with(RefCell::take))
     }
 
-    /// `class_structural` reads `unsettable` and then neither stores it nor warns about it, so the
-    /// flag is dropped without a trace.
+    /// Keep both explicit values so code generation can decide feature support.
     #[test]
-    fn warns_when_dropping_unsettable() {
+    fn preserves_unsettable_for_codegen() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -1108,22 +1107,17 @@ mod tests {
 "##;
 
         let (parsed, warnings) = with_warnings(|| Ctx::parse(ecore));
-        parsed.expect("ecore should parse");
-
-        let unsettable: Vec<_> = warnings
+        let ctx = parsed.expect("ecore should parse");
+        let class = ctx
+            .classes()
             .iter()
-            .filter(|warning| warning.contains("unsettable"))
-            .collect();
-        assert_eq!(
-            unsettable.len(),
-            1,
-            "expected one warning about `unsettable`, got {warnings:?}"
-        );
-        assert!(
-            unsettable[0].contains("`Feature`") && unsettable[0].contains("`direction`"),
-            "the warning does not name `Feature.direction`: {}",
-            unsettable[0]
-        );
+            .find(|class| class.name() == "Feature")
+            .unwrap();
+        assert_eq!(class.structural()[0].unsettable, Some(true));
+        assert_eq!(class.structural()[1].unsettable, Some(false));
+        assert!(warnings
+            .iter()
+            .all(|warning| !warning.contains("unsettable")));
     }
 
     /// The warning for a dropped `eOpposite` names neither the feature nor its opposite, so a

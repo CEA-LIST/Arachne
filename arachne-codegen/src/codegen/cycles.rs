@@ -103,7 +103,7 @@ impl<'a> CycleAnalyzer<'a> {
         for class in self.ctx.classes().iter() {
             let source = class.idx;
 
-            for structural in class.structural() {
+            for structural in self.ctx.supported_features(class.idx) {
                 if !structural.containment {
                     continue;
                 }
@@ -277,7 +277,7 @@ impl<'a> CycleAnalyzer<'a> {
         }
 
         for class in self.ctx.classes().iter() {
-            for structural in class.structural() {
+            for structural in self.ctx.supported_features(class.idx) {
                 if !structural.containment {
                     continue;
                 }

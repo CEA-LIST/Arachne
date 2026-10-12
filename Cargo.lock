@@ -69,7 +69,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "arachne-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "arachne-codegen",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "arachne-codegen"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "arachne-xmi",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "arachne-xmi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "quick-xml",
 ]
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "ecore_rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "log",

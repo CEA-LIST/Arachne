@@ -239,9 +239,8 @@ impl ReadAsEcoreGenerator<'_> {
         }
 
         visits.extend(
-            class
-                .structural()
-                .iter()
+            self.ctx
+                .supported_features(class.idx)
                 .filter(|feature| {
                     feature.kind == structural::Typ::EReference
                         && feature.containment

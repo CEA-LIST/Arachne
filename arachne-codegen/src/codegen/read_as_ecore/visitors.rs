@@ -137,9 +137,9 @@ impl ReadAsEcoreGenerator<'_> {
                     if let Some(field_name) =
                         self.ctx.info(subclass.idx).transparent_field.as_deref()
                     {
-                        let field = subclass
-                            .structural()
-                            .iter()
+                        let field = self
+                            .ctx
+                            .supported_features(subclass.idx)
                             .find(|feature| feature.name == field_name)
                             .expect("transparent field should exist");
                         let body = self.generate_transparent_variant_visit(

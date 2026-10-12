@@ -14,6 +14,10 @@ pub enum Warning {
         property: String,
         value: String,
     },
+    UnsupportedFeatureDependency {
+        feature: String,
+        dependency: String,
+    },
     UnsupportedPropertyCombination {
         feature: String,
         properties: Vec<String>,
@@ -84,8 +88,16 @@ impl Warning {
                 value,
             } => {
                 format!(
-                    "Feature `{}` has unsupported property `{}` with value `{}`.",
+                    "Feature `{}` has unsupported property `{}` with value `{}`; the feature was skipped.",
                     feature, property, value
+                )
+            }
+            Warning::UnsupportedFeatureDependency {
+                feature,
+                dependency,
+            } => {
+                format!(
+                    "Feature `{feature}` depends on skipped feature `{dependency}`; the feature was skipped."
                 )
             }
         }

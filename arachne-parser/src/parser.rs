@@ -172,6 +172,7 @@ fn feature(node: Node<'_, '_>, ctx: &mut ClassCtx<'_, '_>) -> Res<Structural> {
                 ("volatile", Structural::set_volatile),
                 ("transient", Structural::set_transient),
                 ("derived", Structural::set_derived),
+                ("unsettable", Structural::set_unsettable),
                 ("unique", Structural::set_unique),
                 ("resolveProxies", Structural::set_resolve_proxies),
             ] {
@@ -185,10 +186,6 @@ fn feature(node: Node<'_, '_>, ctx: &mut ClassCtx<'_, '_>) -> Res<Structural> {
                 if bounds.ubound == Some(1) && node.attribute(flag).is_some() {
                     warn!("Structural feature `{}` sets `{}` while `upperBound=1`; this has no effect", name, flag);
                 }
-            }
-            if boolean(node, "unsettable")? == Some(true) {
-                warn!("Structural feature `{}` of class `{}` sets `unsettable=\"true\"`, which is currently not supported, ignoring",
-                name, ctx.current().name());
             }
             if let Some(opposite) = node.attribute("eOpposite") {
                 warn!("Structural feature `{}` of class `{}` sets `eOpposite=\"{}\"`: `eOpposite` attributes are currently not supported, ignoring",

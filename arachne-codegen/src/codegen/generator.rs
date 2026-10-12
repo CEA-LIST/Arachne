@@ -60,6 +60,11 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Diagnostics retained even when the corresponding fragment contains no code.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
     pub fn is_empty(&self) -> bool {
         self.tokens.iter().all(TokenStream::is_empty)
     }

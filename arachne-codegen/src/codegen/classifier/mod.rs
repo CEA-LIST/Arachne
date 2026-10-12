@@ -141,7 +141,7 @@ impl<'a> ClassGenerator<'a> {
 
     /// Process all structural features and split them into attributes and references
     fn process_structural_features(&self) -> anyhow::Result<(Vec<Fragment>, Vec<Fragment>)> {
-        self.class.structural().iter().try_fold(
+        self.ctx.supported_features(self.class.idx).try_fold(
             (Vec::new(), Vec::new()),
             |(mut attrs, mut refs), f| {
                 match f.kind {
@@ -227,9 +227,9 @@ impl<'a> ClassGenerator<'a> {
             return Ok(None);
         };
 
-        let field = subclass
-            .structural()
-            .iter()
+        let field = self
+            .ctx
+            .supported_features(subclass.idx)
             .find(|feature| feature.name == field_name)
             .ok_or_else(|| {
                 anyhow::anyhow!(

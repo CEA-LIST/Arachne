@@ -240,9 +240,9 @@ impl ReadAsEcoreGenerator<'_> {
             )?);
         }
 
-        for feature in class
-            .structural()
-            .iter()
+        for feature in self
+            .ctx
+            .supported_features(class.idx)
             .filter(|feature| feature.transient != Some(true))
         {
             match feature.kind {
