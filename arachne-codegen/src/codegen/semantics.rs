@@ -165,13 +165,22 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
     let presence_source = presence_source(feature);
 
     match feature.kind {
-        // A non-containment reference is carried as a string on both paths and
-        // `process_structural_features` emits no field for it at all, so it
-        // has no facet to source.
+        // A non-containment reference is an arc of the generated reference
+        // graph, which names its target by creation, so its rule is SI.05's
+        // reference by store identity; one that declares an `eOpposite` keeps
+        // today's string rule (Cam's decision 3). `process_structural_features`
+        // emits no field for either, so neither has a facet to source.
         structural::Typ::EReference if !feature.containment => (
-            MergeRule::Reference {
-                many: presence == Presence::Many,
-                target: target_slot(feature),
+            if feature.opposite().is_some() {
+                MergeRule::Reference {
+                    many: presence == Presence::Many,
+                    target: target_slot(feature),
+                }
+            } else {
+                MergeRule::IdentityReference {
+                    many: presence == Presence::Many,
+                    target: target_slot(feature),
+                }
             },
             Provenance {
                 ordered: FacetSource::NotApplicable,
@@ -240,6 +249,11 @@ pub fn merge_json(rule: &MergeRule, ctx: &Ctx) -> Value {
         }),
         MergeRule::Reference { many, target } => json!({
             "kind": "reference",
+            "many": many,
+            "target": class_name(*target, ctx),
+        }),
+        MergeRule::IdentityReference { many, target } => json!({
+            "kind": "identityReference",
             "many": many,
             "target": class_name(*target, ctx),
         }),
@@ -1380,7 +1394,8 @@ mod tests {
                         // `record!(DataFlowPort {})`, and
                         // `no_field_is_emitted_for_a_non_containment_reference`
                         // pins that.
-                        MergeRule::Reference { many, target } => {
+                        MergeRule::Reference { many, target }
+                        | MergeRule::IdentityReference { many, target } => {
                             assert_eq!(
                                 (feature.kind, feature.containment),
                                 (structural::Typ::EReference, false),
@@ -1866,9 +1881,10 @@ mod tests {
         assert_eq!(derived, expected, "spec 11 §7.2's feature table");
 
         // The rules themselves, in the vocabulary phase 5 actually runs. Five
-        // sequences, five single containments, five text slots and one
-        // reference, which is the same shape §7.2's rule column describes in
-        // its own words.
+        // sequences, five single containments and five text slots, which is
+        // the same shape §7.2's rule column describes in its own words. The
+        // one reference, `DataFlowPort.entry`, is on SI.05's identity rule and
+        // is held in `tests/si05_inline_replacements.rs`.
         let slot = |name: &str| {
             table
                 .classes
@@ -1900,7 +1916,6 @@ mod tests {
                 rule("Root", "main"),
                 rule("BehaviorTree", "ID"),
                 rule("TreeNode", "name"),
-                rule("DataFlowPort", "entry"),
             ],
             [
                 MergeRule::Containment {
@@ -1915,10 +1930,6 @@ mod tests {
                 MergeRule::Attribute {
                     shape: Shape::Optional,
                     leaf: LeafRule::Text
-                },
-                MergeRule::Reference {
-                    many: false,
-                    target: slot("BlackboardEntry")
                 },
             ],
             "the rules the descriptor carries"
@@ -2380,6 +2391,8 @@ mod tests {
                 _ => "unreachable-arm",
             },
             MergeRule::Reference { .. } => "reference",
+            // SI.05: two-path equal by the twin of its spec, section 5.3.
+            MergeRule::IdentityReference { .. } => "proven",
             MergeRule::Unsupported { .. } => "unsupported",
         }
     }
@@ -2433,7 +2446,10 @@ mod tests {
                     String::new(),
                     "no-field".to_string(),
                 ),
-                (MergeRule::Reference { many, .. }, _) => (
+                (
+                    MergeRule::Reference { many, .. } | MergeRule::IdentityReference { many, .. },
+                    _,
+                ) => (
                     if *many { "many" } else { "single" }.to_string(),
                     String::new(),
                     String::new(),
@@ -2501,6 +2517,7 @@ mod tests {
                 MergeRule::Attribute { .. } => "attribute",
                 MergeRule::Containment { .. } => "containment",
                 MergeRule::Reference { .. } => "reference",
+                MergeRule::IdentityReference { .. } => "identityReference",
                 MergeRule::Unsupported { .. } => "unsupported",
             }
             .to_string(),

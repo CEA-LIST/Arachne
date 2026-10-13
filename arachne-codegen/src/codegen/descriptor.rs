@@ -478,13 +478,6 @@ mod tests {
         descriptor_of("behavior_tree.ecore")
     }
 
-    fn read_json(path: &Path) -> Value {
-        let text = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("{} should be readable: {e}", path.display()));
-        serde_json::from_str(&text)
-            .unwrap_or_else(|e| panic!("{} should be JSON: {e}", path.display()))
-    }
-
     #[test]
     fn bt_names_root_as_its_only_root_class() {
         let descriptor = bt_descriptor();
@@ -610,53 +603,9 @@ mod tests {
         );
     }
 
-    /// The fixture the editor (mp6) and the generated crate (mp13) read: the
-    /// checked-in descriptors and their digests, as this crate computes them.
-    #[test]
-    fn the_digest_fixture_names_the_checked_in_descriptors() {
-        let fixture = read_json(&example("fixtures/metamodel-digests.json"));
-        for (file, ecore) in [
-            ("bt.metamodel.json", "behavior_tree.ecore"),
-            ("uml.metamodel.json", "SimpleUML.ecore"),
-            ("json.metamodel.json", "json.ecore"),
-        ] {
-            let generated = descriptor_of(ecore);
-            let checked_in = read_json(&example(file));
-            let digest = metamodel_digest(&generated);
-            assert_eq!(
-                metamodel_digest(&checked_in),
-                digest,
-                "examples/{file} differs from `arachne describe examples/{ecore}`"
-            );
-            assert_eq!(
-                fixture[file],
-                json!({ "nsURI": generated["nsURI"], "digest": digest }),
-                "the fixture entry for {file} is stale; `arachne digest examples/{file}` prints the current one"
-            );
-        }
-    }
-
-    /// A non-containment reference stays a reference, and its rule says so
-    /// with every facet `notApplicable`: no field is emitted for it
-    /// (`classifier/mod.rs:104-117`), so there is nothing for a facet to
-    /// describe.
-    #[test]
-    fn bt_non_containment_reference_stays_a_reference() {
-        let descriptor = bt_descriptor();
-        let port = &descriptor["classes"]["DataFlowPort"];
-        assert_eq!(
-            port["references"],
-            json!([
-                {"name": "entry", "target": "BlackboardEntry",
-                 "many": false, "required": false,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "reference", "many": false,
-                           "target": "BlackboardEntry"},
-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "notApplicable", "presence": "notApplicable"}},
-            ])
-        );
-    }
+    // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.3): two tests that held
+    // today's reference rule and the regenerated digests of the checked-in descriptors moved to
+    // `tests/si05_inline_replacements.rs`, as the registered exception of VALIDATION.md section 2.
 
     /// The two forms D6 used to keep on the generated path, as `json.ecore`
     /// writes them since the decision was amended on 2026-09-08: a `uw-map`
