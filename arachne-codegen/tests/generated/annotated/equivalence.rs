@@ -59,7 +59,10 @@
 //! - **`Port.annotated`**, design §8's non-containment reference: a string on
 //!   the interpreted path and a `typed_graph!` arc on the generated one, so
 //!   there is nothing to compare. [`project`] drops it by rule and [`canon`]
-//!   drops it from the interpreted side. `Part.subject` and
+//!   drops it from the interpreted side. Since SI.05 the descriptor this crate
+//!   is generated with carries it on the identity rule (it declares no
+//!   `eOpposite`); SI.05's twin compares identity references and this oracle
+//!   keeps the exclusion, by both rules. `Part.subject` and
 //!   `EAnnotation.references` need no exclusion: they carry no rule at all, so
 //!   neither read-out has a key for them.
 //! - **Every value that is the default of its feature's rule**, dropped from
@@ -621,7 +624,13 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
             // Design §8, and the two `EObject` forms and the transient
             // back-pointer: nothing is emitted on either path, so there is
             // nothing to compare and `canon` drops the other side's key too.
-            MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => continue,
+            // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, amendment A1):
+            // this crate's descriptor is the one `describe` writes now, so
+            // `Port.annotated`, which declares no `eOpposite`, carries the
+            // identity rule, and it stays out of the comparison as before.
+            MergeRule::Reference { .. }
+            | MergeRule::IdentityReference { .. }
+            | MergeRule::Unsupported { .. } => continue,
             MergeRule::Attribute {
                 shape: Shape::Optional,
                 leaf: LeafRule::Text,
@@ -656,10 +665,6 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
                  none and this oracle claims none",
                 meta.name(class)
             ),
-            // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
-            // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
-            #[allow(unreachable_patterns)]
-            _ => continue,
         }
     }
     Value::Object(out)
@@ -793,7 +798,7 @@ fn strip_references(meta: &Meta, value: &Value) -> Value {
                         .find(|(name, _, _)| &**name == key)
                     && matches!(
                         meta.sem.rule(*owner, *slot),
-                        Some(MergeRule::Reference { .. })
+                        Some(MergeRule::Reference { .. } | MergeRule::IdentityReference { .. })
                     )
                 {
                     continue;
@@ -869,7 +874,9 @@ fn rule_of(meta: &Meta, class: ClassSlot, feature: &str) -> Option<MergeRule> {
 /// of the rule the feature carrying it is bound to.
 fn is_default(rule: &MergeRule, value: &Value) -> bool {
     match rule {
-        MergeRule::Reference { .. } | MergeRule::Unsupported { .. } => false,
+        MergeRule::Reference { .. }
+        | MergeRule::IdentityReference { .. }
+        | MergeRule::Unsupported { .. } => false,
         MergeRule::Attribute { shape, .. } => match shape {
             // Present means written. See the note on the exemption above.
             Shape::Optional => false,
@@ -880,10 +887,6 @@ fn is_default(rule: &MergeRule, value: &Value) -> bool {
             Shape::Sequence => value.as_array().is_some_and(Vec::is_empty),
             other => panic!("`ecore_builtins.ecore` reaches no {other:?} containment"),
         },
-        // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
-        // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
-        #[allow(unreachable_patterns)]
-        _ => false,
     }
 }
 
