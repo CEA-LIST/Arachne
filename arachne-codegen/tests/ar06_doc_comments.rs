@@ -94,6 +94,7 @@ fn module_doc_bullet(source: &str, start: &str) -> String {
 
 /// The file with every blank line and every line that is a `//` comment (`//`, `///`, `//!`)
 /// removed, lines kept as written otherwise, joined by `\n`.
+#[allow(dead_code)] // SI.05 retired the two code pins that read it (section 6.2).
 fn code_only(source: &str) -> String {
     source
         .lines()
@@ -204,17 +205,18 @@ fn ar06_d2_semantics_module_doc_names_datatype_override_in() {
 /// G1: only doc comments move; `to_crdt.rs` and `examples/` do not.
 #[test]
 fn ar06_g1_only_comments_move() {
+    // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2) changes the code of
+    // `descriptor.rs` and `semantics.rs`: the emitter names the identity rule. The two code pins
+    // were AR.06's guard for its own round (its record, round 1, holds them green at its
+    // commit) and are retired here; `to_crdt.rs` and `examples/` stay pinned, which SI.05's
+    // scoping decision S1 also requires.
+    let _ = (
+        DESCRIPTOR_CODE_SHA256,
+        SEMANTICS_CODE_SHA256,
+        DESCRIPTOR_RS,
+        SEMANTICS_RS,
+    );
     let observed = [
-        (
-            format!("{DESCRIPTOR_RS} code"),
-            sha256(code_only(&read(DESCRIPTOR_RS)).as_bytes()),
-            DESCRIPTOR_CODE_SHA256,
-        ),
-        (
-            format!("{SEMANTICS_RS} code"),
-            sha256(code_only(&read(SEMANTICS_RS)).as_bytes()),
-            SEMANTICS_CODE_SHA256,
-        ),
         (
             TO_CRDT_RS.to_string(),
             sha256(read(TO_CRDT_RS).as_bytes()),

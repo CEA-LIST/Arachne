@@ -36,6 +36,12 @@ use arachne_codegen::{EcoreParser, descriptor_json, find_user_package, metamodel
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
+// SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): from SI.05 on `describe` names the
+// identity rule on every in-scope reference. This file guards everything else, so what it reads is
+// `describe`'s output with that rule read back as today's (`si05_support::read_back`), the
+// identity before SI.05; `si05_identity_reference_emitter.rs` holds the rule itself.
+#[path = "si05_support/mod.rs"]
+mod si05_support;
 /// The three keys this item adds, and nothing else.
 const KEYS: [&str; 3] = ["eOpposite", "subsets", "redefines"];
 
@@ -63,8 +69,10 @@ fn describe(ecore: &Path) -> Value {
         .unwrap_or_else(|e| panic!("set-up: {} should parse: {e}", ecore.display()));
     let pack = find_user_package(&parser.ctx)
         .unwrap_or_else(|e| panic!("set-up: {} has no user package: {e}", ecore.display()));
-    descriptor_json(&parser.ctx, pack)
-        .unwrap_or_else(|e| panic!("set-up: describing {}: {e}", ecore.display()))
+    si05_support::read_back(
+        descriptor_json(&parser.ctx, pack)
+            .unwrap_or_else(|e| panic!("set-up: describing {}: {e}", ecore.display())),
+    )
 }
 
 fn read_json(path: &Path) -> Value {

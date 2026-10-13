@@ -30,6 +30,13 @@ use arachne_codegen::{EcoreParser, descriptor_json, find_user_package, metamodel
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+// SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): from SI.05 on `describe` names the
+// identity rule on every in-scope reference. This file guards everything else, so what it reads is
+// `describe`'s output with that rule read back as today's (`si05_support::read_back`), the
+// identity before SI.05; `si05_identity_reference_emitter.rs` holds the rule itself.
+#[path = "si05_support/mod.rs"]
+mod si05_support;
+
 /// SysON's metamodel, byte for byte (AR.02's fixture).
 const SYSON_ECORE: &str = "arachne-codegen/tests/fixtures/ar02/sysml.ecore";
 const SYSON_ECORE_SHA256: &str = "82463c8f21d1a688603866ec02c6d4880b4e9224e34e9833a464aed0bd8f5440";
@@ -104,7 +111,9 @@ fn describe(ecore: &Path) -> Result<Value, String> {
         .map_err(|e| format!("{} does not parse: {e}", ecore.display()))?;
     let pack = find_user_package(&parser.ctx)
         .map_err(|e| format!("{}: no user package: {e}", ecore.display()))?;
-    descriptor_json(&parser.ctx, pack).map_err(|e| format!("describing {}: {e}", ecore.display()))
+    descriptor_json(&parser.ctx, pack)
+        .map(si05_support::read_back)
+        .map_err(|e| format!("describing {}: {e}", ecore.display()))
 }
 
 fn read_json(path: &Path) -> Result<Value, String> {

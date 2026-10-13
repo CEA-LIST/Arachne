@@ -31,6 +31,10 @@ use std::{
 use arachne_codegen::{Config, generate_with_report};
 use serde_json::{Value, json};
 
+// SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): see `si05_support`.
+#[path = "si05_support/mod.rs"]
+mod si05_support;
+
 /// Each checked-in crate, under `generated/`, and the metamodel it was generated from.
 const CRATES: [(&str, &str); 5] = [
     ("bt_crdt", "examples/behavior_tree.ecore"),
@@ -166,6 +170,14 @@ fn ar01_the_five_checked_in_crates_regenerate_byte_for_byte() {
                 .unwrap_or_else(|e| panic!("reading {}: {e}", checked_in.display()));
             let checked_in = expected_bytes(krate, file, checked_in);
             let regenerated = fs::read(output.join(file)).unwrap_or_default();
+            // SI.05: the generator names the identity rule on the in-scope references of a
+            // crate's descriptor, and the checked-in crates are not regenerated (scoping decision
+            // S1); everything else of the file is held byte for byte as before.
+            let regenerated = if file == "metamodel.json" {
+                si05_support::read_back_bytes(regenerated)
+            } else {
+                regenerated
+            };
             if regenerated != checked_in {
                 differing.push(format!(
                     "{krate}/{file}: regenerated {} bytes, checked in {}, first differing at \

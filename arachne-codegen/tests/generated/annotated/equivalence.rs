@@ -656,6 +656,10 @@ fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
                  none and this oracle claims none",
                 meta.name(class)
             ),
+            // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
+            // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
+            #[allow(unreachable_patterns)]
+            _ => continue,
         }
     }
     Value::Object(out)
@@ -876,6 +880,10 @@ fn is_default(rule: &MergeRule, value: &Value) -> bool {
             Shape::Sequence => value.as_array().is_some_and(Vec::is_empty),
             other => panic!("`ecore_builtins.ecore` reaches no {other:?} containment"),
         },
+        // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
+        // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
+        #[allow(unreachable_patterns)]
+        _ => false,
     }
 }
 

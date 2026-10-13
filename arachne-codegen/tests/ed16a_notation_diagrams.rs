@@ -30,6 +30,13 @@ use arachne_codegen::{EcoreParser, descriptor_json, find_user_package, metamodel
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+// SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): from SI.05 on `describe` names the
+// identity rule on every in-scope reference. This file guards everything else, so what it reads is
+// `describe`'s output with that rule read back as today's (`si05_support::read_back`), the
+// identity before SI.05; `si05_identity_reference_emitter.rs` holds the rule itself.
+#[path = "si05_support/mod.rs"]
+mod si05_support;
+
 const ECORE: &str = "examples/notation.ecore";
 const DESCRIPTOR: &str = "examples/notation.metamodel.json";
 const OLD_FIXTURE: &str = "arachne-codegen/tests/fixtures/ed16a/notation-9d551713.metamodel.json";
@@ -65,6 +72,7 @@ fn try_describe(ecore: &Path) -> Result<Value, String> {
     let pack = find_user_package(&parser.ctx)
         .map_err(|e| format!("{} has no user package: {e}", ecore.display()))?;
     descriptor_json(&parser.ctx, pack)
+        .map(si05_support::read_back)
         .map_err(|e| format!("{} is not describable: {e}", ecore.display()))
 }
 

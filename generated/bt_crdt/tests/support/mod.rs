@@ -709,6 +709,10 @@ pub fn project_object(meta: &Meta, class: ClassSlot, value: &Value) -> Value {
                     shape => panic!("a containment cannot be {shape:?}"),
                 }
             }
+            // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
+            // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
+            #[allow(unreachable_patterns)]
+            _ => continue,
         }
     }
     Value::Object(out)
@@ -960,6 +964,10 @@ pub fn is_default(rule: MergeRule, value: &Value) -> bool {
             Shape::Keyed { .. } => empty_map(value),
             Shape::OrderedSet => unreachable!("`effective` degrades an ordered set to a sequence"),
         },
+        // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
+        // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
+        #[allow(unreachable_patterns)]
+        _ => false,
     }
 }
 
@@ -1461,6 +1469,10 @@ pub fn collect_candidates(
                 }
                 _ => {}
             },
+            // SI.05 (`cea-cdrt-knowledge/spec/items/SI.05.md`, section 6.2): a rule this file never
+            // meets, the identity rule; the descriptors it runs are today's. Unreachable before SI.05.
+            #[allow(unreachable_patterns)]
+            _ => {}
         }
     }
 }
