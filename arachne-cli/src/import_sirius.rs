@@ -441,6 +441,18 @@ impl Walk<'_> {
                 Some(MergeRule::Attribute { shape, leaf }) => {
                     self.attribute(value, class, slot, shape, leaf, path, at, name);
                 }
+                // SI.05: a reference by store identity names its target by the
+                // identity the model serves it under, which this importer does
+                // not hold; the checked-in descriptors it imports into keep
+                // today's string rule.
+                Some(MergeRule::IdentityReference { .. }) => self.fail(
+                    at,
+                    format!(
+                        "`{}`.`{name}` is a reference by store identity, which this importer \
+                         does not write",
+                        self.table.name(class)
+                    ),
+                ),
                 Some(MergeRule::Reference { many, target }) => {
                     let site = Site {
                         class,
