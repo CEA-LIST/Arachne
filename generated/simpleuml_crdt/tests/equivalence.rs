@@ -1330,9 +1330,14 @@ fn strip_references(meta: &Meta, value: Value) -> Value {
                 .map(|name| meta.slot(name));
             let mut out = Map::new();
             for (key, item) in map {
+                // SI.07, G1: a reference on SI.05's identity rule is dropped as
+                // one on today's rule is; neither path compares it here.
                 if let Some(class) = class
                     && key != ECLASS
-                    && matches!(meta.rule(class, &key), MergeRule::Reference { .. })
+                    && matches!(
+                        meta.rule(class, &key),
+                        MergeRule::Reference { .. } | MergeRule::IdentityReference { .. }
+                    )
                 {
                     continue;
                 }
@@ -2498,21 +2503,34 @@ fn only_one_root_arm_is_ever_written() {
 ///
 /// Six of SimpleUML's references are dropped this way, and the test names
 /// them from the table rather than from a list written here.
-#[test]
-fn the_only_exclusion_is_the_reference() {
-    let meta = meta();
+/// The references the projection drops, as `Class.feature` of their
+/// declaring class, sorted: every non-containment reference the table names.
+fn dropped_references(meta: &Meta) -> Vec<String> {
     let mut dropped: Vec<String> = Vec::new();
     for class in &meta.sem.classes {
         for (name, owner, slot) in &class.visible {
             let Some(rule) = meta.sem.rule(*owner, *slot) else {
                 continue;
             };
-            if matches!(rule, MergeRule::Reference { .. }) && *owner == class.slot {
+            // SI.07, G1: a reference on SI.05's identity rule is dropped as one
+            // on today's rule is.
+            if matches!(
+                rule,
+                MergeRule::Reference { .. } | MergeRule::IdentityReference { .. }
+            ) && *owner == class.slot
+            {
                 dropped.push(format!("{}.{name}", class.name));
             }
         }
     }
     dropped.sort();
+    dropped
+}
+
+#[test]
+fn the_only_exclusion_is_the_reference() {
+    let meta = meta();
+    let dropped = dropped_references(&meta);
     assert_eq!(
         dropped,
         vec![
@@ -2819,5 +2837,78 @@ fn a_read_between_deliveries_changes_what_the_generated_nested_list_holds() {
         read["ownedElements"],
         json!([{ECLASS: "DataType", "name": "b"}]),
         "and with a read after each delivery, update-wins still keeps it"
+    );
+}
+
+/// SimpleUML on SI.05's identity rule: this crate's descriptor with its four
+/// in-scope references (`Generalization.general`, `Property.ttype`,
+/// `Association.source`, `Association.target`) moved to `identityReference`,
+/// the two that declare an `eOpposite` kept (SI.05's fixture, sha256
+/// `8c50a7a8...`).
+fn simpleuml_identity_descriptor() -> Value {
+    serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/si05/simpleuml.identity.metamodel.json"
+        ))
+        .expect("SI.05's identity fixture is there"),
+    )
+    .expect("the identity descriptor is JSON")
+}
+
+/// SI.07, G1 (`cea-cdrt-knowledge/spec/items/SI.07.md`): this oracle meets a
+/// descriptor on SI.05's identity rule without skipping or panicking. With
+/// the interpreted path on SimpleUML's identity descriptor and the generated
+/// one as compiled, the projection drops the four identity references as it
+/// drops today's (the generated path carries them as arcs, which it does not
+/// read), so the thirty scripts of `ip14` find no difference, and the
+/// exclusion it makes there is the same six references.
+#[test]
+fn si07_g1_ip14_scripts_agree_with_the_interpreted_path_on_the_identity_rule() {
+    let identity = simpleuml_identity_descriptor();
+    let identity_meta = Meta::new(Arc::new(
+        from_descriptor(&identity).expect("the identity descriptor parses"),
+    ));
+    let on_identity_rule = identity_meta
+        .sem
+        .classes
+        .iter()
+        .flat_map(|class| class.declared.iter())
+        .filter(|feature| matches!(feature.merge, MergeRule::IdentityReference { .. }))
+        .count();
+    assert_eq!(
+        on_identity_rule, 4,
+        "premise: four references carry the identity rule"
+    );
+    assert_eq!(
+        dropped_references(&identity_meta),
+        dropped_references(&meta()),
+        "G1: the projection drops the same six references on the identity rule as on today's"
+    );
+    let meta = meta();
+    let mut failures = Vec::new();
+    let mut edits = 0;
+    let mut comparisons = 0;
+    for seed in 0..30u64 {
+        let script = seeded_script(&meta, seed, seed >= 10);
+        edits += script
+            .steps
+            .iter()
+            .filter(|step| matches!(step, Step::Edit(_)))
+            .count();
+        let mut harness = Harness::new(&simpleuml_descriptor(), &identity);
+        if let Err(reason) = harness.run(&script) {
+            failures.push(reason);
+        }
+        comparisons += harness.comparisons;
+    }
+    assert!(
+        failures.is_empty(),
+        "G1: {} of thirty scripts differ with the interpreted path on the identity rule.\n\n{}",
+        failures.len(),
+        failures.join("\n\n")
+    );
+    println!(
+        "si07 G1, ip14 on the identity rule: 30 scripts, {edits} edits, {comparisons} comparisons, 0 differences"
     );
 }

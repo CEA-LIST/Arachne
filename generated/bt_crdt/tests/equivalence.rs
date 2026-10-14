@@ -445,6 +445,25 @@ fn the_typed_encoder_walks_the_super_hops_and_the_union_variants() {
     );
 }
 
+/// The non-containment references the table declares, as `Class.feature`
+/// in declaration order: what the projection takes out.
+fn non_containment_references(meta: &Meta) -> Vec<String> {
+    meta.sem
+        .classes
+        .iter()
+        .flat_map(|class| {
+            class.declared.iter().filter_map(move |feature| {
+                // SI.07, G1: a reference on SI.05's identity rule is one too.
+                matches!(
+                    feature.merge,
+                    MergeRule::Reference { .. } | MergeRule::IdentityReference { .. }
+                )
+                .then(|| format!("{}.{}", class.name, feature.name))
+            })
+        })
+        .collect()
+}
+
 /// The exclusion, stated as a test: `DataFlowPort.entry` is on the
 /// interpreted read-out and nowhere on the generated one, and the projection
 /// is what removes it.
@@ -466,17 +485,7 @@ fn the_only_exclusion_is_the_non_containment_reference() {
     let meta = Meta::new(Arc::new(
         from_descriptor(&bt_descriptor()).expect("the descriptor parses"),
     ));
-    let references: Vec<String> = meta
-        .sem
-        .classes
-        .iter()
-        .flat_map(|class| {
-            class.declared.iter().filter_map(move |feature| {
-                matches!(feature.merge, MergeRule::Reference { .. })
-                    .then(|| format!("{}.{}", class.name, feature.name))
-            })
-        })
-        .collect();
+    let references = non_containment_references(&meta);
     assert_eq!(
         references,
         vec!["DataFlowPort.entry".to_string()],
@@ -1250,4 +1259,106 @@ fn conflict_matrix_over_bt_ecore() {
     let cells = bt_cells(&meta);
     matrix::run_matrix(matrix::BT, &sem, &cells, &interp, &generated)
         .unwrap_or_else(|reason| panic!("{reason}"));
+}
+
+/// `bt.metamodel.json` on SI.05's identity rule: its one non-containment
+/// reference, `DataFlowPort.entry` (no `eOpposite`), moved to
+/// `identityReference` with its multiplicity and target, as SI.05's emitter
+/// writes it (SI.05, section 3.1); nothing else moved.
+fn bt_identity_descriptor() -> Value {
+    let mut descriptor = bt_descriptor();
+    let references = descriptor["classes"]["DataFlowPort"]["references"]
+        .as_array_mut()
+        .expect("`DataFlowPort` has references");
+    let entry = references
+        .iter_mut()
+        .find(|reference| reference["name"] == json!("entry"))
+        .expect("`DataFlowPort` declares `entry`");
+    assert_eq!(
+        entry["merge"]["kind"],
+        json!("reference"),
+        "premise: today's rule"
+    );
+    let many = entry["merge"]["many"].clone();
+    let target = entry["merge"]["target"].clone();
+    entry["merge"] = json!({"kind": "identityReference", "many": many, "target": target});
+    descriptor
+}
+
+/// SI.07, G1 (`cea-cdrt-knowledge/spec/items/SI.07.md`): this oracle meets a
+/// descriptor on SI.05's identity rule without skipping or panicking. With
+/// the interpreted path on `bt.ecore`'s identity descriptor and the generated
+/// one as compiled, the projection takes `DataFlowPort.entry` out as it does
+/// on today's rule: a flow port holding nothing else is `{"eClass":
+/// "OutFlowPort"}` on both paths, the thirty scripts of `ip13` find no
+/// difference, and the exclusion is the same one reference.
+#[test]
+fn si07_g1_ip13_scripts_agree_with_the_interpreted_path_on_the_identity_rule() {
+    let identity = bt_identity_descriptor();
+    let meta = Meta::new(Arc::new(
+        from_descriptor(&bt_descriptor()).expect("the descriptor parses"),
+    ));
+    let identity_meta = Meta::new(Arc::new(
+        from_descriptor(&identity).expect("the identity descriptor parses"),
+    ));
+    assert!(
+        matches!(
+            identity_meta.rule(identity_meta.slot("DataFlowPort"), "entry"),
+            MergeRule::IdentityReference { .. }
+        ),
+        "premise: `DataFlowPort.entry` carries the identity rule"
+    );
+    assert_eq!(
+        non_containment_references(&identity_meta),
+        vec!["DataFlowPort.entry".to_string()],
+        "G1: the projection takes out the same one reference on the identity rule"
+    );
+
+    let mut steps: Vec<Step> = open_the_model(&meta).into_iter().map(Step::Edit).collect();
+    let mut door = create(main_path(), "child", None, "OpenDoor");
+    door.id = 2;
+    steps.push(Step::Edit(door));
+    let mut port = create(
+        child_path("OpenDoor"),
+        "outflowports",
+        Some(0),
+        "OutFlowPort",
+    );
+    port.id = 3;
+    steps.push(Step::Edit(port));
+    let script = EditScript {
+        label: "si07 G1: a flow port on the identity rule".to_string(),
+        steps,
+    };
+    let mut harness = Harness::new(&bt_descriptor(), &identity);
+    harness
+        .run(&script)
+        .unwrap_or_else(|reason| panic!("G1: a flow port differs on the identity rule: {reason}"));
+    assert_eq!(
+        harness.interp_doc('a')["main"]["child"]["outflowports"][0],
+        json!({"eClass": "OutFlowPort"}),
+        "G1: the projection takes `entry` out on the identity rule"
+    );
+
+    let mut failures = Vec::new();
+    let mut edits = 0;
+    for seed in 0..30u64 {
+        let script = seeded_script(&meta, seed, seed >= 10);
+        edits += script
+            .steps
+            .iter()
+            .filter(|step| matches!(step, Step::Edit(_)))
+            .count();
+        let mut harness = Harness::new(&bt_descriptor(), &identity);
+        if let Err(reason) = harness.run(&script) {
+            failures.push(reason);
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "G1: {} of thirty scripts differ with the interpreted path on the identity rule.\n\n{}",
+        failures.len(),
+        failures.join("\n\n")
+    );
+    println!("si07 G1, ip13 on the identity rule: 30 scripts, {edits} edits, 0 differences");
 }

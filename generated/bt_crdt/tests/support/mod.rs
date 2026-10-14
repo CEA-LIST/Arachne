@@ -1003,9 +1003,14 @@ pub fn strip_references(meta: &Meta, value: Value) -> Value {
                 .map(|name| meta.slot(name));
             let mut out = Map::new();
             for (key, item) in map {
+                // SI.07, G1: a reference on SI.05's identity rule is dropped as
+                // one on today's rule is; neither path compares it here.
                 if let Some(class) = class
                     && key != ECLASS
-                    && matches!(meta.rule(class, &key), MergeRule::Reference { .. })
+                    && matches!(
+                        meta.rule(class, &key),
+                        MergeRule::Reference { .. } | MergeRule::IdentityReference { .. }
+                    )
                 {
                     continue;
                 }
