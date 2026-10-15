@@ -45,6 +45,11 @@ const EXPECTED_FIXTURE: &str =
 const OLD_DIGEST: &str = "9d551713bd2d1b1cfd8c38e591ed33a454706305278f0d1c1dc7d3589167506c";
 const NEW_DIGEST: &str = "12e7d2beab5a6d0a44090ed0512228c170a19879a7ac25093d817d58fe5c4de1";
 const NEW_FILE_SHA: &str = "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f";
+/// SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): the shipped notation descriptor is
+/// regenerated with SI.05's identity rule (`Edge.source` and `Edge.target` move), so C1 reads it
+/// back as today's before comparing, and the digest fixture names it by this digest.
+/// `si10_shipped_descriptors.rs` holds its bytes.
+const SI10_DIGEST: &str = "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86";
 const NS_URI: &str = "http://cea.fr/crdt/notation/0.1";
 
 fn repo() -> PathBuf {
@@ -136,8 +141,9 @@ fn ed16a_premise_the_fixtures_are_the_registered_ones() {
 #[test]
 fn ed16a_c1_the_descriptor_is_the_old_one_plus_diagrams_and_visible() {
     let expected = fixture(EXPECTED_FIXTURE);
+    // SI.10: read back as today's (see `SI10_DIGEST`).
     let shipped = match read_json(DESCRIPTOR) {
-        Ok(v) => v,
+        Ok(v) => si05_support::read_back(v),
         Err(why) => panic!("ED16A claim: {why}"),
     };
     let mut fail = Vec::new();
@@ -241,6 +247,8 @@ fn ed16a_c1_the_checked_in_descriptor_is_what_arachne_describe_writes() {
             match fs::read(repo().join(DESCRIPTOR)) {
                 Err(e) => fail.push(format!("{DESCRIPTOR}: {e}")),
                 Ok(bytes) => {
+                    // SI.10: read back as today's (see `SI10_DIGEST`).
+                    let bytes = si05_support::read_back_bytes(bytes);
                     if bytes != rendered.as_bytes() {
                         fail.push(format!(
                             "{DESCRIPTOR} differs from `arachne describe {ECORE}` (digest of \
@@ -291,7 +299,8 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
         ),
         (
             "bt.metamodel.json",
-            "ff4525108d4ecb65d297002c7bc02f22978966d347af3678712de07a5c6e1263",
+            // SI.10: regenerated with the identity rule; ff452510... before.
+            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
         ),
         (
             "class_diagram.ecore",
@@ -343,7 +352,8 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
         ),
         (
             "umlclass.metamodel.json",
-            "a770d938ae503aff62f395b6f3cf241a4776459da5b2a04d5ba5e3cddc892edd",
+            // SI.10: regenerated with the identity rule; a770d938... before.
+            "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
         ),
     ];
     // Every checked-in descriptor but notation keeps its digest (umlclass's taken at dc16103 by
@@ -351,11 +361,13 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
     const DIGESTS: [(&str, &str); 4] = [
         (
             "bt.metamodel.json",
-            "b899ec335e7dc46303d5a7871a1370a12db8858718bea57dc6f58f01c474feb5",
+            // SI.10; b899ec33... before.
+            "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822",
         ),
         (
             "uml.metamodel.json",
-            "21c50dea71938b861233b72116f5ead094fe1bbb3d67bf623864f52c3ead1c3f",
+            // SI.10; 21c50dea... before.
+            "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3",
         ),
         (
             "json.metamodel.json",
@@ -363,12 +375,14 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
         ),
         (
             "umlclass.metamodel.json",
-            "a44920adc661d308b7bbb9a8e4ccf1549a093546a241c0e33b28596de8000f3b",
+            // SI.10; a44920ad... before.
+            "999ed54f0657c2c8e27162645b0676e94be56a16d9058429707a104d1e620dc9",
         ),
     ];
     const UML_FILE: (&str, &str) = (
         "uml.metamodel.json",
-        "b000aa0d2b562a41763d3e77829fd9363224fdcade914d42846b9cb0c54690a5",
+        // SI.10: regenerated with the identity rule; b000aa0d... before.
+        "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
     );
     const MAY_CHANGE: [&str; 4] = [
         "notation.ecore",
@@ -408,7 +422,7 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
                 "bt.metamodel.json": {"nsURI": "http://www.example.org/behaviortree", "digest": DIGESTS[0].1},
                 "uml.metamodel.json": {"nsURI": "http:///SimpleUML.ecore", "digest": DIGESTS[1].1},
                 "json.metamodel.json": {"nsURI": "http://www.example.org/json", "digest": DIGESTS[2].1},
-                "notation.metamodel.json": {"nsURI": NS_URI, "digest": NEW_DIGEST},
+                "notation.metamodel.json": {"nsURI": NS_URI, "digest": SI10_DIGEST},
             });
             if fixture != want {
                 fail.push(format!(

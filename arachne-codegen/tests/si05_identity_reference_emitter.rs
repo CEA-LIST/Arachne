@@ -2,7 +2,9 @@
 //! `arachne describe` names the new reference rule on every reference in scope, keeps today's
 //! rule on a reference that declares an `eOpposite` and on an `EObject`-typed one, moves nothing
 //! else, and so gives a metamodel with an in-scope reference a new digest. The checked-in
-//! descriptors keep their bytes (scoping decision S1: no migration).
+//! descriptors keep their bytes (scoping decision S1: no migration). SI.10 (`cea-cdrt-knowledge/
+//! spec/items/SI.10.md`) regenerates them with the rule and keeps the descriptors as SI.05 found
+//! them under `tests/fixtures/si10/legacy/` (`today_path`), which E0 and E2 read from then on.
 //!
 //! Ground truth, none of it computed by the emitter under test:
 //! - the descriptors `arachne describe` wrote at d81cae8, checked in (`examples/*.metamodel.json`)
@@ -189,14 +191,34 @@ const CHECKED_IN: [(&str, &str, &str, &str); 6] = [
     ),
 ];
 
-/// R6: each checked-in descriptor is what `arachne describe` writes once moved by the rule and
-/// by nothing else, byte for byte, so a metamodel with an in-scope reference has a new digest,
-/// the one registered; and the checked-in file itself keeps its bytes (S1, no migration).
+/// SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`) regenerates the checked-in descriptors with
+/// the rule, which supersedes scoping decision S1. The descriptors as SI.05 found them are kept,
+/// byte for byte, under `tests/fixtures/si10/legacy/` (json's does not move and stays where it
+/// is); E0 and E2 read them there, and `si10_shipped_descriptors.rs` holds the shipped files.
+fn today_path(file: &str) -> PathBuf {
+    let legacy = match file {
+        "examples/bt.metamodel.json" => "bt.b899ec33.metamodel.json",
+        "examples/uml.metamodel.json" => "uml.21c50dea.metamodel.json",
+        "examples/notation.metamodel.json" => "notation.12e7d2be.metamodel.json",
+        "examples/umlclass.metamodel.json" => "umlclass.a44920ad.metamodel.json",
+        "examples/sysml/sysml.metamodel.json" => "sysml.2df00538.metamodel.json",
+        _ => return repo().join(file),
+    };
+    repo()
+        .join("arachne-codegen/tests/fixtures/si10/legacy")
+        .join(legacy)
+}
+
+/// R6: each checked-in descriptor (as SI.05 found it, `today_path`) is what `arachne describe`
+/// writes once moved by the rule and by nothing else, byte for byte, so a metamodel with an
+/// in-scope reference has a new digest, the one registered; and the descriptor as it was keeps
+/// its bytes for the models created under it (no migration; SI.10 keeps it under
+/// `tests/fixtures/si10/legacy/`).
 #[test]
 fn si05_e2_the_emitter_moves_each_checked_in_descriptor_by_the_rule_alone() {
     let mut wrong = Vec::new();
     for (file, ecore, file_sha, new_digest) in CHECKED_IN {
-        let path = repo().join(file);
+        let path = today_path(file);
         let checked_in = read_json(&path);
         let described = describe(&repo().join(ecore));
         let expected = with_identity_rule(&checked_in);
@@ -282,9 +304,9 @@ fn si05_e3_the_oracles_descriptors_are_what_describe_writes() {
 fn si05_e0_premise_the_today_fixtures_are_the_checked_in_bytes() {
     for (file, _, file_sha, _) in CHECKED_IN {
         assert_eq!(
-            sha256_of(&repo().join(file)),
+            sha256_of(&today_path(file)),
             file_sha,
-            "{file} is not the registered file"
+            "{file} (as SI.05 found it) is not the registered file"
         );
     }
     assert_eq!(

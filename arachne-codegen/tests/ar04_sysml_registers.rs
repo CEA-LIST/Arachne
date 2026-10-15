@@ -47,6 +47,8 @@ const ANNOTATED_DESCRIPTOR: &str = "examples/sysml/sysml.metamodel.json";
 const EXPECTED: &str = "arachne-codegen/tests/fixtures/ar04/sysml.ar04.metamodel.json";
 const EXPECTED_SHA256: &str = "896ba4d758c6d8adfe9764bb7779f3400212c02afd97959012936d4e113d4e47";
 const EXPECTED_DIGEST: &str = "2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457";
+/// SI.10: `examples/sysml/sysml.metamodel.json` as regenerated, the fixture moved by SI.05's rule.
+const SHIPPED_SHA256: &str = "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83";
 /// SysON's own `.ecore`, unannotated, describes to this today and must after.
 const SYSON_DIGEST: &str = "ebd580696f97d9339c148f5b29db5d0ff7b0928d78fb05efc7c206811405e627";
 
@@ -545,21 +547,27 @@ fn ar04_r3_the_checked_in_descriptor_is_the_one_describe_writes() {
         expected_sha, EXPECTED_SHA256,
         "set-up: the AR.04 fixture moved"
     );
+    // SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): the checked-in descriptor is regenerated
+    // with `arachne describe`, so it is this fixture moved by SI.05's identity rule
+    // (`SHIPPED_SHA256`); read back as today's it is still the fixture and what `describe` writes,
+    // which is what this test guarded. Before SI.10 it was the fixture's bytes (`EXPECTED_SHA256`).
     let sha = sha256_of(&repo.join(ANNOTATED_DESCRIPTOR));
     let described = describe(&repo.join(ANNOTATED_ECORE));
-    let checked_in = read_json(&repo.join(ANNOTATED_DESCRIPTOR));
+    let checked_in = read_json(&repo.join(ANNOTATED_DESCRIPTOR)).map(si05_support::read_back);
+    let fixture = read_json(&repo.join(EXPECTED)).unwrap_or_else(|e| panic!("set-up: {e}"));
     println!(
-        "AR04-R3 {ANNOTATED_DESCRIPTOR}: sha256 {sha:?}, equal to describe {:?}",
+        "AR04-R3 {ANNOTATED_DESCRIPTOR}: sha256 {sha:?}, read back equal to describe {:?}, to the fixture {:?}",
         match (&described, &checked_in) {
             (Ok(d), Ok(c)) => Some(d == c),
             _ => None,
-        }
+        },
+        checked_in.as_ref().map(|c| c == &fixture).ok()
     );
     assert!(
-        sha.as_deref() == Ok(EXPECTED_SHA256)
-            && matches!((&described, &checked_in), (Ok(d), Ok(c)) if d == c),
-        "AR04 claim: {ANNOTATED_DESCRIPTOR} is the fixture's bytes ({EXPECTED_SHA256}) and what describe \
-         writes for {ANNOTATED_ECORE}: sha256 {sha:?}"
+        sha.as_deref() == Ok(SHIPPED_SHA256)
+            && matches!((&described, &checked_in), (Ok(d), Ok(c)) if d == c && c == &fixture),
+        "AR04 claim: {ANNOTATED_DESCRIPTOR} is the fixture moved by the identity rule ({SHIPPED_SHA256}) and, \
+         read back, what describe writes for {ANNOTATED_ECORE}: sha256 {sha:?}"
     );
 }
 
@@ -680,7 +688,8 @@ fn ar04_r4_no_other_metamodel_and_no_default_moves() {
     const FILES: [(&str, &str); 7] = [
         (
             "examples/bt.metamodel.json",
-            "ff4525108d4ecb65d297002c7bc02f22978966d347af3678712de07a5c6e1263",
+            // SI.10: regenerated with the identity rule; ff452510... before.
+            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
         ),
         (
             "examples/json.metamodel.json",
@@ -688,19 +697,23 @@ fn ar04_r4_no_other_metamodel_and_no_default_moves() {
         ),
         (
             "examples/notation.metamodel.json",
-            "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f",
+            // SI.10: regenerated with the identity rule; 04ebb5c1... before.
+            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
         ),
         (
             "examples/umlclass.metamodel.json",
-            "a770d938ae503aff62f395b6f3cf241a4776459da5b2a04d5ba5e3cddc892edd",
+            // SI.10: regenerated with the identity rule; a770d938... before.
+            "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
         ),
         (
             "examples/uml.metamodel.json",
-            "b000aa0d2b562a41763d3e77829fd9363224fdcade914d42846b9cb0c54690a5",
+            // SI.10: regenerated with the identity rule; b000aa0d... before.
+            "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
         ),
         (
             "examples/fixtures/metamodel-digests.json",
-            "9d217db433c8a2d72b9badc5264869b3f2b65b84ad95cfe3047c79a244476879",
+            // SI.10: names the regenerated descriptors; 9d217db4... before.
+            "9e4a4f24bc3f5485a1b54726cd2645a8ddf18c0f0bd55a539b4fb7dd2c277efe",
         ),
         (
             "arachne-codegen/src/codegen/datatype/to_crdt.rs",

@@ -490,8 +490,10 @@ fn ar02_d3_every_other_metamodel_that_declares_an_opposite_carries_it() {
         }
     }
     // The descriptor the examples hold for SimpleUML is the one `arachne describe` writes, which
-    // the editor, the agent and the digest fixture read.
-    let checked_in = read_json(&repo.join("examples/uml.metamodel.json"));
+    // the editor, the agent and the digest fixture read. SI.10 (`cea-cdrt-knowledge/spec/items/
+    // SI.10.md`) regenerates it with the identity rule, so it is read back as today's like
+    // `describe`'s output here (`si10_shipped_descriptors.rs` holds the bytes).
+    let checked_in = si05_support::read_back(read_json(&repo.join("examples/uml.metamodel.json")));
     let described = describe(&repo.join("examples/SimpleUML.ecore"));
     println!(
         "AR02-D3 examples/uml.metamodel.json: digest {}, equal to `describe examples/SimpleUML.ecore` {}",
@@ -615,7 +617,8 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
     const FILES: [(&str, &str); 3] = [
         (
             "examples/bt.metamodel.json",
-            "ff4525108d4ecb65d297002c7bc02f22978966d347af3678712de07a5c6e1263",
+            // SI.10: regenerated with the identity rule; ff452510... before.
+            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
         ),
         (
             "examples/json.metamodel.json",
@@ -623,8 +626,9 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
         ),
         (
             "examples/notation.metamodel.json",
-            // ED.16a; 8c98687d... before.
-            "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f",
+            // ED.16a; 8c98687d... before. SI.10: regenerated with the identity rule; 04ebb5c1...
+            // before.
+            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
         ),
     ];
     let repo = repo();

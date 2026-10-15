@@ -143,9 +143,12 @@ fn read(relative: &str) -> Value {
 }
 
 /// Today's descriptor, as `arachne describe` writes it at d81cae8
-/// (`examples/uml.metamodel.json`, the same bytes).
+/// (`examples/uml.metamodel.json` until SI.10, the same bytes). SI.10
+/// (`cea-cdrt-knowledge/spec/items/SI.10.md`) regenerates the shipped file with
+/// the identity rule and keeps these bytes under `arachne-codegen`'s
+/// `tests/fixtures/si10/legacy/`, which is where they are read from now.
 fn today() -> Value {
-    read("../../examples/uml.metamodel.json")
+    read("../../arachne-codegen/tests/fixtures/si10/legacy/uml.21c50dea.metamodel.json")
 }
 
 fn identity() -> Value {

@@ -46,6 +46,13 @@ use serde_json::{Value, json};
 /// `arachne digest demo/sysml.json`: SysON's SysML v2 descriptor as AR.04 annotated it, names,
 /// ids and literals as multi-value registers (it was `ebd58069` before AR.06, now kept as
 /// `demo/sysml-ebd58069.json`).
+///
+/// SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`, legacy register L1): `demo/sysml.json` is
+/// regenerated with SI.05's identity rule (`a75d8af4...`), under which a reference is a `Link` of
+/// its target's creation identity, which a batch printed offline cannot know, and a reference to
+/// a standard-library element outside the project names no creation at all. `import-sirius`
+/// under the identity rule is not part of SI.10; this test holds what it claims on the descriptor
+/// it was written for, kept by SI.10 as `demo/sysml-2df00538.json`.
 const DESCRIPTOR_DIGEST: &str = "2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457";
 /// The one reference of the fixture whose target is outside the project.
 const LIBRARY_VALUE: &str = "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66";
@@ -84,7 +91,7 @@ fn descriptor() -> Result<(PathBuf, String, Value), String> {
     let path = std::env::var_os("ED12_DESCRIPTOR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../demo/sysml.json")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../demo/sysml-2df00538.json")
         });
     let text = fs::read_to_string(&path).map_err(|e| {
         format!(

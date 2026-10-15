@@ -61,12 +61,17 @@ fn try_describe(ecore: &Path) -> Result<Value, String> {
         .map_err(|e| format!("{} is not describable: {e}", ecore.display()))
 }
 
-/// The descriptor ED.10 ships, as the node would read it, or why there is none.
+/// The descriptor ED.10 ships, as the node would read it, or why there is none; read back as
+/// today's (SI.10, `cea-cdrt-knowledge/spec/items/SI.10.md`: the shipped descriptor is regenerated
+/// with SI.05's identity rule, which `si10_shipped_descriptors.rs` holds; A2 and A3 guard
+/// everything else, as before).
 fn shipped() -> Result<Value, String> {
     let path = repo().join(DESCRIPTOR);
     let text =
         fs::read_to_string(&path).map_err(|e| format!("{DESCRIPTOR} cannot be read: {e}"))?;
-    serde_json::from_str(&text).map_err(|e| format!("{DESCRIPTOR} is not JSON: {e}"))
+    serde_json::from_str(&text)
+        .map(si05_support::read_back)
+        .map_err(|e| format!("{DESCRIPTOR} is not JSON: {e}"))
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -88,6 +93,10 @@ fn ed10_a1_the_checked_in_descriptor_is_what_arachne_describe_writes() {
             match fs::read(repo().join(DESCRIPTOR)) {
                 Err(e) => fail.push(format!("{DESCRIPTOR} cannot be read: {e}")),
                 Ok(bytes) => {
+                    // SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): the shipped descriptor is
+                    // regenerated with the identity rule, so it is read back as today's like
+                    // `describe`'s output here; `si10_shipped_descriptors.rs` holds its bytes.
+                    let bytes = si05_support::read_back_bytes(bytes);
                     let same = bytes == rendered.as_bytes();
                     println!(
                         "ED10-A1 digest {}, package {}, nsURI {}, checked-in bytes equal to \
@@ -968,7 +977,8 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "bt.metamodel.json",
-            "ff4525108d4ecb65d297002c7bc02f22978966d347af3678712de07a5c6e1263",
+            // SI.10: regenerated with the identity rule; ff452510... before.
+            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
         ),
         (
             "class_diagram.ecore",
@@ -984,7 +994,8 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "fixtures/metamodel-digests.json",
-            "9d217db433c8a2d72b9badc5264869b3f2b65b84ad95cfe3047c79a244476879",
+            // SI.10: names the regenerated descriptors; 9d217db4... before.
+            "9e4a4f24bc3f5485a1b54726cd2645a8ddf18c0f0bd55a539b4fb7dd2c277efe",
         ),
         (
             "json.ecore",
@@ -996,7 +1007,8 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "notation.metamodel.json",
-            "04ebb5c15dad375284d4e5e681a5e634130525c614517d373763e6040eead03f",
+            // SI.10: regenerated with the identity rule; 04ebb5c1... before.
+            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
         ),
         (
             "pet_metamodels/abstract_inherits_concrete.ecore",
@@ -1024,18 +1036,21 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "uml.metamodel.json",
-            "b000aa0d2b562a41763d3e77829fd9363224fdcade914d42846b9cb0c54690a5",
+            // SI.10: regenerated with the identity rule; b000aa0d... before.
+            "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
         ),
     ];
     /// The fixture's descriptors and the digest each must keep.
     const DIGESTS: [(&str, &str); 4] = [
         (
             "bt.metamodel.json",
-            "b899ec335e7dc46303d5a7871a1370a12db8858718bea57dc6f58f01c474feb5",
+            // SI.10; b899ec33... before.
+            "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822",
         ),
         (
             "uml.metamodel.json",
-            "21c50dea71938b861233b72116f5ead094fe1bbb3d67bf623864f52c3ead1c3f",
+            // SI.10; 21c50dea... before.
+            "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3",
         ),
         (
             "json.metamodel.json",
@@ -1043,7 +1058,8 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "notation.metamodel.json",
-            "12e7d2beab5a6d0a44090ed0512228c170a19879a7ac25093d817d58fe5c4de1",
+            // SI.10; 12e7d2be... before.
+            "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86",
         ),
     ];
     const NEW: [&str; 3] = [

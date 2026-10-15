@@ -36,7 +36,10 @@ const SEMANTICS_CODE_SHA256: &str =
 /// sha256 of `datatype/to_crdt.rs` at `6606ed9`.
 const TO_CRDT_SHA256: &str = "2de8d2e8927b67d61f81d5055ac6a92809991aa259a96227e216602411dd4218";
 /// sha256 of [`examples_listing`] at `6606ed9`.
-const EXAMPLES_SHA256: &str = "18f1dba27d1cf7cc07f8bf92040c730ede266efec2a666b94277819cc840d92c";
+// SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): five descriptors and the digest fixture under
+// `examples/` are regenerated with the identity rule (`si10_shipped_descriptors.rs`, D6); every
+// other file keeps its bytes. `18f1dba2...` before.
+const EXAMPLES_SHA256: &str = "d4e287a6c1602e0687163a0d404338394459a1a8cda40afc6e551905dcbd7a37";
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
