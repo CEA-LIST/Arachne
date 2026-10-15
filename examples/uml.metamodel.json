@@ -13,7 +13,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Class"
           },
@@ -35,7 +35,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Class"
           },
@@ -276,7 +276,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Class"
           },
@@ -481,7 +481,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "TType"
           },

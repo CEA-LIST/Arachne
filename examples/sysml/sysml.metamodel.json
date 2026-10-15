@@ -513,7 +513,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Element"
           },
@@ -1636,7 +1636,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "ConjugatedPortDefinition"
           },
@@ -1695,7 +1695,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -1723,7 +1723,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -2130,7 +2130,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -3103,7 +3103,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Element"
           },
@@ -3131,7 +3131,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Element"
           },
@@ -3169,7 +3169,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -3241,7 +3241,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -3301,7 +3301,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -4879,7 +4879,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -4951,7 +4951,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -4979,7 +4979,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -5186,7 +5186,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -5214,7 +5214,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -6252,7 +6252,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -6775,7 +6775,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Element"
           },
@@ -6857,7 +6857,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Membership"
           },
@@ -7317,7 +7317,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Namespace"
           },
@@ -7907,7 +7907,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "PortDefinition"
           },
@@ -8030,7 +8030,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -8058,7 +8058,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -8096,7 +8096,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -8287,7 +8287,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Element"
           },
@@ -8315,7 +8315,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Element"
           },
@@ -9264,7 +9264,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -9324,7 +9324,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -9826,7 +9826,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Classifier"
           },
@@ -9854,7 +9854,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Classifier"
           },
@@ -9963,7 +9963,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -9991,7 +9991,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -11116,7 +11116,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Feature"
           },
@@ -11144,7 +11144,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },
@@ -11248,7 +11248,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },

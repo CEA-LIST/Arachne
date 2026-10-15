@@ -45,7 +45,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Property"
           },
@@ -67,7 +67,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Property"
           },
@@ -329,7 +329,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "Element"
           },
@@ -421,7 +421,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "NamedElement"
           },
@@ -443,7 +443,7 @@
           },
           "many": true,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": true,
             "target": "NamedElement"
           },
@@ -590,7 +590,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Classifier"
           },
@@ -705,7 +705,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Interface"
           },
@@ -1114,7 +1114,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Type"
           },

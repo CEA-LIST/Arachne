@@ -256,7 +256,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "BlackboardEntry"
           },

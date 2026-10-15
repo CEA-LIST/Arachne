@@ -126,7 +126,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Node"
           },
@@ -148,7 +148,7 @@
           },
           "many": false,
           "merge": {
-            "kind": "reference",
+            "kind": "identityReference",
             "many": false,
             "target": "Node"
           },
