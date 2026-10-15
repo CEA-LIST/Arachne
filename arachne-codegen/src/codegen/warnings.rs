@@ -35,6 +35,26 @@ pub enum Warning {
 }
 
 impl Warning {
+    /// Stable diagnostic codes for tools consuming the CLI JSON stream.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::UnsupportedAttributeBounds { .. } => {
+                "arachne_codegen::warning::bounds_normalized"
+            }
+            Self::UnsupportedFeatureProperty { .. } => "arachne_codegen::warning::feature_omitted",
+            Self::UnsupportedFeatureDependency { .. } => {
+                "arachne_codegen::warning::dependency_omitted"
+            }
+            Self::UnsupportedPropertyCombination { .. } => {
+                "arachne_codegen::warning::properties_transformed"
+            }
+            Self::AbstractWithNoSubclass(_) => "arachne_codegen::warning::class_omitted",
+            Self::OperationNotSupported(_) => "arachne_codegen::warning::operation_omitted",
+            Self::UnsupportedAnnotation { .. } => {
+                "arachne_codegen::warning::annotation_unsupported"
+            }
+        }
+    }
     /// Return a human-readable warning message
     pub fn message(&self) -> String {
         match self {
@@ -105,6 +125,6 @@ impl Warning {
 
     /// Emit the warning to stderr
     pub fn emit(&self) {
-        warn!("{}", self.message());
+        warn!(target: self.code(), "{}", self.message());
     }
 }

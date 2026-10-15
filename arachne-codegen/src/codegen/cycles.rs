@@ -3,7 +3,7 @@
 // This module detects cycles in the containment hierarchy and determines
 // where Box<T> wrappers are needed to break cycles in generated code.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ecore_rs::prelude::idx::Class;
 
@@ -15,7 +15,6 @@ use crate::codegen::{
 };
 
 type ClassIdx = Class;
-type ArcKey = (ClassIdx, String, ClassIdx);
 
 /// Represents a containment relationship in the type hierarchy
 #[derive(Clone, Debug)]
@@ -35,9 +34,6 @@ struct ContainmentEdge {
 /// Result of cycle analysis
 #[derive(Debug)]
 pub struct CycleAnalysis {
-    /// Set of edges that form cycles
-    #[allow(dead_code)]
-    cycles: Vec<Vec<ContainmentEdge>>,
     /// Edges that need Box wrapping (feedback arc set)
     pub boxing_requirements: HashMap<(ClassIdx, String), BoxingStrategy>,
 }
@@ -86,12 +82,8 @@ impl<'a> CycleAnalyzer<'a> {
 
     fn analyze(&self) -> anyhow::Result<CycleAnalysis> {
         let graph = self.build_containment_graph()?;
-        let cycles = self.find_all_cycles(&graph);
-        let mut boxing_requirements = Self::determine_boxing_strategy(&cycles);
-        boxing_requirements.extend(self.determine_polymorphic_family_boxing(&graph));
-
+        let boxing_requirements = select_boxing(&graph, self.ctx.classes().len())?;
         Ok(CycleAnalysis {
-            cycles,
             boxing_requirements,
         })
     }
@@ -153,215 +145,280 @@ impl<'a> CycleAnalyzer<'a> {
         Ok(edges)
     }
 
-    /// Phase 2: Find all elementary cycles in the containment graph
-    fn find_all_cycles(&self, edges: &[ContainmentEdge]) -> Vec<Vec<ContainmentEdge>> {
-        let mut cycles = Vec::new();
-        let num_classes = self.ctx.classes().len();
-
-        let mut adj_list: HashMap<ClassIdx, Vec<&ContainmentEdge>> = HashMap::new();
-        for edge in edges {
-            adj_list.entry(edge.source).or_default().push(edge);
-        }
-
-        let mut rec_stack = Vec::new();
-        let mut edge_stack = Vec::new();
-        let mut rec_stack_set = HashSet::new();
-        let mut seen_cycles = HashSet::new();
-
-        for start_idx in 0..num_classes {
-            let start = ClassIdx::from(start_idx);
-
-            Self::dfs_find_cycles(
-                start,
-                &adj_list,
-                &mut rec_stack,
-                &mut edge_stack,
-                &mut rec_stack_set,
-                &mut cycles,
-                &mut seen_cycles,
-            );
-        }
-
-        cycles
-    }
-
-    /// Depth-first search to find cycles
-    fn dfs_find_cycles(
-        node: ClassIdx,
-        adj_list: &HashMap<ClassIdx, Vec<&ContainmentEdge>>,
-        rec_stack: &mut Vec<ClassIdx>,
-        edge_stack: &mut Vec<ContainmentEdge>,
-        rec_stack_set: &mut HashSet<ClassIdx>,
-        cycles: &mut Vec<Vec<ContainmentEdge>>,
-        seen_cycles: &mut HashSet<Vec<ArcKey>>,
-    ) {
-        rec_stack.push(node);
-        rec_stack_set.insert(node);
-
-        if let Some(outgoing_edges) = adj_list.get(&node) {
-            for edge in outgoing_edges {
-                let target = edge.target;
-
-                if !rec_stack_set.contains(&target) {
-                    edge_stack.push((*edge).clone());
-                    Self::dfs_find_cycles(
-                        target,
-                        adj_list,
-                        rec_stack,
-                        edge_stack,
-                        rec_stack_set,
-                        cycles,
-                        seen_cycles,
-                    );
-                    edge_stack.pop();
-                } else if rec_stack_set.contains(&target)
-                    && let Some(pos) = rec_stack.iter().position(|&n| n == target)
-                {
-                    let mut cycle_edges = edge_stack[pos..].to_vec();
-                    cycle_edges.push((*edge).clone());
-
-                    let key = Self::canonical_cycle_key(&cycle_edges);
-                    if !cycle_edges.is_empty() && seen_cycles.insert(key) {
-                        cycles.push(cycle_edges);
-                    }
-                }
-            }
-        }
-
-        rec_stack.pop();
-        rec_stack_set.remove(&node);
-    }
-
-    fn canonical_cycle_key(cycle: &[ContainmentEdge]) -> Vec<ArcKey> {
-        let mut key = cycle
-            .iter()
-            .map(|edge| (edge.source, edge.field_name.clone(), edge.target))
-            .collect::<Vec<_>>();
-        key.sort();
-        key
-    }
-
-    /// Phase 3: Determine which edges need Box wrapping using heuristics
-    fn determine_boxing_strategy(
-        cycles: &[Vec<ContainmentEdge>],
-    ) -> HashMap<(ClassIdx, String), BoxingStrategy> {
-        let mut boxing_requirements: HashMap<(ClassIdx, String), BoxingStrategy> = HashMap::new();
-
-        for cycle in cycles {
-            if let Some(edge_to_box) = Self::select_edge_to_box(cycle) {
-                let strategy = if edge_to_box.is_many {
-                    BoxingStrategy::CollectionElement
-                } else {
-                    BoxingStrategy::DirectReference
-                };
-
-                boxing_requirements.insert(
-                    (edge_to_box.source, edge_to_box.field_name.clone()),
-                    strategy,
-                );
-            }
-        }
-
-        boxing_requirements
-    }
-
-    fn determine_polymorphic_family_boxing(
-        &self,
-        edges: &[ContainmentEdge],
-    ) -> HashMap<(ClassIdx, String), BoxingStrategy> {
-        let mut boxing_requirements = HashMap::new();
-        let mut adj_list: HashMap<ClassIdx, Vec<ClassIdx>> = HashMap::new();
-
-        for edge in edges {
-            adj_list.entry(edge.source).or_default().push(edge.target);
-        }
-
-        for class in self.ctx.classes().iter() {
-            for structural in self.ctx.supported_features(class.idx) {
-                if !structural.containment {
-                    continue;
-                }
-
-                let Some(target_idx) = structural.typ else {
-                    continue;
-                };
-                let target_class = &self.ctx.classes()[*target_idx];
-
-                if !has_codegen_polymorphic_family(self.ctx, target_class) {
-                    continue;
-                }
-
-                let family_members = self.polymorphic_family_members(target_idx);
-                let closes_family_cycle = family_members.iter().copied().any(|member| {
-                    let mut visited = HashSet::new();
-                    Self::path_exists(&adj_list, member, class.idx, &mut visited)
-                });
-
-                if !closes_family_cycle {
-                    continue;
-                }
-
-                let strategy = if structural.bounds.ubound != Some(1) {
-                    BoxingStrategy::CollectionElement
-                } else {
-                    BoxingStrategy::DirectReference
-                };
-                boxing_requirements.insert((class.idx, structural.name.clone()), strategy);
-            }
-        }
-
-        boxing_requirements
-    }
-
     fn polymorphic_family_members(&self, root: ClassIdx) -> &[ClassIdx] {
         &self.ctx.info(root).family
-    }
-
-    fn path_exists(
-        adj_list: &HashMap<ClassIdx, Vec<ClassIdx>>,
-        start: ClassIdx,
-        goal: ClassIdx,
-        visited: &mut HashSet<ClassIdx>,
-    ) -> bool {
-        if start == goal {
-            return true;
-        }
-
-        if !visited.insert(start) {
-            return false;
-        }
-
-        adj_list.get(&start).is_some_and(|targets| {
-            targets
-                .iter()
-                .copied()
-                .any(|target| Self::path_exists(adj_list, target, goal, visited))
-        })
-    }
-
-    /// Select the best edge to break in a cycle using heuristics
-    fn select_edge_to_box(cycle: &[ContainmentEdge]) -> Option<ContainmentEdge> {
-        if cycle.is_empty() {
-            return None;
-        }
-
-        let union_edge = cycle.iter().find(|e| e.is_union_variant);
-        if let Some(edge) = union_edge {
-            return Some(edge.clone());
-        }
-
-        let collection_edge = cycle.iter().find(|e| e.is_many);
-        if let Some(edge) = collection_edge {
-            return Some(edge.clone());
-        }
-
-        let edge = cycle.iter().min_by_key(|_e| 0);
-
-        edge.cloned()
     }
 }
 
 /// Analyzes the Ecore model and detects cycles requiring Box wrappers
 pub fn analyze_cycles(ctx: &ModelIndex<'_>) -> anyhow::Result<CycleAnalysis> {
     CycleAnalysis::analyze(ctx)
+}
+
+/// Compact adjacency and field IDs keep all passes linear in graph size. A field
+/// can expand to several polymorphic edges; boxing it removes all those edges.
+struct Graph<'a> {
+    edges: &'a [ContainmentEdge],
+    outgoing: Vec<Vec<usize>>,
+    incoming: Vec<Vec<usize>>,
+    field_ids: Vec<usize>,
+    fields: Vec<usize>,
+    boxed: Vec<bool>,
+}
+
+impl<'a> Graph<'a> {
+    fn new(edges: &'a [ContainmentEdge], nodes: usize) -> Self {
+        let mut outgoing = vec![Vec::new(); nodes];
+        let mut incoming = vec![Vec::new(); nodes];
+        let mut ids = HashMap::new();
+        let mut fields = Vec::new();
+        let mut field_ids = Vec::with_capacity(edges.len());
+        for (index, edge) in edges.iter().enumerate() {
+            outgoing[*edge.source].push(index);
+            incoming[*edge.target].push(index);
+            let id = *ids
+                .entry((edge.source, edge.field_name.as_str()))
+                .or_insert_with(|| {
+                    fields.push(index);
+                    fields.len() - 1
+                });
+            field_ids.push(id);
+        }
+        let boxed = vec![false; fields.len()];
+        Self {
+            edges,
+            outgoing,
+            incoming,
+            field_ids,
+            fields,
+            boxed,
+        }
+    }
+
+    fn active(&self, edge: usize) -> bool {
+        !self.boxed[self.field_ids[edge]]
+    }
+
+    // Iterative Kosaraju: no call-stack growth, even for deeply nested models.
+    fn components(&self) -> Vec<usize> {
+        let nodes = self.outgoing.len();
+        let mut seen = vec![false; nodes];
+        let mut finish = Vec::with_capacity(nodes);
+        let mut stack = Vec::new();
+        for start in 0..nodes {
+            if seen[start] {
+                continue;
+            }
+            seen[start] = true;
+            stack.push((start, 0));
+            while let Some((node, next)) = stack.last_mut() {
+                if *next == self.outgoing[*node].len() {
+                    finish.push(*node);
+                    stack.pop();
+                    continue;
+                }
+                let edge = self.outgoing[*node][*next];
+                *next += 1;
+                let target = *self.edges[edge].target;
+                if self.active(edge) && !seen[target] {
+                    seen[target] = true;
+                    stack.push((target, 0));
+                }
+            }
+        }
+        let mut component = vec![usize::MAX; nodes];
+        let mut pending = Vec::new();
+        for start in finish.into_iter().rev() {
+            if component[start] != usize::MAX {
+                continue;
+            }
+            component[start] = start;
+            pending.push(start);
+            while let Some(node) = pending.pop() {
+                for &edge in &self.incoming[node] {
+                    let source = *self.edges[edge].source;
+                    if self.active(edge) && component[source] == usize::MAX {
+                        component[source] = start;
+                        pending.push(source);
+                    }
+                }
+            }
+        }
+        component
+    }
+
+    fn box_preferred(&mut self, union: bool) {
+        let components = self.components();
+        for (index, edge) in self.edges.iter().enumerate() {
+            let preferred = if union {
+                edge.is_union_variant
+            } else {
+                edge.is_many
+            };
+            if preferred && components[*edge.source] == components[*edge.target] {
+                self.boxed[self.field_ids[index]] = true;
+            }
+        }
+    }
+
+    fn box_back_edges(&mut self) {
+        let mut color = vec![0u8; self.outgoing.len()];
+        let mut stack = Vec::new();
+        // Reverse class order gives stable choices and favors earlier declared
+        // fields in ordinary scalar cycles, as the original generator did.
+        for start in (0..color.len()).rev() {
+            if color[start] != 0 {
+                continue;
+            }
+            color[start] = 1;
+            stack.push((start, 0));
+            while let Some((node, next)) = stack.last_mut() {
+                if *next == self.outgoing[*node].len() {
+                    color[*node] = 2;
+                    stack.pop();
+                    continue;
+                }
+                let edge = self.outgoing[*node][*next];
+                *next += 1;
+                if !self.active(edge) {
+                    continue;
+                }
+                let target = *self.edges[edge].target;
+                match color[target] {
+                    0 => {
+                        color[target] = 1;
+                        stack.push((target, 0));
+                    }
+                    1 => self.boxed[self.field_ids[edge]] = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn is_acyclic(&self) -> bool {
+        let mut incoming = vec![0usize; self.outgoing.len()];
+        for (index, edge) in self.edges.iter().enumerate() {
+            if self.active(index) {
+                incoming[*edge.target] += 1;
+            }
+        }
+        let mut pending = incoming
+            .iter()
+            .enumerate()
+            .filter_map(|(node, &count)| (count == 0).then_some(node))
+            .collect::<Vec<_>>();
+        let mut visited = 0;
+        while let Some(node) = pending.pop() {
+            visited += 1;
+            for &index in &self.outgoing[node] {
+                if self.active(index) {
+                    let target = *self.edges[index].target;
+                    incoming[target] -= 1;
+                    if incoming[target] == 0 {
+                        pending.push(target);
+                    }
+                }
+            }
+        }
+        visited == incoming.len()
+    }
+}
+
+fn select_boxing(
+    edges: &[ContainmentEdge],
+    nodes: usize,
+) -> anyhow::Result<HashMap<(ClassIdx, String), BoxingStrategy>> {
+    let mut graph = Graph::new(edges, nodes);
+    // Preserve family boxing: a union edge is cyclic exactly when source and
+    // target share an SCC. Recompute SCCs before preferring collection edges.
+    graph.box_preferred(true);
+    graph.box_preferred(false);
+    graph.box_back_edges();
+    anyhow::ensure!(
+        graph.is_acyclic(),
+        "containment boxing left a recursive type dependency"
+    );
+    Ok(graph
+        .fields
+        .iter()
+        .enumerate()
+        .filter_map(|(id, &index)| {
+            if !graph.boxed[id] {
+                return None;
+            }
+            let edge = &edges[index];
+            let strategy = if edge.is_many {
+                BoxingStrategy::CollectionElement
+            } else {
+                BoxingStrategy::DirectReference
+            };
+            Some(((edge.source, edge.field_name.clone()), strategy))
+        })
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edge(source: usize, target: usize, many: bool, union: bool) -> ContainmentEdge {
+        ContainmentEdge {
+            source: source.into(),
+            target: target.into(),
+            field_name: format!("field_{source}_{target}"),
+            is_many: many,
+            is_union_variant: union,
+        }
+    }
+
+    #[test]
+    fn dense_dag_needs_no_boxing() {
+        let edges = (0..200)
+            .flat_map(|s| (s + 1..200).map(move |t| edge(s, t, false, false)))
+            .collect::<Vec<_>>();
+        assert!(select_boxing(&edges, 200).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deep_graph_does_not_use_the_call_stack() {
+        let mut edges = (0..50_000)
+            .map(|s| edge(s, s + 1, false, false))
+            .collect::<Vec<_>>();
+        edges.push(edge(50_000, 0, false, false));
+        assert_eq!(select_boxing(&edges, 50_001).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn every_small_directed_graph_is_broken() {
+        for mask in 0u32..(1 << 16) {
+            let edges = (0..16)
+                .filter(|bit| mask & (1 << bit) != 0)
+                .map(|bit| edge(bit / 4, bit % 4, bit % 3 == 0, bit % 5 == 0))
+                .collect::<Vec<_>>();
+            let boxed = select_boxing(&edges, 4).unwrap();
+            let remaining = edges
+                .into_iter()
+                .filter(|e| !boxed.contains_key(&(e.source, e.field_name.clone())))
+                .collect::<Vec<_>>();
+            assert!(Graph::new(&remaining, 4).is_acyclic(), "graph {mask}");
+        }
+    }
+
+    #[test]
+    fn polymorphic_field_removes_all_its_edges() {
+        let mut edges = vec![
+            edge(0, 1, true, true),
+            edge(0, 2, true, true),
+            edge(1, 0, false, false),
+            edge(2, 0, false, false),
+        ];
+        edges[1].field_name = edges[0].field_name.clone();
+        let boxed = select_boxing(&edges, 3).unwrap();
+        assert_eq!(boxed.len(), 1);
+        assert_eq!(
+            boxed[&(0.into(), edges[0].field_name.clone())],
+            BoxingStrategy::CollectionElement
+        );
+    }
 }

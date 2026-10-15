@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, process::ExitCode, time::Instant};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arachne_codegen::{Config, generate_with_report};
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use colored::Colorize;
@@ -14,6 +14,9 @@ use log::{error, info};
     about = "Arachne CLI: translates Ecore metamodels into collaborative, CRDT-based applications in Rust."
 )]
 struct Cli {
+    /// Emit newline-delimited JSON diagnostics and a final result on stdout
+    #[arg(long, global = true)]
+    diagnostics_json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -76,11 +79,39 @@ struct GenerateArgs {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let json = cli.diagnostics_json;
+    let stage = match &cli.command {
+        Command::Parse(_) => "parse",
+        Command::Generate(_) => "generate",
+    };
+    if json {
+        log::set_logger(&JSON_LOGGER).expect("logger initialized once");
+        log::set_max_level(log::LevelFilter::Info);
+    }
 
     let result = match cli.command {
-        Command::Parse(args) => run_parse(args),
-        Command::Generate(args) => run_generate(args),
+        Command::Parse(args) => run_parse(args, json),
+        Command::Generate(args) => run_generate(args, json),
     };
+
+    if json {
+        let diagnostic = result.as_ref().err().map(|err| {
+            let (code, kind) = error_category(err, stage);
+            serde_json::json!({"code": code, "kind": kind, "message": format!("{err:#}")})
+        });
+        println!(
+            "{}",
+            serde_json::json!({
+                "reason": "arachne-result", "schema_version": 1,
+                "stage": stage, "ok": result.is_ok(), "error": diagnostic,
+            })
+        );
+        return if result.is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -91,11 +122,13 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_parse(args: ParseArgs) -> Result<()> {
-    if args.quiet {
-        init_logger_at("error");
-    } else {
-        init_logger(u8::from(args.verbose));
+fn run_parse(args: ParseArgs, json: bool) -> Result<()> {
+    if !json {
+        if args.quiet {
+            init_logger_at("error");
+        } else {
+            init_logger(u8::from(args.verbose));
+        }
     }
 
     if args.verbose {
@@ -107,7 +140,7 @@ fn run_parse(args: ParseArgs) -> Result<()> {
     }
 
     let content = fs::read_to_string(&args.input)
-        .map_err(|e| anyhow!("Failed to read file '{}': {}", args.input.display(), e))?;
+        .with_context(|| format!("Failed to read file '{}'", args.input.display()))?;
 
     let ctx = Ctx::parse(&content).map_err(|e| anyhow!("Failed to parse ecore file: {}", e))?;
 
@@ -115,10 +148,12 @@ fn run_parse(args: ParseArgs) -> Result<()> {
         info!("{}", "Parsing completed successfully ✓".green());
     }
 
-    match args.output_format {
-        OutputFormat::Pretty => {
-            for line in ctx.to_pretty_string().lines() {
-                info!("| {}", line);
+    if !args.quiet && !json {
+        match args.output_format {
+            OutputFormat::Pretty => {
+                for line in ctx.to_pretty_string().lines() {
+                    info!("| {}", line);
+                }
             }
         }
     }
@@ -126,8 +161,10 @@ fn run_parse(args: ParseArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_generate(args: GenerateArgs) -> Result<()> {
-    init_logger(args.verbose);
+fn run_generate(args: GenerateArgs, json: bool) -> Result<()> {
+    if !json {
+        init_logger(args.verbose);
+    }
 
     info!("{}", "Starting code generation".bold());
 
@@ -183,4 +220,58 @@ fn init_logger_at(default_level: &str) {
     env_logger::Builder::from_env(env)
         .format_timestamp(None)
         .init();
+}
+
+struct JsonLogger;
+static JSON_LOGGER: JsonLogger = JsonLogger;
+
+impl log::Log for JsonLogger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "reason": "arachne-diagnostic", "level": match record.level() {
+                        log::Level::Warn => "warning",
+                        log::Level::Error => "error",
+                        log::Level::Info => "info",
+                        log::Level::Debug => "debug",
+                        log::Level::Trace => "trace",
+                    },
+                    "code": record.target(), "message": record.args().to_string(),
+                })
+            );
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn error_category(err: &anyhow::Error, stage: &str) -> (&'static str, &'static str) {
+    use arachne_codegen::ArachneError;
+    if err.downcast_ref::<std::io::Error>().is_some() {
+        return ("io", "infrastructure");
+    }
+    if let Some(err) = err.downcast_ref::<ArachneError>() {
+        return match err {
+            ArachneError::FileRead(_) | ArachneError::Config(_) => {
+                ("configuration", "infrastructure")
+            }
+            ArachneError::RootClassNotFound(_) => ("root_selection", "unsupported_feature"),
+            ArachneError::NoValidPackageFound => ("package_selection", "unsupported_feature"),
+            ArachneError::InvalidModel(_) => ("invalid_model", "invalid_input"),
+            ArachneError::SynParse(_) => ("generated_syntax", "implementation_bug"),
+            ArachneError::EcoreParse(_) => ("parse_error", "unknown"),
+            ArachneError::CodeGeneration(_) => ("generation_error", "unknown"),
+        };
+    }
+    if stage == "parse" {
+        ("parse_error", "unknown")
+    } else {
+        ("generation_error", "unknown")
+    }
 }
