@@ -131,6 +131,7 @@ impl<'a> ReferenceGenerator<'a> {
 
                 Some(quote! {
                     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+                    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
                     #[cfg_attr(feature = "test_utils", derive(deepsize::DeepSizeOf))]
                     pub struct #edge_name;
                 })
