@@ -121,12 +121,14 @@ fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -
         petgraph = \"0.8.3\"\n\
         rustc-hash = \"2.1.3\"\n\
         arachne-xmi = {{ path = \"runtime/arachne-xmi\" }}\n\
-        deepsize = {{ git = \"https://github.com/leo-olivier/deepsize.git\", optional = true, features = [\"elsa\"] }}\n\n\
+        deepsize = {{ git = \"https://github.com/leo-olivier/deepsize.git\", optional = true, features = [\"elsa\"] }}\n\
+        serde = {{ version = \"1.0.229\", features = [\"derive\"], optional = true }}\n\n\
         [features]\n\
         default = [\"fuzz\", \"sink\"]\n\
         fuzz = [\"moirai-crdt/fuzz\", \"moirai-macros/fuzz\", \"test_utils\"]\n\
         sink = [\"moirai-protocol/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n\
-        test_utils = [\"dep:deepsize\",\"moirai-protocol/test_utils\",\"moirai-macros/test_utils\",\"moirai-crdt/test_utils\"]\n",
+        test_utils = [\"dep:deepsize\",\"moirai-protocol/test_utils\",\"moirai-macros/test_utils\",\"moirai-crdt/test_utils\"]\n\
+        serde = [\"dep:serde\", \"moirai-crdt/serde\", \"moirai-macros/serde\"]"
     ))
 }
 

@@ -134,6 +134,7 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub enum #package_ident {
                 #(#root_variants),*
                 #reference_variants
@@ -219,6 +220,7 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone, Default)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub struct #package_value_name {
                 #(#root_fields,)*
                 #refs_field
