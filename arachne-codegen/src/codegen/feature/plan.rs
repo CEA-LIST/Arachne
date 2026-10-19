@@ -22,7 +22,8 @@ use crate::codegen::{
     },
     generate::Fragment,
     ident::{classifier_type_ident, rust_ident, value_ident},
-    import::{Import, Log, Protocol},
+    import::{Import, Log},
+    reference::projection::projected_log_type,
     warnings::Warning,
 };
 
@@ -61,6 +62,22 @@ pub(crate) struct MapPlan<'a> {
     pub key: &'a Structural,
     pub key_type: &'a Class,
     pub value: Box<FeaturePlan<'a>>,
+}
+
+impl MapPlan<'_> {
+    /// A projected entry and its contained value are distinct Ecore objects.
+    /// Preserve that boundary whenever either can be a reference endpoint.
+    pub fn tracks_identity(&self, ctx: &ModelIndex<'_>) -> bool {
+        ctx.info(self.entry.idx).referenceable
+            || match &self.value.storage {
+                Storage::Containment { target, .. } => ctx
+                    .info(target.idx)
+                    .concrete_family
+                    .iter()
+                    .any(|class| ctx.info(*class).referenceable),
+                _ => false,
+            }
+    }
 }
 
 pub(crate) struct FeatureTypes {
@@ -222,14 +239,13 @@ impl<'a> FeaturePlan<'a> {
             );
             let key_type = feature_type(ctx, key)?;
             rust_type(ctx, key_type, None)?;
-            // Transparent variants project the entry value directly into their union.
-            // Preserve that projection's boxing owner in the plan so XMI uses it too.
-            let owner = if ctx.info(source).transparent_field.is_some() {
-                source
-            } else {
-                target.idx
-            };
-            let value = Box::new(Self::resolve(ctx, owner, value, cycles)?);
+            let mut value = Box::new(Self::resolve(ctx, target.idx, value, cycles)?);
+            // Cycle analysis keys this projected dependency by the owner's map
+            // field. The entry helper is not emitted, so its value-field key
+            // cannot determine boxing. Share the owner's decision with XMI too.
+            if let Storage::Containment { boxing, .. } = &mut value.storage {
+                *boxing = cycles.boxing_strategy(source, &feature.name);
+            }
             plan.warnings.extend(value.warnings.iter().cloned());
             plan.storage = Storage::Map(MapPlan {
                 entry: target,
@@ -299,20 +315,20 @@ impl<'a> FeaturePlan<'a> {
                     value: qualify(quote! { #value }, namespace),
                     imports: Vec::new(),
                 };
+                // Operation, storage and value layouts are chosen separately.
+                // Collections and Union already indirect their stored children;
+                // only inline log/value cycles need a physical Box around L/V.
                 if *boxing != BoxingStrategy::NoBox {
-                    let FeatureTypes {
-                        payload,
-                        log,
-                        value,
-                        mut imports,
-                    } = types;
-                    imports.push(Import::Protocol(Protocol::BoxedLog));
-                    types = FeatureTypes {
-                        payload: quote! { Box<#payload> },
-                        log: quote! { #path::BoxedLog<#log> },
-                        value: quote! { Box<#value> },
-                        imports,
+                    types.payload = {
+                        let payload = types.payload;
+                        quote! { Box<#payload> }
                     };
+                }
+                if *boxing == BoxingStrategy::LogAndValue {
+                    let log = types.log;
+                    let value = types.value;
+                    types.log = quote! { Box<#log> };
+                    types.value = quote! { Box<#value> };
                 }
                 types
             }
@@ -324,11 +340,17 @@ impl<'a> FeaturePlan<'a> {
                     value,
                     mut imports,
                 } = map.value.types(ctx, path, namespace)?;
+                let log = if map.tracks_identity(ctx) {
+                    imports.push(Import::Custom("crate::references::ProjectedLog"));
+                    projected_log_type(map.entry, map.value.feature, log, path)
+                } else {
+                    log
+                };
                 imports.push(Import::Crdt(Crdt::Nested(NestedCrdt::Map(Map::UWMap))));
-                // A map operation embeds its child operation inline. Box it to break
-                // recursive union payloads; Moirai's Boxer converts it for the child log.
+                // The value plan has already applied any required operation
+                // box. Maps alone do not justify another Box around the payload.
                 return Ok(FeatureTypes {
-                    payload: quote! { moirai_crdt::map::uw_map::UWMap<#key, Box<#payload>> },
+                    payload: quote! { moirai_crdt::map::uw_map::UWMap<#key, #payload> },
                     log: quote! { #path::UWMapLog<#key, #log> },
                     value: quote! { rustc_hash::FxHashMap<#key, #value> },
                     imports,
@@ -380,24 +402,41 @@ impl<'a> FeaturePlan<'a> {
     pub fn into_field(self, ctx: &ModelIndex<'_>, path: &syn::Path) -> Result<Fragment> {
         let name = value_ident(&self.feature.name);
         let FeatureTypes {
+            payload,
             log,
             value,
             imports,
-            ..
         } = self.types(ctx, path, None)?;
-        Ok(Fragment::new(
-            quote! { #name: #log => #value },
-            imports,
-            self.warnings,
-        ))
+        // The ordinary form derives its operation from L::Op. Only recursive
+        // fields need the explicit payload form, adapted by record!'s Boxer.
+        let field = if self.boxes_operation() {
+            quote! { #name: #payload, #log => #value }
+        } else {
+            quote! { #name: #log => #value }
+        };
+        Ok(Fragment::new(field, imports, self.warnings))
     }
 
+    fn boxes_operation(&self) -> bool {
+        match &self.storage {
+            Storage::Containment { boxing, .. } => *boxing != BoxingStrategy::NoBox,
+            Storage::Map(map) => map.value.boxes_operation(),
+            Storage::Attribute(_) => false,
+        }
+    }
+
+    /// XMI visits the stored child directly; operation-only boxes add no wrapper.
     pub fn unbox_log(&self, log: TokenStream) -> TokenStream {
-        match self.storage {
-            Storage::Containment { boxing, .. } if boxing != BoxingStrategy::NoBox => {
-                quote! { (#log).inner() }
+        if matches!(
+            self.storage,
+            Storage::Containment {
+                boxing: BoxingStrategy::LogAndValue,
+                ..
             }
-            _ => log,
+        ) {
+            quote! { (#log).as_ref() }
+        } else {
+            log
         }
     }
 }

@@ -1,5 +1,6 @@
 use crate::codegen::analysis::{GenerationPlan, ModelIndex};
 pub mod analysis;
+pub(crate) mod projection;
 
 use log::debug;
 use proc_macro2::TokenStream;
@@ -21,6 +22,7 @@ use crate::{
 pub struct ReferenceGenerator<'a> {
     ctx: &'a ModelIndex<'a>,
     analysis: &'a ReferenceAnalysis,
+    reachable_classes: &'a std::collections::BTreeSet<ecore_rs::repr::idx::Class>,
 }
 
 impl<'a> ReferenceGenerator<'a> {
@@ -28,6 +30,7 @@ impl<'a> ReferenceGenerator<'a> {
         Self {
             ctx: &plan.model,
             analysis: &plan.references,
+            reachable_classes: &plan.reachable_classes,
         }
     }
 }
@@ -46,6 +49,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
         let edge_structs = self.generate_edge_structs(analysis);
         debug!("Generating typed graph...");
         let typed_graph = self.generate_typed_graph(analysis);
+        let projection_support = self.generate_projection_support()?;
         let path =
             syn::parse_str::<syn::Path>(&format!("{}{}", PRIVATE_MOD_PREFIX, REFERENCES_PATH_MOD))
                 .unwrap();
@@ -73,6 +77,7 @@ impl<'a> Generate for ReferenceGenerator<'a> {
             #edge_structs
 
             #typed_graph
+            #projection_support
         };
 
         let imports = vec![

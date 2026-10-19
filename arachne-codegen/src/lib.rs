@@ -147,6 +147,7 @@ pub fn generate_from_parser<'a>(
     let mut read_as_ecore = Generator::new(READ_AS_ECORE_PATH_MOD);
 
     let plan = GenerationPlan::new(&parser.ctx, pack)?;
+
     debug!(
         "Package '{}' has {} roots and {} reachable classes",
         pack.name(),
@@ -405,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn recursive_containment_uses_boxed_log() {
+    fn recursive_containment_boxes_each_required_representation() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -428,15 +429,15 @@ mod tests {
 
         let (classifiers, _references) = generate_modules_from_str(ecore);
 
-        assert!(classifiers.contains("pubusemoirai_protocol::state::log::BoxedLog;"));
+        assert!(!classifiers.contains("BoxedLog"));
         assert!(classifiers.contains(
-            "Select{union:__classifiers::OptionLog<__classifiers::BoxedLog<UnionLog>>=>Option<Box<UnionValue>>,}"
+            "Select{union:moirai_crdt::option::Optional<Box<Union>>,__classifiers::OptionLog<Box<UnionLog>>=>Option<Box<UnionValue>>,}"
         ));
-        assert!(!classifiers.contains("OptionLog<Box<UnionLog>>"));
+        assert!(classifiers.contains("OptionLog<Box<UnionLog>>"));
     }
 
     #[test]
-    fn parallel_recursive_containment_edges_are_all_boxed() {
+    fn parallel_recursive_containment_separates_storage_and_operation_boxes() {
         let ecore = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -462,10 +463,10 @@ mod tests {
         let (classifiers, _references) = generate_modules_from_str(ecore);
 
         assert!(classifiers.contains(
-            "left_side:__classifiers::OptionLog<__classifiers::BoxedLog<TerminalExpressionLog>>"
+            "left_side:moirai_crdt::option::Optional<Box<TerminalExpression>>,__classifiers::OptionLog<Box<TerminalExpressionLog>>"
         ));
         assert!(classifiers.contains(
-            "right_side:__classifiers::NestedListLog<__classifiers::BoxedLog<TerminalExpressionLog>>"
+            "right_side:moirai_crdt::list::nested_list::NestedList<Box<TerminalExpression>>,__classifiers::NestedListLog<TerminalExpressionLog>=>Vec<TerminalExpressionValue>"
         ));
         assert!(classifiers.contains("every_expression:__classifiers::OptionLog<FollowByLog>"));
     }
@@ -657,7 +658,10 @@ mod tests {
         assert!(read_as_ecore.contains("None=>(\"json:String\",false)"));
         assert!(read_as_ecore.contains("None=>(\"json:Number\",false)"));
         assert!(read_as_ecore.contains("None=>(\"json:Boolean\",false)"));
-        assert!(read_as_ecore.contains("(child).inner()"));
+        assert!(
+            read_as_ecore.contains("visit_json_kind(writer,Some(\"items\"),child_path,child,)")
+        );
+        assert!(!read_as_ecore.contains("(child).inner()"));
         assert!(read_as_ecore.contains("children.sort_by_key(|child|child_rank(child))"));
     }
 

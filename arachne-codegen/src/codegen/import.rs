@@ -175,7 +175,6 @@ pub enum Protocol {
     EffectContext,
     PathSegment,
     ObjectPath,
-    BoxedLog,
 }
 
 impl ToUseStatement for Protocol {
@@ -217,7 +216,6 @@ impl ToUseStatement for Protocol {
             ),
             Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
             Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
-            Protocol::BoxedLog => format!("{}::state::log::BoxedLog", PROTOCOL_PREFIX),
         }
     }
 }

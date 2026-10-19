@@ -1,6 +1,6 @@
 //! Resolves typed-graph arcs into XMI links between serialized objects.
 
-use ecore_rs::repr::structural;
+use ecore_rs::repr::{Class, structural};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -8,6 +8,36 @@ use super::ReadAsEcoreGenerator;
 use crate::codegen::ident::classifier_type_ident_with_suffix;
 
 impl ReadAsEcoreGenerator<'_> {
+    /// Projected objects have no record fields to visit, but their references
+    /// still belong to the EClass (including references inherited from bases).
+    pub(super) fn projected_reference_visits(
+        &self,
+        class: &Class,
+        object_path: TokenStream,
+    ) -> Vec<TokenStream> {
+        if !self.has_references() {
+            return Vec::new();
+        }
+        let mut visits = Vec::new();
+        for superclass in class.sup() {
+            visits.extend(
+                self.projected_reference_visits(self.class(*superclass), object_path.clone()),
+            );
+        }
+        for feature in self.ctx.supported_features(class.idx).filter(|feature| {
+            feature.kind == structural::Typ::EReference
+                && !feature.containment
+                && feature.transient != Some(true)
+        }) {
+            let feature_key = self.reference_feature_key(class, feature);
+            let xml_name = &feature.name;
+            visits.push(quote! {
+                attrs.push_values(#xml_name, refs.values(&#object_path, #feature_key), false);
+            });
+        }
+        visits
+    }
+
     pub(super) fn generate_reference_resolver(&self) -> TokenStream {
         if !self.has_references() {
             return quote! {};

@@ -80,7 +80,7 @@ impl ReadAsEcoreGenerator<'_> {
                         field,
                         log,
                         quote! { path },
-                        false,
+                        self.ctx.info(subclass.idx).referenceable,
                         quote! { writer },
                     )?,
                 ),
@@ -88,6 +88,7 @@ impl ReadAsEcoreGenerator<'_> {
         };
 
         let subclass_type = self.xmi_type(subclass);
+        let reference_visits = self.projected_reference_visits(subclass, quote! { path });
         Ok(quote! {
             {
                 let path = #path;
@@ -96,6 +97,7 @@ impl ReadAsEcoreGenerator<'_> {
                     attrs.push_value("xsi:type", #subclass_type);
                 }
                 #attribute_visit
+                #(#reference_visits)*
                 (#writer).element(#element_name, &attrs, |writer| {
                     #child_visit
                 });

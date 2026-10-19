@@ -67,12 +67,7 @@ impl Config {
         }
 
         if let Some(path) = &self.moirai_path {
-            for name in [
-                "moirai-protocol",
-                "moirai-crdt",
-                "moirai-macros",
-                "moirai-fuzz",
-            ] {
+            for name in ["moirai-protocol", "moirai-crdt", "moirai-macros"] {
                 if !path.join(name).join("Cargo.toml").is_file() {
                     return Err(crate::error::ArachneError::Config(format!(
                         "Moirai workspace is missing {name}/Cargo.toml: {}",

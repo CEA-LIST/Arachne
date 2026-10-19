@@ -1,7 +1,17 @@
-// Cycle detection algorithm for Ecore models
-//
-// This module detects cycles in the containment hierarchy and determines
-// where Box<T> wrappers are needed to break cycles in generated code.
+//! Selects indirection for recursive generated Rust types.
+//!
+//! A containment cycle can affect two different layouts: operations embed child
+//! operations inline, while collection logs/read values already store children
+//! behind allocations. Moirai's Union also provides indirection for its active
+//! child log and read value. Boxing every recursive child log and read value would
+//! therefore add unnecessary allocations to those logs and query results.
+//!
+//! We first break cycles in the inline log/value graph with full boxing, then
+//! reuse those boxes when breaking the remaining operation cycles. For example,
+//! an optional self-reference needs full boxing (`Option<T>` is still inline),
+//! whereas a recursive list needs only operation boxing (`Vec<T>` is indirect).
+//! These are Rust layout decisions; they do not remove Union CRDTs or change
+//! their conflict-resolution semantics.
 
 use std::collections::HashMap;
 
@@ -11,6 +21,10 @@ use crate::codegen::{
     analysis::ModelIndex,
     classifier::{
         has_codegen_polymorphic_family, inherited_field_ident, is_uninhabited_polymorphic_class,
+    },
+    feature::{
+        bounds::BoundKind,
+        plan::{FeaturePlan, Storage},
     },
 };
 
@@ -32,20 +46,24 @@ struct ContainmentEdge {
 }
 
 /// Result of cycle analysis
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CycleAnalysis {
     /// Edges that need Box wrapping (feedback arc set)
     pub boxing_requirements: HashMap<(ClassIdx, String), BoxingStrategy>,
 }
 
-/// Strategy for applying Box wrapper
+/// Which generated representations need indirection at a selected field.
+///
+/// A strategy applies to the whole field, including every concrete member of a
+/// polymorphic target. The emitter applies boxes directly to the corresponding generated types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoxingStrategy {
-    /// Box a single reference value: field log uses BoxedLog<T>
-    DirectReference,
-    /// Box collection element values: field log uses ListLog<BoxedLog<T>>
-    CollectionElement,
-    /// Do not box (cycle broken elsewhere)
+    /// Only operations need indirection; storage/read cycles are already broken.
+    /// Emit a boxed operation payload and convert it with `Boxer` when forwarding.
+    OperationOnly,
+    /// Inline storage and read values are recursive too: emit Box<Log>/Box<Value>.
+    LogAndValue,
+    /// No indirection is needed here: there is no cycle, or it is broken elsewhere.
     NoBox,
 }
 
@@ -91,23 +109,44 @@ impl<'a> CycleAnalyzer<'a> {
     /// Phase 1: Build the type dependency graph from the Ecore model
     fn build_containment_graph(&self) -> anyhow::Result<Vec<ContainmentEdge>> {
         let mut edges = Vec::new();
+        // Resolve storage without applying boxing: the graph must reflect the
+        // emitted types before we decide which of its edges to break.
+        let unboxed = CycleAnalysis::default();
 
         for class in self.ctx.classes().iter() {
             let source = class.idx;
+            // Map helpers are projected into their owner's map, not emitted as records.
+            if self.ctx.info(source).map_entry {
+                continue;
+            }
 
             for structural in self.ctx.supported_features(class.idx) {
                 if !structural.containment {
                     continue;
                 }
 
-                let target = structural.typ.unwrap();
-                let target_class = &self.ctx.classes()[*target];
+                let target_class = &self.ctx.classes()[*structural.typ.unwrap()];
                 let field_name = structural.name.clone();
-                let is_many = structural.bounds.ubound != Some(1);
 
                 if is_uninhabited_polymorphic_class(self.ctx, target_class) {
                     continue;
                 }
+
+                // A projected map depends directly on its value type, not the
+                // Ecore entry helper. Attribute values introduce no class edge.
+                let plan = FeaturePlan::resolve(self.ctx, source, structural, &unboxed)?;
+                let (target_class, is_many) = match &plan.storage {
+                    Storage::Containment { target, .. } => {
+                        (*target, matches!(plan.bounds, BoundKind::Many))
+                    }
+                    Storage::Map(map) => match &map.value.storage {
+                        Storage::Containment { target, .. } => (*target, true),
+                        Storage::Attribute(_) => continue,
+                        Storage::Map(_) => unreachable!("map values are single-valued"),
+                    },
+                    Storage::Attribute(_) => continue,
+                };
+                let target = target_class.idx;
 
                 if has_codegen_polymorphic_family(self.ctx, target_class) {
                     for &member in self.polymorphic_family_members(target) {
@@ -130,6 +169,10 @@ impl<'a> CycleAnalyzer<'a> {
                 }
             }
 
+            // Transparent union variants contain only the projected feature.
+            if self.ctx.info(source).transparent_field.is_some() {
+                continue;
+            }
             for superclass_idx in class.sup() {
                 let superclass = &self.ctx.classes()[**superclass_idx];
                 edges.push(ContainmentEdge {
@@ -325,13 +368,42 @@ impl<'a> Graph<'a> {
     }
 }
 
+/// Breaks layout cycles first, then operation cycles using the same field IDs.
+///
+/// Selection is a linear-time heuristic, not a minimum feedback arc set: prefer
+/// Union and collection edges within cyclic components, then cut DFS back edges.
+/// A full box already breaks both graphs and must never be downgraded.
 fn select_boxing(
     edges: &[ContainmentEdge],
     nodes: usize,
 ) -> anyhow::Result<HashMap<(ClassIdx, String), BoxingStrategy>> {
+    // Collections store children behind allocations; unions already box their
+    // active child and read value. Neither contributes an inline layout edge.
+    let inline_edges = edges
+        .iter()
+        .filter(|edge| !edge.is_many && !edge.is_union_variant)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut layout = Graph::new(&inline_edges, nodes);
+    layout.box_back_edges();
+    let mut requirements = HashMap::new();
+    for (id, &index) in layout.fields.iter().enumerate() {
+        if layout.boxed[id] {
+            let edge = &inline_edges[index];
+            requirements.insert(
+                (edge.source, edge.field_name.clone()),
+                BoxingStrategy::LogAndValue,
+            );
+        }
+    }
+
     let mut graph = Graph::new(edges, nodes);
-    // Preserve family boxing: a union edge is cyclic exactly when source and
-    // target share an SCC. Recompute SCCs before preferring collection edges.
+    for (id, &index) in graph.fields.iter().enumerate() {
+        let edge = &edges[index];
+        graph.boxed[id] = requirements.contains_key(&(edge.source, edge.field_name.clone()));
+    }
+    // Operations embed their child payload inline even for lists and maps.
+    // Reuse storage boxes first, then break remaining operation cycles.
     graph.box_preferred(true);
     graph.box_preferred(false);
     graph.box_back_edges();
@@ -339,23 +411,15 @@ fn select_boxing(
         graph.is_acyclic(),
         "containment boxing left a recursive type dependency"
     );
-    Ok(graph
-        .fields
-        .iter()
-        .enumerate()
-        .filter_map(|(id, &index)| {
-            if !graph.boxed[id] {
-                return None;
-            }
+    for (id, &index) in graph.fields.iter().enumerate() {
+        if graph.boxed[id] {
             let edge = &edges[index];
-            let strategy = if edge.is_many {
-                BoxingStrategy::CollectionElement
-            } else {
-                BoxingStrategy::DirectReference
-            };
-            Some(((edge.source, edge.field_name.clone()), strategy))
-        })
-        .collect())
+            requirements
+                .entry((edge.source, edge.field_name.clone()))
+                .or_insert(BoxingStrategy::OperationOnly);
+        }
+    }
+    Ok(requirements)
 }
 
 #[cfg(test)]
@@ -397,6 +461,17 @@ mod tests {
                 .map(|bit| edge(bit / 4, bit % 4, bit % 3 == 0, bit % 5 == 0))
                 .collect::<Vec<_>>();
             let boxed = select_boxing(&edges, 4).unwrap();
+            let inline = edges
+                .iter()
+                .filter(|e| {
+                    !e.is_many
+                        && !e.is_union_variant
+                        && boxed.get(&(e.source, e.field_name.clone()))
+                            != Some(&BoxingStrategy::LogAndValue)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            assert!(Graph::new(&inline, 4).is_acyclic(), "inline layout {mask}");
             let remaining = edges
                 .into_iter()
                 .filter(|e| !boxed.contains_key(&(e.source, e.field_name.clone())))
@@ -418,7 +493,22 @@ mod tests {
         assert_eq!(boxed.len(), 1);
         assert_eq!(
             boxed[&(0.into(), edges[0].field_name.clone())],
-            BoxingStrategy::CollectionElement
+            BoxingStrategy::OperationOnly
         );
+    }
+
+    #[test]
+    fn existing_indirection_only_requires_operation_boxes() {
+        for (many, union, expected) in [
+            (true, false, BoxingStrategy::OperationOnly),
+            (false, true, BoxingStrategy::OperationOnly),
+            (false, false, BoxingStrategy::LogAndValue),
+        ] {
+            let edges = [edge(0, 0, many, union)];
+            assert_eq!(
+                select_boxing(&edges, 1).unwrap()[&(0.into(), "field_0_0".into())],
+                expected
+            );
+        }
     }
 }
