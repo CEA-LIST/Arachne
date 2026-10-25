@@ -30,3 +30,7 @@ default = ["fuzz", "sink", "serde"]
 fuzz = []
 serde = ["moirai-protocol/serde", "moirai-macros/serde", "moirai-crdt/serde"]
 sink = ["moirai-protocol/sink","moirai-fuzz/sink","moirai-macros/sink","moirai-crdt/sink"]
+
+# zenoh 1.10.1 plus upstream PR #2779 (issue #2581), the model store's vendored copy.
+[patch.crates-io]
+zenoh = { path = "../../../moirai-model-plane/vendor/zenoh-1.10.1" }
