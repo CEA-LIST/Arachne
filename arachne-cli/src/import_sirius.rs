@@ -10,12 +10,11 @@
 //! transcoder learned (`experiments/ip8-sysml-usecase`): a second table is a second source of
 //! truth.
 //!
-//! What this adds to ip8's walk is the references. Sirius writes a reference as the target's
-//! Sirius `id`, a resource-local UUID that means nothing to a node; the editor resolves a
-//! reference by the target's id attribute (`isId`, `elementId` in SysML). So a value that is the
-//! Sirius `id` of an object of the document is rewritten to that object's id attribute, and
-//! every other value (a standard-library URI, a dangling id) is written as the source wrote it
-//! and reported, never dropped.
+//! Sirius writes references using resource-local ids. Offline batches translate local
+//! targets to their id attributes (`isId`, `elementId` in SysML). Live imports defer identity
+//! links until the node serves the complete structure, then join those attributes to the
+//! observed store identities. External values, including complete library strings, are
+//! preserved and reported in both modes.
 
 use std::collections::HashMap;
 
@@ -25,6 +24,8 @@ use moirai_semantics::{
     from_descriptor,
 };
 use serde_json::{Map, Value};
+
+pub mod live;
 
 /// A reference value whose target is not an object of the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,15 +56,7 @@ pub fn import(descriptor: &Value, project: &Value) -> Result<Import, Vec<String>
     let sem = from_descriptor(descriptor)
         .map_err(|err| vec![format!("the descriptor does not parse: {err}")])?;
     let table = Table::new(sem, descriptor);
-    let mut walk = Walk {
-        table: &table,
-        ids: HashMap::new(),
-        ops: Vec::new(),
-        resolved: 0,
-        unresolved: Vec::new(),
-        failures: Vec::new(),
-        root: ClassSlot(0),
-    };
+    let mut walk = Walk::new(&table, false);
     walk.document(project);
     if walk.failures.is_empty() {
         Ok(Import {
@@ -280,6 +273,35 @@ struct Walk<'t> {
     unresolved: Vec<Unresolved>,
     failures: Vec<String>,
     root: ClassSlot,
+    /// Live identity references wait until the complete structure has been read back.
+    links: Option<Vec<PendingLink>>,
+}
+
+struct PendingLink {
+    path: Vec<Step>,
+    slot: FeatureSlot,
+    /// An id attribute to join to the served identity, or a verbatim external value.
+    target: LinkTarget,
+}
+
+enum LinkTarget {
+    Local(String),
+    External(String),
+}
+
+impl<'t> Walk<'t> {
+    fn new(table: &'t Table, live: bool) -> Self {
+        Self {
+            table,
+            ids: HashMap::new(),
+            ops: Vec::new(),
+            resolved: 0,
+            unresolved: Vec::new(),
+            failures: Vec::new(),
+            root: ClassSlot(0),
+            links: live.then(Vec::new),
+        }
+    }
 }
 
 impl Walk<'_> {
@@ -289,6 +311,10 @@ impl Walk<'_> {
 
     /// The operation that does `inner` at the end of `path`.
     fn emit(&mut self, path: &[Step], inner: InstanceOp) {
+        self.ops.push(self.operation(path, inner));
+    }
+
+    fn operation(&self, path: &[Step], inner: InstanceOp) -> ModelOp {
         let mut op = inner;
         for step in path.iter().rev() {
             op = match *step {
@@ -303,8 +329,7 @@ impl Walk<'_> {
                 }
             };
         }
-        self.ops
-            .push(ModelOp::Instance(InstanceOp::variant(self.root, op)));
+        ModelOp::Instance(InstanceOp::variant(self.root, op))
     }
 
     fn document(&mut self, document: &Value) {
@@ -441,10 +466,16 @@ impl Walk<'_> {
                 Some(MergeRule::Attribute { shape, leaf }) => {
                     self.attribute(value, class, slot, shape, leaf, path, at, name);
                 }
-                // SI.05: a reference by store identity names its target by the
-                // identity the model serves it under, which this importer does
-                // not hold; the checked-in descriptors it imports into keep
-                // today's string rule.
+                Some(MergeRule::IdentityReference { many, target, .. }) if self.links.is_some() => {
+                    let site = Site {
+                        class,
+                        slot,
+                        name,
+                        at,
+                    };
+                    self.reference(value, &site, many, target, path, &holder);
+                }
+                // Offline batches cannot predict a node's creation identities.
                 Some(MergeRule::IdentityReference { .. }) => self.fail(
                     at,
                     format!(
@@ -597,7 +628,7 @@ impl Walk<'_> {
                     self.emit(path, shaped(LeafOp::InsertChar { pos, ch }));
                 }
             }
-            (Shape::OrderedSet, LeafRule::Text) => {
+            (Shape::OrderedSet, LeafRule::Text | LeafRule::Register { .. }) => {
                 for (pos, item) in values_of(value).into_iter().enumerate() {
                     let Some(text) = item.as_str() else {
                         let why = wrong("an ordered set of text");
@@ -683,8 +714,8 @@ impl Walk<'_> {
         }
     }
 
-    /// A non-containment reference, carried as text: the target's id attribute when the
-    /// target is an object of the document, the source's value otherwise.
+    /// A reference: legacy text is emitted now, while live identity links are deferred
+    /// with the target's id attribute to join against the subsequent identified read.
     fn reference(
         &mut self,
         value: &Value,
@@ -744,6 +775,25 @@ impl Walk<'_> {
                     source.to_string()
                 }
             };
+            if matches!(
+                self.table.feature(site.class, site.name),
+                Some((_, Some(MergeRule::IdentityReference { .. })))
+            ) {
+                let target = if self.ids.contains_key(source) {
+                    LinkTarget::Local(written)
+                } else {
+                    LinkTarget::External(written)
+                };
+                self.links
+                    .as_mut()
+                    .expect("live identity reference")
+                    .push(PendingLink {
+                        path: path.to_vec(),
+                        slot: site.slot,
+                        target,
+                    });
+                continue;
+            }
             let op = if many {
                 LeafOp::Add(Scalar::text(written))
             } else {

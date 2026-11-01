@@ -43,8 +43,7 @@ enum Command {
     #[command(name = "digest")]
     Digest(DigestArgs),
 
-    /// Print the node operations that build a Sirius Web / SysON project export, as the body
-    /// `POST /api/model/{id}/ops` takes; references outside the project are reported on stderr
+    /// Import a Sirius Web / SysON project into a live model, or print its offline batch
     #[command(name = "import-sirius")]
     ImportSirius(ImportSiriusArgs),
 }
@@ -155,6 +154,14 @@ struct ImportSiriusArgs {
     /// Path to the metamodel descriptor the model is registered under
     #[arg(long, value_name = "DESCRIPTOR")]
     descriptor: PathBuf,
+
+    /// Node hosting the already registered model
+    #[arg(long, value_name = "URL", requires = "model")]
+    node: Option<String>,
+
+    /// Registered model to import into (requires --node)
+    #[arg(long, value_name = "ID", requires = "node")]
+    model: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -286,9 +293,7 @@ fn run_digest(args: DigestArgs) -> Result<()> {
     Ok(())
 }
 
-/// `{"ops": [...]}` on stdout; the references left as the source wrote them, one line each,
-/// and the count of both kinds on stderr. Posts nothing: the node and the model are the
-/// caller's.
+/// Live import when a node and model are supplied; otherwise the legacy offline batch.
 fn run_import_sirius(args: ImportSiriusArgs) -> Result<()> {
     init_logger_at("error");
     let read = |path: &PathBuf, what: &str| -> Result<serde_json::Value> {
@@ -299,6 +304,10 @@ fn run_import_sirius(args: ImportSiriusArgs) -> Result<()> {
     };
     let descriptor = read(&args.descriptor, "descriptor")?;
     let project = read(&args.input, "project export")?;
+    if let (Some(node), Some(model)) = (&args.node, &args.model) {
+        return import_sirius::live::import(&descriptor, &project, node, model)
+            .map_err(|err| anyhow!("{err:#}"));
+    }
     let import = import_sirius::import(&descriptor, &project).map_err(|failures| {
         anyhow!(
             "'{}' cannot be carried by the descriptor:\n  {}",
