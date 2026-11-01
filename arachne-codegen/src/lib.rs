@@ -4,6 +4,7 @@ mod deployment;
 pub mod error;
 pub mod parser;
 mod project;
+mod resources;
 mod utils;
 
 use std::path::PathBuf;
@@ -55,7 +56,8 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     config.validate()?;
 
     info!("Parsing ecore metamodel: {:?}", config.input_path);
-    let parser = EcoreParser::from_file(&config.input_path)?;
+    let resources = resources::load(&config.input_path)?;
+    let parser = &resources.parser;
 
     if parser
         .ctx
@@ -85,7 +87,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 
     info!("Generating Rust tokens");
     let (classifiers, references, package, generated_class_count) =
-        generate_from_parser(&parser, pack)?;
+        generate_from_parser_with_roots(parser, pack, &resources.own_classes)?;
 
     // Emit any warnings collected during generation
     classifiers.emit_warnings();
@@ -106,7 +108,7 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
 
     // The metamodel the generated types encode, re-emitted as data so the
     // node can serve it to clients (`GET /api/metamodel`).
-    let descriptor = codegen::descriptor::descriptor_json(&parser.ctx, pack)?;
+    let descriptor = &resources.descriptor;
 
     info!("Writing generated project '{}'", project_name);
     // Write a full Rust project
@@ -117,8 +119,9 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
         classifiers_code,
         references_code,
         package_code,
-        &descriptor,
+        descriptor,
     )?;
+    resources.write_dependencies(&config.output_dir)?;
 
     Ok(GenerationReport {
         input_path: config.input_path.clone(),
@@ -154,6 +157,15 @@ pub fn generate_from_parser<'a>(
     parser: &'a EcoreParser,
     pack: &'a Pack,
 ) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>, usize)> {
+    let own_classes: Vec<_> = pack.classes().iter().copied().collect();
+    generate_from_parser_with_roots(parser, pack, &own_classes)
+}
+
+fn generate_from_parser_with_roots<'a>(
+    parser: &'a EcoreParser,
+    pack: &'a Pack,
+    own_classes: &[idx::Class],
+) -> anyhow::Result<(Generator<'a>, Generator<'a>, Generator<'a>, usize)> {
     let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
     let mut references = Generator::new(REFERENCES_PATH_MOD);
     let mut package = Generator::new(PACKAGE_PATH_MOD);
@@ -181,7 +193,7 @@ pub fn generate_from_parser<'a>(
 
     let top_level_roots = compute_top_level_roots(
         &parser.ctx,
-        &package_classes,
+        own_classes,
         &package_classes_and_ecore,
         &package_class_set,
     );
@@ -199,6 +211,14 @@ pub fn generate_from_parser<'a>(
             &package_class_set,
         ));
     }
+    // Resource imports have already been reduced to the superclass/feature-target closure.
+    // Include reference-only targets too, without making imported classes package roots.
+    reachable_classes.extend(
+        package_classes
+            .iter()
+            .filter(|idx| !own_classes.contains(idx))
+            .copied(),
+    );
     // An abstract class of Ecore that no generated class extends, such as `ENamedElement` reached
     // as a subclass of `EModelElement`, is left out instead of being skipped with a warning.
     reachable_classes.retain(|class_idx| {

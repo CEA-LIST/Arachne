@@ -122,6 +122,15 @@ const FORMAT_VERSION: u64 = 2;
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
 /// root class — the same condition under which code generation fails.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
+    let own_classes: Vec<_> = pack.classes().iter().copied().collect();
+    descriptor_with_roots(ctx, pack, &own_classes)
+}
+
+pub(crate) fn descriptor_with_roots(
+    ctx: &Ctx,
+    pack: &Pack,
+    own_classes: &[idx::Class],
+) -> Result<Value> {
     // The class set is the one code generation reaches, computed the same way
     // `generate_from_parser` computes it so that the descriptor and the crate
     // describe one slice: the package's classes, then Ecore's own but
@@ -143,7 +152,7 @@ pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
         .collect();
     let generated_set: HashSet<idx::Class> = generated.iter().copied().collect();
 
-    let roots = crate::compute_top_level_roots(ctx, &package_classes, &generated, &generated_set);
+    let roots = crate::compute_top_level_roots(ctx, own_classes, &generated, &generated_set);
     if roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
     }
@@ -165,6 +174,12 @@ pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
     for root in &roots {
         reachable.extend(crate::collect_reachable_classes(ctx, *root, &described_set));
     }
+    reachable.extend(
+        package_classes
+            .iter()
+            .filter(|idx| !own_classes.contains(idx))
+            .copied(),
+    );
     // An abstract class of Ecore that nothing generated extends is left out,
     // exactly as `generate_from_parser` leaves it out.
     reachable.retain(|class| {
