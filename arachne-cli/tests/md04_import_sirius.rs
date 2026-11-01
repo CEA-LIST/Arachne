@@ -52,6 +52,7 @@ fn md04_instrument_census_and_pins() {
             elements: 32,
             local: 17,
             library: 1,
+            dangling: 0,
             aliases: 1,
             alias_values: 3,
             sysml: 1,
@@ -66,6 +67,7 @@ fn md04_instrument_census_and_pins() {
             elements: 741,
             local: 251,
             library: 27,
+            dangling: 0,
             aliases: 9,
             alias_values: 9,
             sysml: 25,
@@ -75,6 +77,62 @@ fn md04_instrument_census_and_pins() {
     let pins = read(&fixture("pins.json"));
     assert_eq!(hash(&descriptor_path()), pins["sysml_sha256"]);
     assert_eq!(hash(&fixture("gauge.project.json")), pins["gauge_sha256"]);
+    for good in [
+        "sysml:DataType kermllibrary:///b2c6dd37-2084-3ce4-9ce2-580fdf30629c#b352ded6-38ba-4e7e-ae55-9299cb0cc6d0",
+        "ScalarValues::Real",
+        "SI::'watt hour'",
+        "BaseFunctions::'#'",
+        "A::'x::y'",
+        "A::'can\\'t'",
+    ] {
+        assert!(library_value(good), "MD04 library grammar: {good}");
+    }
+    for bad in [
+        "5ee1dead",
+        "md04-alice@1.0",
+        "ScalarValues",
+        "A::",
+        "A::::B",
+        "A::''",
+        "A::'unfinished",
+        "A::B#suffix",
+        " A::B",
+        "A::B ",
+        "sysml:DataType kermllibrary:///missing#missing",
+        "04040404040404040404040404040404#alice@1.0",
+    ] {
+        assert!(!library_value(bad), "MD04 library grammar: {bad}");
+    }
+    let dangling = Source::new(&fixture("dangling-references.project.json"));
+    assert_eq!(
+        dangling.census(),
+        Census {
+            objects: 5,
+            elements: 5,
+            local: 1,
+            library: 2,
+            dangling: 1,
+            sysml: 1,
+            ..Census::default()
+        }
+    );
+    assert_eq!(
+        dangling.dangling(),
+        vec![Dangling {
+            holder: "md04-dangling-typing".into(),
+            feature: "type".into(),
+            value: "5ee1dead".into()
+        }]
+    );
+    // Inspecting the pinned fixture is not execution of the GAUGE load step.
+    assert_eq!(
+        Source::new(&fixture("gauge.project.json")).dangling(),
+        vec![Dangling {
+            holder: "82087f5f-fdb2-4ff8-be00-51a29ace8cce".into(),
+            feature: "type".into(),
+            value: "5ee1dead".into()
+        }]
+    );
     // The relay parser must also carry deep model operation trees unchanged.
     let deep = format!("{}0{}", "[".repeat(220), "]".repeat(220));
     assert_eq!(parse(&deep).to_string(), deep);
@@ -160,6 +218,25 @@ fn md04_instrument_literal_state_and_three_bad_cases() {
         s.compare(&bad, true, false, &ids).is_err(),
         "MD04 instrument missed duplicate structure"
     );
+    let s = Source::new(&fixture("dangling-references.project.json"));
+    let good = read(&fixture("dangling.identified.expected.json"));
+    let ids = Source::served(&good).unwrap();
+    s.check(&good, true, false, &ids);
+    s.check(&plain(good.clone()), false, false, &ids);
+    let mut bad = good.clone();
+    bad["ownedRelationship"][0]["type"] = json!("5ee1dead");
+    assert!(
+        s.compare(&bad, true, false, &ids).is_err(),
+        "MD04 instrument missed dangling read-back"
+    );
+    for index in 1..4 {
+        let mut bad = good.clone();
+        bad["ownedRelationship"][index]["type"] = Value::Null;
+        assert!(
+            s.compare(&bad, true, false, &ids).is_err(),
+            "MD04 instrument lost retained reference {index}"
+        );
+    }
 }
 #[test]
 fn md04_offline_legacy_batch_and_report_are_frozen() {
@@ -243,6 +320,33 @@ fn md04_live_survey() {
 #[test]
 fn md04_batmobile_census() {
     live(&batmobile(), "batmobile")
+}
+#[test]
+fn md04_dangling_references_are_reported_and_not_written() {
+    let path = fixture("dangling-references.project.json");
+    let c = Cluster::new(Source::new(&path), "dangling");
+    c.pause();
+    let relay = Relay::new(&c, false);
+    let mut cli = Importer::start(&c, &path, relay.port, &descriptor_path());
+    cli.success();
+    relay.assert_trace();
+    assert!(
+        relay.trace.lock().unwrap().dangling_writes.is_empty(),
+        "MD04 G5: dangling reference was written as Link"
+    );
+    c.source.check_dangling_report(&cli.stderr());
+    c.check();
+    c.resume();
+    c.convergence();
+    let ids = c.check();
+    c.source
+        .check(&parse(&state(c.port(1), &c.model, true)), true, false, &ids);
+    c.source.check(
+        &parse(&state(c.port(1), &c.model, false)),
+        false,
+        false,
+        &ids,
+    );
 }
 #[test]
 fn md04_paused_link_phase() {
@@ -361,6 +465,7 @@ fn md04_gauge_load() {
         let mut cli = Importer::start(&c, &path, c.port(0), &descriptor_path());
         cli.success();
         let seconds = start.elapsed().as_secs_f64();
+        c.source.check_dangling_report(&cli.stderr());
         c.check();
         println!(
             "MD04 GAUGE block={block} seconds={seconds:.6} census={census:?} node_sha={NODE_SHA}"

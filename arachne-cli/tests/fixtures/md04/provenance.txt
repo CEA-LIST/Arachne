@@ -5,3 +5,5 @@ GAUGE is the hand-authored ED.26 excerpt copied unchanged from /volatile/home/vp
 The offline stdout and stderr are frozen output from Arachne 0c76470958e22d14d290a960ed95f6beec532c7e on the original ED.12 SURVEY and legacy sysml-2df00538.json.
 Batmobile is external and checked in place by SHA256; no Batmobile-derived data is stored here.
 All pins are in pins.json.
+The 2026-11-01 dangling-reference ruling adds dangling-references.project.json, a hand-authored five-object control with one missing SysON id, one local reference and both library forms; dangling.identified.expected.json is its handwritten read-back, not importer output.
+GAUGE remains byte-identical to its pinned source; only the oracle expectation for e104b701.type changes to empty, with source id 82087f5f-fdb2-4ff8-be00-51a29ace8cce, feature type and value 5ee1dead required on one report line.

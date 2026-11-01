@@ -1,0 +1,39 @@
+{
+  "json": { "version": "1.0", "encoding": "utf-8" },
+  "ns": { "sysml": "http://www.eclipse.org/syson/sysml" },
+  "content": [
+    {
+      "id": "md04-local-target",
+      "eClass": "sysml:PartDefinition",
+      "data": {
+        "elementId": "md04-target-eid",
+        "declaredName": "Dangling reference control",
+        "ownedRelationship": [
+          {
+            "id": "md04-dangling-typing",
+            "eClass": "sysml:FeatureTyping",
+            "data": { "elementId": "md04-dangling-eid", "type": "5ee1dead" }
+          },
+          {
+            "id": "md04-local-typing",
+            "eClass": "sysml:FeatureTyping",
+            "data": { "elementId": "md04-local-eid", "type": "md04-local-target" }
+          },
+          {
+            "id": "md04-address-typing",
+            "eClass": "sysml:FeatureTyping",
+            "data": {
+              "elementId": "md04-address-eid",
+              "type": "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66"
+            }
+          },
+          {
+            "id": "md04-qualified-typing",
+            "eClass": "sysml:FeatureTyping",
+            "data": { "elementId": "md04-qualified-eid", "type": "ScalarValues::Real" }
+          }
+        ]
+      }
+    }
+  ]
+}

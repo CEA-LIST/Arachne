@@ -202,12 +202,91 @@ pub fn items(v: &Value) -> Vec<&Value> {
 pub fn data(v: &Value) -> &Value {
     v.get("data").unwrap_or(v)
 }
+// Independent recognition of the grammars in MD.03 section 1.1 and MD.03a
+// section 1. No importer or runtime foreign-value recognizer is called.
+pub fn library_value(text: &str) -> bool {
+    fn identifier(text: &str) -> bool {
+        let mut bytes = text.bytes();
+        bytes
+            .next()
+            .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+            && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    }
+    fn uuid(text: &str) -> bool {
+        let parts = text.split('-').collect::<Vec<_>>();
+        parts.len() == 5
+            && parts
+                .iter()
+                .zip([8, 4, 4, 4, 12])
+                .all(|(part, n)| part.len() == n && part.bytes().all(|b| b.is_ascii_hexdigit()))
+    }
+    if let Some((class, address)) = text.split_once(' ') {
+        if let Some((prefix, class)) = class.split_once(':') {
+            if identifier(prefix) && identifier(class) {
+                if let Some((scheme, coordinates)) = address.split_once(":///") {
+                    if matches!(scheme, "sysmllibrary" | "kermllibrary") {
+                        if let Some((resource, element)) = coordinates.split_once('#') {
+                            if uuid(resource) && uuid(element) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut chars = text.chars().peekable();
+    let mut segments = 0;
+    loop {
+        if chars.peek() == Some(&'\'') {
+            chars.next();
+            let mut nonempty = false;
+            loop {
+                match chars.next() {
+                    Some('\'') if nonempty => break,
+                    Some('\'') | None => return false,
+                    Some('\\') => {
+                        if chars.next().is_none() {
+                            return false;
+                        }
+                        nonempty = true;
+                    }
+                    Some(_) => nonempty = true,
+                }
+            }
+        } else {
+            let mut segment = String::new();
+            while chars
+                .peek()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+            {
+                segment.push(chars.next().unwrap());
+            }
+            if !identifier(&segment) {
+                return false;
+            }
+        }
+        segments += 1;
+        match chars.next() {
+            None => return segments >= 2,
+            Some(':') if chars.next() == Some(':') => {}
+            _ => return false,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Dangling {
+    pub holder: String,
+    pub feature: String,
+    pub value: String,
+}
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Census {
     pub objects: usize,
     pub elements: usize,
     pub local: usize,
     pub library: usize,
+    pub dangling: usize,
     pub aliases: usize,
     pub alias_values: usize,
     pub sysml: usize,
@@ -274,13 +353,15 @@ impl Source {
                             let target = target.as_str().unwrap();
                             if s.by_source.contains_key(target) {
                                 c.local += 1
-                            } else {
+                            } else if library_value(target) {
                                 c.library += 1;
                                 if target.contains("sysmllibrary:///") {
                                     c.sysml += 1
                                 } else if target.contains("kermllibrary:///") {
                                     c.kerml += 1
                                 }
+                            } else {
+                                c.dangling += 1
                             }
                         }
                     }
@@ -297,6 +378,60 @@ impl Source {
             go(self, r, "", &mut c)
         }
         c
+    }
+    pub fn dangling(&self) -> Vec<Dangling> {
+        fn go(s: &Source, src: &Value, fallback: &str, out: &mut Vec<Dangling>) {
+            let class = s.table.class(src, fallback);
+            let fields = s.table.features(&class);
+            for (name, value) in data(src).as_object().unwrap() {
+                let field = &fields[name];
+                match field["merge"]["kind"].as_str().unwrap() {
+                    "containment" => {
+                        for child in items(value) {
+                            go(s, child, field["target"].as_str().unwrap(), out);
+                        }
+                    }
+                    "identityReference" => {
+                        for target in items(value) {
+                            let text = target.as_str().unwrap();
+                            if !s.by_source.contains_key(text) && !library_value(text) {
+                                out.push(Dangling {
+                                    holder: src["id"]
+                                        .as_str()
+                                        .expect("dangling source SysON id")
+                                        .into(),
+                                    feature: name.clone(),
+                                    value: text.into(),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for root in self.project["content"].as_array().unwrap() {
+            go(self, root, "", &mut out);
+        }
+        out
+    }
+    pub fn check_dangling_report(&self, report: &str) {
+        for missing in self.dangling() {
+            let lines = report
+                .lines()
+                .filter(|line| {
+                    let words = line.split_whitespace().collect::<Vec<_>>();
+                    words.contains(&missing.holder.as_str())
+                        && words.contains(&missing.feature.as_str())
+                        && line.contains(&missing.value)
+                })
+                .count();
+            assert_eq!(
+                lines, 1,
+                "MD04 G5: one report line required for {missing:?}: {report}"
+            );
+        }
     }
     /// Observe every object, including anonymous EAnnotations, by JSON path.
     pub fn all_identities(doc: &Value) -> BTreeMap<String, String> {
@@ -449,6 +584,7 @@ impl Source {
                                         eid.clone()
                                     }
                                 }
+                                None if identity && !library_value(text) => continue,
                                 None => text.to_owned(),
                             };
                             wanted.push(json!(target));
@@ -866,6 +1002,26 @@ fn has_link(v: &Value) -> bool {
         _ => false,
     }
 }
+fn link_values(v: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    match v {
+        Value::Object(m) => {
+            if let Some(text) = m.get("Link").and_then(Value::as_str) {
+                out.push(text.to_owned());
+            }
+            for value in m.values() {
+                out.extend(link_values(value));
+            }
+        }
+        Value::Array(a) => {
+            for value in a {
+                out.extend(link_values(value));
+            }
+        }
+        _ => {}
+    }
+    out
+}
 fn mutate_links(v: &mut Value, map: &BTreeMap<String, String>) {
     match v {
         Value::Object(m) => {
@@ -927,6 +1083,7 @@ pub struct Trace {
     pub read_ids: BTreeMap<String, String>,
     pub first_seen: bool,
     pub forwarded_links: usize,
+    pub dangling_writes: Vec<String>,
     pub error: Option<String>,
     pub il2: BTreeMap<String, String>,
 }
@@ -1042,6 +1199,12 @@ impl Relay {
                             }
                         }
                         if link {
+                            let dangling = source.dangling();
+                            tr.lock().unwrap().dangling_writes.extend(
+                                link_values(&v).into_iter().filter(|value| {
+                                    dangling.iter().any(|missing| &missing.value == value)
+                                }),
+                            );
                             tr.lock().unwrap().forwarded_links += 1
                         }
                         if ARM_IL2 || ARM_DROP_LIBRARY || ARM_DROP_ALIASES {

@@ -1,0 +1,32 @@
+{
+  "__id": "fixture@1.0",
+  "eClass": "PartDefinition",
+  "elementId": "md04-target-eid",
+  "declaredName": "Dangling reference control",
+  "ownedRelationship": [
+    {
+      "__id": "fixture@2.0",
+      "eClass": "FeatureTyping",
+      "elementId": "md04-dangling-eid",
+      "type": null
+    },
+    {
+      "__id": "fixture@3.0",
+      "eClass": "FeatureTyping",
+      "elementId": "md04-local-eid",
+      "type": "fixture@1.0"
+    },
+    {
+      "__id": "fixture@4.0",
+      "eClass": "FeatureTyping",
+      "elementId": "md04-address-eid",
+      "type": "sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66"
+    },
+    {
+      "__id": "fixture@5.0",
+      "eClass": "FeatureTyping",
+      "elementId": "md04-qualified-eid",
+      "type": "ScalarValues::Real"
+    }
+  ]
+}
