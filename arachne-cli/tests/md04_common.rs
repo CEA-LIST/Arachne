@@ -19,8 +19,8 @@ use std::{
 };
 
 pub const SCRATCH: &str = "/volatile/home/vp242103/.cache/cea-crdt-scratch/MD.04/work";
-pub const NODE: &str = "/volatile/home/vp242103/.cache/cea-crdt-scratch/bin/model_node-aeefe32";
-pub const NODE_SHA: &str = "df0d214edfede61992f6097a8f624e51c45c3e6a7fb8c4a61b7a7f3ce4dd2888";
+pub const NODE: &str = "/volatile/home/vp242103/.cache/cea-crdt-scratch/bin/model_node-b131ee3";
+pub const NODE_SHA: &str = "c10b485c54b47245a7602957fa3b02a57641afd3df40ba71581541fd5702f882";
 pub const BAT_SHA: &str = "9d5af374c3823ee9ac439d21fb94023a566fab6f5dcbf3dc5e3b939eca86d505";
 pub const LIMIT: Duration = Duration::from_secs(1800);
 // Mutation arms patch exactly one of these constants. Ordinary runs are transparent.
