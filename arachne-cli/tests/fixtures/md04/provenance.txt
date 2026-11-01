@@ -1,0 +1,7 @@
+MD.04 validator fixtures, 2026-11-01.
+SURVEY is the hand-authored ED.12 excerpt in ../ed12/, extended with three ordered aliases and Subclassification.source/target lists.
+survey.identified.expected.json starts from the handwritten ED.12 expected read, with literal fixture identities, aliases and those two lists; it is not importer output.
+GAUGE is the hand-authored ED.26 excerpt copied unchanged from /volatile/home/vp242103/.cache/cea-crdt-scratch/marcos-guide/model-editor/src/testing/ed26/gauge.project.json.
+The offline stdout and stderr are frozen output from Arachne 0c76470958e22d14d290a960ed95f6beec532c7e on the original ED.12 SURVEY and legacy sysml-2df00538.json.
+Batmobile is external and checked in place by SHA256; no Batmobile-derived data is stored here.
+All pins are in pins.json.

@@ -1,0 +1,4 @@
+metamodel: {"digest":"2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457","nsURI":"http://www.eclipse.org/syson/sysml"}
+operations: 99
+unresolved: 2c09fb6d type sysml:AttributeDefinition sysmllibrary:///de9b8ac4-d3a5-4f9a-840d-fe7afd0b7f92#42c66539-5bc6-43c6-9806-00600d1d5a66
+references: 13 resolved, 1 unresolved
