@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    io::{Read, Write},
+    io::{self, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command},
@@ -544,13 +544,52 @@ pub struct Response {
     pub headers: Vec<(String, String)>,
 }
 pub fn http(port: u16, method: &str, path: &str, body: &str) -> Response {
-    let mut s = TcpStream::connect(("127.0.0.1", port))
-        .unwrap_or_else(|e| panic!("MD04 setup connect {port}: {e}"));
-    s.set_read_timeout(Some(LIMIT)).unwrap();
-    s.set_write_timeout(Some(LIMIT)).unwrap();
-    write!(s,"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+    http_before(port, method, path, body, None)
+        .unwrap_or_else(|e| panic!("MD04 setup HTTP {port} {method} {path}: {e}"))
+}
+fn http_before(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    deadline: Option<Instant>,
+) -> io::Result<Response> {
+    let remaining = || match deadline {
+        Some(deadline) => deadline
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "convergence deadline")),
+        None => Ok(LIMIT),
+    };
+    let mut s = if deadline.is_some() {
+        TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), remaining()?)?
+    } else {
+        TcpStream::connect(("127.0.0.1", port))?
+    };
+    s.set_read_timeout(Some(remaining()?))?;
+    s.set_write_timeout(Some(remaining()?))?;
+    write!(
+        s,
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
     let mut all = String::new();
-    s.read_to_string(&mut all).unwrap();
+    if deadline.is_some() {
+        let mut bytes = Vec::new();
+        let mut chunk = [0; 8192];
+        loop {
+            s.set_read_timeout(Some(remaining()?))?;
+            let n = s.read(&mut chunk)?;
+            if n == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..n]);
+        }
+        all =
+            String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    } else {
+        s.read_to_string(&mut all)?;
+    }
     let (h, b) = all.split_once("\r\n\r\n").expect("MD04 setup HTTP header");
     let status = h
         .lines()
@@ -587,11 +626,11 @@ pub fn http(port: u16, method: &str, path: &str, body: &str) -> Response {
     } else {
         b.to_owned()
     };
-    Response {
+    Ok(Response {
         status,
         body,
         headers,
-    }
+    })
 }
 pub fn ok(port: u16, method: &str, path: &str, body: Value) -> Value {
     let r = http(
@@ -623,6 +662,49 @@ pub fn state(port: u16, model: &str, identified: bool) -> String {
     );
     assert_eq!(r.status, 200, "MD04 setup state {}", r.body);
     r.body
+}
+// Only convergence reads may retry 504. Keep all other state reads fail-fast.
+fn wait_for_convergence(ports: [u16; 2], model: &str, limit: Duration) -> (Duration, usize) {
+    let start = Instant::now();
+    let deadline = start + limit;
+    let mut retries_504 = 0;
+    let mut last_504 = None;
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "MD04 claim: replicas never converged; retries_504={retries_504}; last 504={last_504:?}"
+        );
+        let equal = [false, true].iter().all(|identified| {
+            let suffix = if *identified { "/identified" } else { "" };
+            let path = format!("/api/model/{model}/state{suffix}");
+            let mut bodies = Vec::new();
+            for port in ports {
+                let r = http_before(port, "GET", &path, "", Some(deadline)).unwrap_or_else(|e| {
+                    panic!(
+                        "MD04 claim: convergence read {port} {path}: {e}; retries_504={retries_504}; last 504={last_504:?}"
+                    )
+                });
+                if r.status == 504 {
+                    retries_504 += 1;
+                    last_504 = Some(format!("{port} {path}: {}", r.body));
+                    return false;
+                }
+                assert_eq!(r.status, 200, "MD04 setup state {}", r.body);
+                bodies.push(r.body);
+            }
+            bodies[0] == bodies[1]
+        });
+        assert!(
+            Instant::now() < deadline,
+            "MD04 claim: replicas never converged; retries_504={retries_504}; last 504={last_504:?}"
+        );
+        if equal {
+            return (start.elapsed(), retries_504);
+        }
+        thread::sleep(
+            Duration::from_millis(200).min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
 }
 pub struct Cluster {
     pub nodes: Vec<launch::Launched>,
@@ -744,19 +826,16 @@ impl Cluster {
         }
     }
     pub fn convergence(&self) {
-        let deadline = Instant::now() + Duration::from_secs(240);
-        loop {
-            if [false, true].iter().all(|id| {
-                state(self.port(0), &self.model, *id) == state(self.port(1), &self.model, *id)
-            }) {
-                return;
-            }
-            assert!(
-                Instant::now() < deadline,
-                "MD04 claim: replicas never converged"
-            );
-            thread::sleep(Duration::from_millis(200))
-        }
+        let (elapsed, retries_504) = wait_for_convergence(
+            [self.port(0), self.port(1)],
+            &self.model,
+            Duration::from_secs(240),
+        );
+        println!(
+            "MD04 convergence dir={} seconds={:.6} retries_504={retries_504}",
+            self.dir.display(),
+            elapsed.as_secs_f64()
+        );
     }
     pub fn check(&self) -> BTreeMap<String, String> {
         let doc = parse(&state(self.port(0), &self.model, true));
