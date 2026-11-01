@@ -1,0 +1,202 @@
+{
+  "classes": {
+    "Car": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "Components::Engine"
+          },
+          "name": "engine",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Components::Engine"
+        }
+      ],
+      "superTypes": [
+        "Components::Part"
+      ]
+    },
+    "Components::Controller": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "origin": "urn:md08:Components",
+      "references": [],
+      "superTypes": [
+        "Components::Device"
+      ]
+    },
+    "Components::Device": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "serial",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "origin": "urn:md08:Components",
+      "references": [],
+      "superTypes": []
+    },
+    "Components::Engine": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "power",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "origin": "urn:md08:Components",
+      "references": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "Components::Controller"
+          },
+          "name": "controller",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Components::Controller"
+        }
+      ],
+      "superTypes": [
+        "Components::Part"
+      ]
+    },
+    "Components::Part": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "label",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "origin": "urn:md08:Components",
+      "references": [],
+      "superTypes": []
+    },
+    "Independent": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "dcdda0fc994380030b2fb10852104d530dd077c7c96d1532afd8a1d962880d63",
+      "nsURI": "urn:md08:Components"
+    }
+  ],
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "urn:md08:Vehicle",
+  "package": "Vehicle",
+  "rootClasses": [
+    "Car",
+    "Independent"
+  ]
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "path": "examples/bt.metamodel.json",
+    "sha256": "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+    "digest": "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822"
+  },
+  {
+    "path": "examples/json.metamodel.json",
+    "sha256": "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+    "digest": "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30"
+  },
+  {
+    "path": "examples/notation.metamodel.json",
+    "sha256": "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+    "digest": "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86"
+  },
+  {
+    "path": "examples/sysml/sysml.metamodel.json",
+    "sha256": "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83",
+    "digest": "a75d8af47bf99f51b908f909a468c75c629a505de80b5379f19085943d6ae066"
+  },
+  {
+    "path": "examples/uml.metamodel.json",
+    "sha256": "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
+    "digest": "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3"
+  },
+  {
+    "path": "examples/umlclass.metamodel.json",
+    "sha256": "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
+    "digest": "999ed54f0657c2c8e27162645b0676e94be56a16d9058429707a104d1e620dc9"
+  }
+]

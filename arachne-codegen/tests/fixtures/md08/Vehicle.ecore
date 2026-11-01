@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="Vehicle" nsURI="urn:md08:Vehicle" nsPrefix="vehicle">
+  <eClassifiers xsi:type="ecore:EClass" name="Car" eSuperTypes="Components.ecore#//Part">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="engine" eType="Components.ecore#//Engine"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Independent"/>
+</ecore:EPackage>
