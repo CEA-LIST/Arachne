@@ -13,8 +13,8 @@
 //! Sirius writes references using resource-local ids. Offline batches translate local
 //! targets to their id attributes (`isId`, `elementId` in SysML). Live imports defer identity
 //! links until the node serves the complete structure, then join those attributes to the
-//! observed store identities. External values, including complete library strings, are
-//! preserved and reported in both modes.
+//! observed store identities. Library strings are preserved; dangling live identity
+//! references are reported and omitted. Offline external values remain verbatim.
 
 use std::collections::HashMap;
 
@@ -30,11 +30,11 @@ pub mod live;
 /// A reference value whose target is not an object of the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unresolved {
-    /// The id attribute of the object holding the reference (its Sirius `id` when it has none).
+    /// The holder's id attribute in offline mode, or its Sirius `id` for live identity links.
     pub holder: String,
     /// The reference feature.
     pub feature: String,
-    /// The value, as the source wrote it and as it is written.
+    /// The complete source value; dangling live identity references are not written.
     pub value: String,
 }
 
@@ -198,6 +198,76 @@ fn values_of(value: &Value) -> Vec<&Value> {
     }
 }
 
+/// MD.03 address values and MD.03a qualified names are opaque library references.
+/// Recognize the complete spelling without trimming, splitting or unquoting its value.
+fn is_library_reference(text: &str) -> bool {
+    fn identifier(text: &str) -> bool {
+        let mut bytes = text.bytes();
+        bytes
+            .next()
+            .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+            && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    }
+    fn uuid(text: &str) -> bool {
+        text.len() == 36
+            && text.bytes().enumerate().all(|(i, b)| {
+                if matches!(i, 8 | 13 | 18 | 23) {
+                    b == b'-'
+                } else {
+                    b.is_ascii_hexdigit()
+                }
+            })
+    }
+    if let Some((class, address)) = text.split_once(' ')
+        && let Some((prefix, class)) = class.split_once(':')
+        && let Some(coordinates) = address
+            .strip_prefix("sysmllibrary:///")
+            .or_else(|| address.strip_prefix("kermllibrary:///"))
+        && let Some((resource, element)) = coordinates.split_once('#')
+        && identifier(prefix)
+        && identifier(class)
+        && uuid(resource)
+        && uuid(element)
+    {
+        return true;
+    }
+
+    let mut chars = text.chars().peekable();
+    let mut qualified = false;
+    loop {
+        match chars.next() {
+            Some('\'') => {
+                let mut nonempty = false;
+                loop {
+                    match chars.next() {
+                        Some('\'') if nonempty => break,
+                        Some('\'') | None => return false,
+                        Some('\\') => {
+                            if chars.next().is_none() {
+                                return false;
+                            }
+                        }
+                        Some(_) => {}
+                    }
+                    nonempty = true;
+                }
+            }
+            Some(first) if first.is_ascii_alphabetic() || first == '_' => {
+                while chars
+                    .next_if(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .is_some()
+                {}
+            }
+            _ => return false,
+        }
+        match chars.next() {
+            None => return qualified,
+            Some(':') if chars.next() == Some(':') => qualified = true,
+            _ => return false,
+        }
+    }
+}
+
 fn as_flag(value: &Value) -> Option<bool> {
     match value {
         Value::Bool(flag) => Some(*flag),
@@ -280,13 +350,13 @@ struct Walk<'t> {
 struct PendingLink {
     path: Vec<Step>,
     slot: FeatureSlot,
-    /// An id attribute to join to the served identity, or a verbatim external value.
+    /// An id attribute to join to the served identity, or a verbatim library value.
     target: LinkTarget,
 }
 
 enum LinkTarget {
     Local(String),
-    External(String),
+    Library(String),
 }
 
 impl<'t> Walk<'t> {
@@ -473,7 +543,14 @@ impl Walk<'_> {
                         name,
                         at,
                     };
-                    self.reference(value, &site, many, target, path, &holder);
+                    self.reference(
+                        value,
+                        &site,
+                        many,
+                        target,
+                        path,
+                        sirius_id.unwrap_or(&holder),
+                    );
                 }
                 // Offline batches cannot predict a node's creation identities.
                 Some(MergeRule::IdentityReference { .. }) => self.fail(
@@ -725,6 +802,10 @@ impl Walk<'_> {
         path: &[Step],
         holder: &str,
     ) {
+        let identity = matches!(
+            self.table.feature(site.class, site.name),
+            Some((_, Some(MergeRule::IdentityReference { .. })))
+        );
         let values = values_of(value);
         if !many && values.len() > 1 {
             self.fail(
@@ -772,17 +853,19 @@ impl Walk<'_> {
                         feature: site.name.to_string(),
                         value: source.to_string(),
                     });
+                    // An absent document target cannot become a served identity.
+                    // Only the two library grammars may be linked verbatim.
+                    if identity && !is_library_reference(source) {
+                        continue;
+                    }
                     source.to_string()
                 }
             };
-            if matches!(
-                self.table.feature(site.class, site.name),
-                Some((_, Some(MergeRule::IdentityReference { .. })))
-            ) {
+            if identity {
                 let target = if self.ids.contains_key(source) {
                     LinkTarget::Local(written)
                 } else {
-                    LinkTarget::External(written)
+                    LinkTarget::Library(written)
                 };
                 self.links
                     .as_mut()

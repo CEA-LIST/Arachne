@@ -64,7 +64,7 @@ pub fn import(descriptor: &Value, project: &Value, node: &str, model: &str) -> R
             .map(|link| {
                 let target = match &link.target {
                     LinkTarget::Local(id) => observed.by_attribute[id].clone(),
-                    LinkTarget::External(value) => value.clone(),
+                    LinkTarget::Library(value) => value.clone(),
                 };
                 walk.operation(
                     &link.path,
@@ -292,10 +292,12 @@ fn reference_values(
                     .get(element_id)
                     .ok_or_else(|| anyhow!("no served identity for {element_id}"))?,
                 Some((element_id, _)) => element_id,
+                None if identity && !is_library_reference(text) => return Ok(None),
                 None => text,
             };
-            Ok(json!(target))
+            Ok(Some(json!(target)))
         })
+        .filter_map(Result::transpose)
         .collect()
 }
 
