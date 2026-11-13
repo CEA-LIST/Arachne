@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use std::fs;
 
 use proc_macro2::TokenStream;
@@ -101,7 +116,7 @@ fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -
             Ok(format!("{{ path = {}{options} }}", toml_string(path)))
         } else {
             Ok(format!(
-                "{{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.8.2\"{options} }}"
+                "{{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.8.3\"{options} }}"
             ))
         }
     };
@@ -152,7 +167,7 @@ fn toml_string(value: &str) -> String {
     escaped
 }
 
-fn render_arachne_xmi_cargo_toml() -> &'static str {
+const fn render_arachne_xmi_cargo_toml() -> &'static str {
     "[package]\n\
     name = \"arachne-xmi\"\n\
     version = \"0.1.0\"\n\

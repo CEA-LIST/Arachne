@@ -82,7 +82,7 @@ impl<'a> ReadAsEcoreGenerator<'a> {
             .to_string()
     }
 
-    fn has_references(&self) -> bool {
+    const fn has_references(&self) -> bool {
         self.ref_analysis.has_references()
     }
 

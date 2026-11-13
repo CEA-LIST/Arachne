@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use arachne_codegen::{EcoreParser, generate_from_parser};
 
 fn model(feature: &str, helpers: &str, transparent: bool) -> String {
@@ -76,7 +91,7 @@ fn optional_transparent_attributes_and_containments_use_optional_commands() {
         let helpers = r#"<eClassifiers xsi:type="ecore:EClass" name="Node"/>"#;
         let (classifiers, _) = modules(&model(&feature, helpers, true)).unwrap();
         assert!(
-            classifiers.contains("typeBaseOwner=moirai_crdt::option::Optional<"),
+            classifiers.contains("typeBaseOwner=moirai_crdt::option::update::OptionUpdate<"),
             "{classifiers}"
         );
     }

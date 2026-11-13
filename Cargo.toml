@@ -1,14 +1,15 @@
 [workspace]
 resolver = "3"
 members = ["arachne-codegen", "arachne-cli", "arachne-parser", "arachne-xmi"]
+description = "Arachne: a code generator that translates Ecore's metamodel-based Domain-Specific Languages (DSL) into a composition of Conflict-free Replicated Data Types (CRDT)."
+readme = "README.md"
 
 [workspace.package]
+version = "0.3.3"
 license = "Apache-2.0"
 authors = ["Léo Olivier <leo.olivier@cea.fr>"]
 repository = "https://github.com/CEA-LIST/Arachne.git"
 homepage = "https://github.com/CEA-LIST/Arachne"
-description = "Arachne: a code generator that translates Ecore's metamodel-based Domain-Specific Languages (DSL) into a composition of Conflict-free Replicated Data Types (CRDT)."
-readme = "README.md"
 keywords = [
     "crdt",
     "conflict-free replicated data type",

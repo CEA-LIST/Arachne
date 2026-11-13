@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -16,7 +31,7 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Optional generated project name (Cargo package name)
     pub project_name: Option<String>,
-    /// Local Moirai workspace to use instead of the pinned Git revision.
+    ///  Local Moirai workspace to use instead of the pinned Git revision.
     pub moirai_path: Option<PathBuf>,
     /// Format output code
     pub format_code: Formatting,
@@ -52,7 +67,7 @@ impl Config {
         self
     }
 
-    pub fn with_formatting(mut self, formatting: Formatting) -> Self {
+    pub const fn with_formatting(mut self, formatting: Formatting) -> Self {
         self.format_code = formatting;
         self
     }

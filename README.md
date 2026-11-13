@@ -63,7 +63,7 @@ You can programmatically create one or several replicas of a generated CRDT, and
 // Create two replicas of the generated CRDT, each with a unique identifier and a list of replicas it can communicate with.
 use moirai_protocol::{
     broadcast::tcsb::Tcsb,
-    crdt::query::Read,
+    data_type::query::Read,
     replica::{IsReplica, Replica},
 };
 
@@ -182,6 +182,18 @@ cargo check --manifest-path generated/behavior-tree/Cargo.toml
 cargo check --manifest-path generated/json/Cargo.toml
 ```
 
+Generated projects target Moirai `v0.8.3`. When preparing that release locally,
+add `--moirai-path ../moirai` to the generation commands. The Moirai tag must
+include the updated record macro before the Arachne release is published.
+Run the complete example build and replication/XMI checks with:
+
+```sh
+python3 examples/verify_generated.py --moirai-path ../moirai
+```
+
+This checks default, minimal, and all feature configurations. Omit
+`--moirai-path` after publishing the Moirai tag to verify the pinned dependency.
+
 ## ModelSet coverage
 
 Download and extract
@@ -241,5 +253,7 @@ Reference results are available in the
 
 ## License
 
-Arachne is distributed under the Apache License 2.0. See
-[`LICENSE`](./LICENSE).
+Arachne code is distributed under the Apache License 2.0. See
+[`LICENSE`](./LICENSE). The `arachne-parser` crate also contains code from
+OCamlPro’s `ecore.rs` under LGPL-3.0-or-later; see its
+[license and attribution details](./arachne-parser/README.md#origin-license-and-contributors).

@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use ecore_rs::repr::{Structural, idx};
 use proc_macro2::TokenStream;
 
@@ -21,7 +36,7 @@ pub struct ContainmentGenerator<'a> {
 }
 
 impl<'a> ContainmentGenerator<'a> {
-    pub fn new(
+    pub const fn new(
         reference: &'a Structural,
         source_class: idx::Class,
         ctx: &'a ModelIndex<'a>,

@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 //! Generates visitors for EClasses and their polymorphic Union CRDTs.
 
 use ecore_rs::repr::{Class, Structural, structural};
@@ -70,7 +85,7 @@ impl ReadAsEcoreGenerator<'_> {
             match field.kind {
                 structural::Typ::EAttribute => {
                     let collect =
-                        self.attribute_collect_from_log(field, log.clone(), quote! { &mut attrs })?;
+                        self.attribute_collect_from_log(field, log, quote! { &mut attrs })?;
                     (quote! { #collect }, quote! {})
                 }
                 structural::Typ::EReference => (

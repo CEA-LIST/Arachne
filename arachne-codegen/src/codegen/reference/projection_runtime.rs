@@ -1,8 +1,26 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use moirai_protocol::{
     clock::{causal_frontier::CausalFrontier, version_vector::Version},
-    crdt::{eval::EvalNested, query::QueryOperation},
+    data_type::query::QueryOperation,
     event::Event,
-    state::{effect_context::EffectContext, log::IsLog},
+    state::{
+        effect_context::EffectContext,
+        log::{EvalNested, IsLog},
+    },
 };
 
 /// Preserves the identity of an EClass whose record was projected away.
@@ -29,22 +47,22 @@ impl<L: IsLog, const C: usize, const F: usize> std::ops::Deref for ProjectedLog<
 
 impl<L: IsLog, const C: usize, const F: usize> IsLog for ProjectedLog<L, C, F> {
     type Command = L::Command;
-    type Op = L::Op;
+    type Update = L::Update;
     type Rejection = L::Rejection;
 
     fn new() -> Self {
         Self(L::new())
     }
 
-    fn prepare(&self, command: Self::Command) -> Self::Op {
+    fn prepare(&self, command: Self::Command) -> Self::Update {
         self.0.prepare(command)
     }
 
-    fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
+    fn is_enabled(&self, op: &Self::Update) -> Result<(), Self::Rejection> {
         self.0.is_enabled(op)
     }
 
-    fn effect(&mut self, event: Event<Self::Op>, ctx: &mut EffectContext<'_>) {
+    fn effect(&mut self, event: Event<Self::Update>, ctx: &mut EffectContext<'_>) {
         let (kind, field) = super::projection_metadata(C, F);
         if self.0.is_default() {
             ctx.create_typed(kind);

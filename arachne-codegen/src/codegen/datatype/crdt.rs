@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 pub trait Named {
     fn name(&self) -> &str;
 }
@@ -11,8 +26,8 @@ pub enum Crdt {
 impl Named for Crdt {
     fn name(&self) -> &str {
         match self {
-            Crdt::Simple(simple) => simple.name(),
-            Crdt::Nested(nested) => nested.name(),
+            Self::Simple(simple) => simple.name(),
+            Self::Nested(nested) => nested.name(),
         }
     }
 }
@@ -26,8 +41,8 @@ pub enum SimpleCrdt {
 impl Named for SimpleCrdt {
     fn name(&self) -> &str {
         match self {
-            SimpleCrdt::Primitive(primitive) => primitive.name(),
-            SimpleCrdt::Collection(collection) => collection.name(),
+            Self::Primitive(primitive) => primitive.name(),
+            Self::Collection(collection) => collection.name(),
         }
     }
 }
@@ -43,10 +58,10 @@ pub enum Primitive {
 impl Named for Primitive {
     fn name(&self) -> &str {
         match self {
-            Primitive::Counter(counter) => counter.name(),
-            Primitive::Flag(flag) => flag.name(),
-            Primitive::Register(register) => register.name(),
-            Primitive::List => "List",
+            Self::Counter(counter) => counter.name(),
+            Self::Flag(flag) => flag.name(),
+            Self::Register(register) => register.name(),
+            Self::List => "List",
         }
     }
 }
@@ -61,9 +76,9 @@ pub enum Collection {
 impl Named for Collection {
     fn name(&self) -> &str {
         match self {
-            Collection::Set(set) => set.name(),
-            Collection::Graph(graph) => graph.name(),
-            Collection::Bag(bag) => bag.name(),
+            Self::Set(set) => set.name(),
+            Self::Graph(graph) => graph.name(),
+            Self::Bag(bag) => bag.name(),
         }
     }
 }
@@ -77,7 +92,7 @@ pub enum Counter {
 impl Named for Counter {
     fn name(&self) -> &str {
         match self {
-            Counter::ResettableCounter => "Counter",
+            Self::ResettableCounter => "Counter",
         }
     }
 }
@@ -92,8 +107,8 @@ pub enum Flag {
 impl Named for Flag {
     fn name(&self) -> &str {
         match self {
-            Flag::EWFlag => "EWFlag",
-            Flag::DWFlag => "DWFlag",
+            Self::EWFlag => "EWFlag",
+            Self::DWFlag => "DWFlag",
         }
     }
 }
@@ -107,7 +122,7 @@ pub enum Bag {
 impl Named for Bag {
     fn name(&self) -> &str {
         match self {
-            Bag::AWBag => "AWBagLog",
+            Self::AWBag => "AWBagLog",
         }
     }
 }
@@ -121,7 +136,7 @@ pub enum Graph {
 impl Named for Graph {
     fn name(&self) -> &str {
         match self {
-            Graph::AWMultigraph => "Graph",
+            Self::AWMultigraph => "Graph",
         }
     }
 }
@@ -135,7 +150,7 @@ pub enum Map {
 impl Named for Map {
     fn name(&self) -> &str {
         match self {
-            Map::UWMap => "UWMap",
+            Self::UWMap => "UWMap",
         }
     }
 }
@@ -153,11 +168,11 @@ pub enum Register {
 impl Named for Register {
     fn name(&self) -> &str {
         match self {
-            Register::MultiValue => "MVRegister",
-            Register::LastWriterWins => "LwwRegister",
-            Register::Fair => "FairRegister",
-            Register::PartiallyOrdered => "PORegister",
-            Register::TotallyOrdered => "TORegister",
+            Self::MultiValue => "MVRegister",
+            Self::LastWriterWins => "LwwRegister",
+            Self::Fair => "FairRegister",
+            Self::PartiallyOrdered => "PORegister",
+            Self::TotallyOrdered => "TORegister",
         }
     }
 }
@@ -172,8 +187,8 @@ pub enum Set {
 impl Named for Set {
     fn name(&self) -> &str {
         match self {
-            Set::AWSet => "AWSet",
-            Set::RWSet => "RWSet",
+            Self::AWSet => "AWSet",
+            Self::RWSet => "RWSet",
         }
     }
 }
@@ -189,10 +204,10 @@ pub enum NestedCrdt {
 impl Named for NestedCrdt {
     fn name(&self) -> &str {
         match self {
-            NestedCrdt::Map(map) => map.name(),
-            NestedCrdt::List => "List",
-            NestedCrdt::Graph => "Graph",
-            NestedCrdt::Optional => "Optional",
+            Self::Map(map) => map.name(),
+            Self::List => "List",
+            Self::Graph => "Graph",
+            Self::Optional => "Optional",
         }
     }
 }

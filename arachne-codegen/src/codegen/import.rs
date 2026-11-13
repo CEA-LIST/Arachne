@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -23,28 +38,28 @@ pub enum Import {
 impl Import {
     pub fn path(&self) -> String {
         match self {
-            Import::Log(log) => log.path(),
-            Import::Crdt(crdt) => crdt.path(),
-            Import::Macros(macros) => macros.path(),
-            Import::Protocol(protocol) => protocol.path(),
-            Import::Custom(path) => path.to_string(),
-            Import::CrdtOp(op) => op.path(),
+            Self::Log(log) => log.path(),
+            Self::Crdt(crdt) => crdt.path(),
+            Self::Macros(macros) => macros.path(),
+            Self::Protocol(protocol) => protocol.path(),
+            Self::Custom(path) => path.to_string(),
+            Self::CrdtOp(op) => op.path(),
         }
     }
 
     pub fn to_use_statement(&self) -> TokenStream {
         match self {
-            Import::Log(log) => log.to_use_statement(),
-            Import::Crdt(crdt) => crdt.to_use_statement(),
-            Import::Macros(macros) => macros.to_use_statement(),
-            Import::Protocol(protocol) => protocol.to_use_statement(),
-            Import::Custom(path) => {
+            Self::Log(log) => log.to_use_statement(),
+            Self::Crdt(crdt) => crdt.to_use_statement(),
+            Self::Macros(macros) => macros.to_use_statement(),
+            Self::Protocol(protocol) => protocol.to_use_statement(),
+            Self::Custom(path) => {
                 let path_tokens: TokenStream = path.parse().unwrap();
                 quote! {
                     pub use #path_tokens;
                 }
             }
-            Import::CrdtOp(op) => op.to_use_statement(),
+            Self::CrdtOp(op) => op.to_use_statement(),
         }
     }
 }
@@ -63,11 +78,11 @@ trait ToUseStatement {
 impl ToUseStatement for Crdt {
     fn path(&self) -> String {
         match self {
-            Crdt::Simple(crdt) => match crdt {
+            Self::Simple(crdt) => match crdt {
                 SimpleCrdt::Primitive(primitive) => match primitive {
                     Primitive::Counter(counter) => match counter {
                         Counter::ResettableCounter => {
-                            format!("{}::counter::resettable_counter::Counter", CRDT_PREFIX)
+                            format!("{}::counter::Counter", CRDT_PREFIX)
                         }
                     },
                     Primitive::Flag(flag) => match flag {
@@ -108,7 +123,7 @@ impl ToUseStatement for Crdt {
                     },
                 },
             },
-            Crdt::Nested(crdt) => match crdt {
+            Self::Nested(crdt) => match crdt {
                 NestedCrdt::Map(map) => match map {
                     Map::UWMap => format!("{}::map::uw_map::UWMapLog", CRDT_PREFIX),
                 },
@@ -130,9 +145,9 @@ pub enum Log {
 impl ToUseStatement for Log {
     fn path(&self) -> String {
         match self {
-            Log::Vec => format!("{}::state::po_log::VecLog", PROTOCOL_PREFIX),
-            Log::Graph => format!("{}::state::graph_log::GraphLog", PROTOCOL_PREFIX),
-            Log::PartiallyOrdered => format!("{}::state::po_log::POLog", PROTOCOL_PREFIX),
+            Self::Vec => format!("{}::state::po_log::VecLog", PROTOCOL_PREFIX),
+            Self::Graph => format!("{}::state::po_log::GraphLog", PROTOCOL_PREFIX),
+            Self::PartiallyOrdered => format!("{}::state::po_log::POLog", PROTOCOL_PREFIX),
         }
     }
 }
@@ -147,9 +162,9 @@ pub enum Macros {
 impl ToUseStatement for Macros {
     fn path(&self) -> String {
         match self {
-            Macros::Record => format!("{}::record", MACROS_PREFIX),
-            Macros::Union => format!("{}::union", MACROS_PREFIX),
-            Macros::TypedGraph => format!("{}::typed_graph", MACROS_PREFIX),
+            Self::Record => format!("{}::record", MACROS_PREFIX),
+            Self::Union => format!("{}::union", MACROS_PREFIX),
+            Self::TypedGraph => format!("{}::typed_graph", MACROS_PREFIX),
         }
     }
 }
@@ -180,42 +195,44 @@ pub enum Protocol {
 impl ToUseStatement for Protocol {
     fn path(&self) -> String {
         match self {
-            Protocol::EventId => format!("{}::event::id::EventId", PROTOCOL_PREFIX),
-            Protocol::Read => format!("{}::crdt::query::Read", PROTOCOL_PREFIX),
-            Protocol::EvalNested => {
-                format!("{}::crdt::eval::EvalNested", PROTOCOL_PREFIX)
+            Self::EventId => format!("{}::event::id::EventId", PROTOCOL_PREFIX),
+            Self::Read => format!("{}::data_type::query::Read", PROTOCOL_PREFIX),
+            Self::EvalNested => {
+                format!("{}::state::log::EvalNested", PROTOCOL_PREFIX)
             }
-            Protocol::IsLog => format!("{}::state::log::IsLog", PROTOCOL_PREFIX),
-            Protocol::Version => format!("{}::clock::version_vector::Version", PROTOCOL_PREFIX),
-            Protocol::Frontier => format!(
+            Self::IsLog => format!("{}::state::log::IsLog", PROTOCOL_PREFIX),
+            Self::Version => format!("{}::clock::version_vector::Version", PROTOCOL_PREFIX),
+            Self::Frontier => format!(
                 "{}::clock::causal_frontier::CausalFrontier",
                 PROTOCOL_PREFIX
             ),
-            Protocol::ReplicaIdx => format!("{}::replica::ReplicaIdx", PROTOCOL_PREFIX),
-            Protocol::LwwPolicy => {
-                format!("{}::crdt::policy::LwwPolicy", PROTOCOL_PREFIX)
+            Self::ReplicaIdx => format!("{}::replica::ReplicaIdx", PROTOCOL_PREFIX),
+            Self::LwwPolicy => {
+                format!("{}::data_type::policy::LwwPolicy", PROTOCOL_PREFIX)
             }
-            Protocol::FairPolicy => {
-                format!("{}::crdt::policy::FairPolicy", PROTOCOL_PREFIX)
+            Self::FairPolicy => {
+                format!("{}::data_type::policy::FairPolicy", PROTOCOL_PREFIX)
             }
-            Protocol::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
-            Protocol::QueryOperation => format!("{}::crdt::query::QueryOperation", PROTOCOL_PREFIX),
-            Protocol::ReplicatedDataType => format!(
-                "{}::crdt::replicated_data_type::ReplicatedDataType",
+            Self::Event => format!("{}::event::Event", PROTOCOL_PREFIX),
+            Self::QueryOperation => {
+                format!("{}::data_type::query::QueryOperation", PROTOCOL_PREFIX)
+            }
+            Self::ReplicatedDataType => format!(
+                "{}::data_type::replicated::ReplicatedDataType",
                 PROTOCOL_PREFIX
             ),
-            Protocol::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
-            Protocol::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
-            Protocol::EffectContext => {
+            Self::SinkCollector => format!("{}::state::sink::SinkCollector", PROTOCOL_PREFIX),
+            Self::SinkEffect => format!("{}::state::sink::SinkEffect", PROTOCOL_PREFIX),
+            Self::EffectContext => {
                 format!("{}::state::effect_context::EffectContext", PROTOCOL_PREFIX)
             }
-            Protocol::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
-            Protocol::PathSegment => format!(
+            Self::Sink => format!("{}::state::sink::Sink", PROTOCOL_PREFIX),
+            Self::PathSegment => format!(
                 "{}::state::object_path::PathSegment::{{Field, ListElement, MapEntry, Variant}}",
                 PROTOCOL_PREFIX
             ),
-            Protocol::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
-            Protocol::Policy => format!("{}::crdt::policy::Policy", PROTOCOL_PREFIX),
+            Self::ObjectPath => format!("{}::state::object_path::ObjectPath", PROTOCOL_PREFIX),
+            Self::Policy => format!("{}::data_type::policy::Policy", PROTOCOL_PREFIX),
         }
     }
 }
@@ -234,9 +251,9 @@ pub enum NestedCrdtOp {
 impl ToUseStatement for CrdtOp {
     fn path(&self) -> String {
         match self {
-            CrdtOp::Nested(nested_op) => match nested_op {
-                NestedCrdtOp::ListOp => format!("{}::list::nested_list::NestedList", CRDT_PREFIX),
-                NestedCrdtOp::MapOp => format!("{}::map::uw_map::UWMap", CRDT_PREFIX),
+            Self::Nested(nested_op) => match nested_op {
+                NestedCrdtOp::ListOp => format!("{}::list::update::NestedListUpdate", CRDT_PREFIX),
+                NestedCrdtOp::MapOp => format!("{}::map::update::MapUpdate", CRDT_PREFIX),
             },
         }
     }

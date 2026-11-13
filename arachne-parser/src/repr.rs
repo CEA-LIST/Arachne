@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Original implementation: Red Iron Team (OCamlPro), Arthur Carcano.
+//  Upstream code is licensed under LGPL-3.0-or-later.
+//
+//  Modifications Copyright (c) 2025, 2026 CEA LIST.
+//  CEA modifications are made available under the Apache License, Version 2.0.
+//
+//  SPDX-License-Identifier: LGPL-3.0-or-later AND Apache-2.0
+//
+//  Contributors:
+//  Red Iron Team (OCamlPro), Arthur Carcano - Original ecore.rs implementation
+//  Léo Olivier (CEA LIST) - Arachne adaptations and extensions
+//
+/////////////////////////////////////////////////////////////////////////////
+
 prelude! {}
 
 pub mod bounds;
@@ -53,7 +68,7 @@ impl Annot {
     pub fn source(&self) -> &str {
         &self.source
     }
-    pub fn details(&self) -> &HashMap<annot::Key, annot::Val> {
+    pub const fn details(&self) -> &HashMap<annot::Key, annot::Val> {
         &self.details
     }
     /// Decoded `references` of the annotation, in document order.
@@ -286,28 +301,34 @@ impl Param {
         self.ordered = Some(ordered);
     }
 
-    pub fn set_unique(&mut self, unique: bool) {
+    pub const fn set_unique(&mut self, unique: bool) {
         self.unique = Some(unique);
     }
 
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn bounds(&self) -> &Bounds {
+
+    pub const fn bounds(&self) -> &Bounds {
         &self.bounds
     }
-    pub fn typ(&self) -> Option<idx::Class> {
+
+    pub const fn typ(&self) -> Option<idx::Class> {
         self.typ
     }
-    pub fn ordered(&self) -> Option<bool> {
+
+    pub const fn ordered(&self) -> Option<bool> {
         self.ordered
     }
+
     pub fn unique(&self) -> Option<bool> {
         self.unique
     }
+
     pub fn is_ordered(&self) -> bool {
         self.ordered.unwrap_or(true)
     }
+
     pub fn is_unique(&self) -> bool {
         self.unique.unwrap_or(true)
     }
@@ -352,7 +373,7 @@ impl Operation {
     pub fn add_annotation(&mut self, annot: Annot) {
         self.annotations.push(annot)
     }
-    pub fn set_ordered(&mut self, ordered: bool) {
+    pub const fn set_ordered(&mut self, ordered: bool) {
         self.ordered = Some(ordered);
     }
     pub fn set_unique(&mut self, unique: bool) {
@@ -362,7 +383,7 @@ impl Operation {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn typ(&self) -> Option<idx::Class> {
+    pub const fn typ(&self) -> Option<idx::Class> {
         self.typ
     }
     pub fn bounds(&self) -> &Bounds {
@@ -380,7 +401,7 @@ impl Operation {
     pub fn is_unique(&self) -> bool {
         self.unique.unwrap_or(true)
     }
-    pub fn parameters(&self) -> &Params {
+    pub const fn parameters(&self) -> &Params {
         &self.parameters
     }
     pub fn annotations(&self) -> &Annots {
@@ -476,70 +497,77 @@ impl Class {
     }
 
     #[inline]
-    pub fn is_concrete(&self) -> bool {
+    pub const fn is_concrete(&self) -> bool {
         self.concrete
     }
+
     #[inline]
-    pub fn is_interface(&self) -> bool {
+    pub const fn is_interface(&self) -> bool {
         self.is_interface
     }
+
     #[inline]
-    pub fn is_abstract(&self) -> bool {
+    pub const fn is_abstract(&self) -> bool {
         !self.is_concrete()
     }
+
     #[inline]
     pub fn name(&self) -> &str {
         &self.name
     }
+
     #[inline]
     pub fn inst_name(&self) -> Option<&str> {
         self.inst_name.as_deref()
     }
+
     #[inline]
     pub fn instance_class_name(&self) -> Option<&str> {
         self.instance_class_name.as_deref()
     }
+
     pub fn set_instance_class_name(&mut self, instance_class_name: impl Into<String>) {
         self.instance_class_name = Some(instance_class_name.into())
     }
+
     #[inline]
-    pub fn is_enum(&self) -> bool {
+    pub const fn is_enum(&self) -> bool {
         !self.literals.is_empty()
     }
 
-    pub fn annotations(&self) -> &Annots {
+    pub const fn annotations(&self) -> &Annots {
         &self.annotations
     }
     pub fn add_annotation(&mut self, annot: Annot) {
         self.annotations.push(annot)
     }
 
-    pub fn literals(&self) -> &ELits {
+    pub const fn literals(&self) -> &ELits {
         &self.literals
     }
     pub fn add_literal(&mut self, lit: ELit) {
         self.literals.push(lit)
     }
 
-    pub fn operations(&self) -> &Operations {
+    pub const fn operations(&self) -> &Operations {
         &self.operations
     }
     pub fn add_operation(&mut self, op: Operation) {
         self.operations.push(op)
     }
 
-    pub fn typ(&self) -> &String {
+    pub const fn typ(&self) -> &String {
         &self.typ
     }
 
-    pub fn sup(&self) -> &BTreeSet<idx::Class> {
+    pub const fn sup(&self) -> &BTreeSet<idx::Class> {
         &self.sup
     }
     pub fn add_sup(&mut self, sup: idx::Class) -> bool {
         self.sup.insert(sup)
     }
 
-    pub fn sub(&self) -> &BTreeSet<idx::Class> {
+    pub const fn sub(&self) -> &BTreeSet<idx::Class> {
         &self.sub
     }
     pub fn add_sub(&mut self, sub: idx::Class) -> bool {
@@ -588,7 +616,7 @@ impl Pack {
     }
 
     /// A package is empty if it has nothing but an index, a name, and optionnaly a `sup`.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.sub.is_empty() && self.classes.is_empty() && self.annotations.is_empty()
     }
 
@@ -596,29 +624,34 @@ impl Pack {
         Path::of_idx(ctx, self.idx)
     }
 
-    pub fn annotations(&self) -> &Annots {
+    pub const fn annotations(&self) -> &Annots {
         &self.annotations
     }
+
     pub fn add_annotation(&mut self, annot: Annot) {
         self.annotations.push(annot)
     }
 
-    pub fn sup(&self) -> Option<idx::Pack> {
+    pub const fn sup(&self) -> Option<idx::Pack> {
         self.sup
     }
-    pub fn set_sup(&mut self, sup: idx::Pack) -> Option<idx::Pack> {
+
+    pub const fn set_sup(&mut self, sup: idx::Pack) -> Option<idx::Pack> {
         self.sup.replace(sup)
     }
+
     pub fn has_sup(&mut self, sup: idx::Pack) -> bool {
         self.sup == Some(sup)
     }
 
-    pub fn sub(&self) -> &BTreeSet<idx::Pack> {
+    pub const fn sub(&self) -> &BTreeSet<idx::Pack> {
         &self.sub
     }
+
     pub fn add_sub(&mut self, sub: idx::Pack) -> bool {
         self.sub.insert(sub)
     }
+
     pub fn has_sub(&self, sub: idx::Pack) -> bool {
         self.sub.contains(&sub)
     }
@@ -630,6 +663,7 @@ impl Pack {
     pub fn ns_uri(&self) -> Option<&str> {
         self.ns_uri.as_deref()
     }
+
     pub fn set_ns_uri(&mut self, ns_uri: impl Into<String>) {
         self.ns_uri = Some(ns_uri.into());
     }
@@ -637,13 +671,15 @@ impl Pack {
     pub fn ns_prefix(&self) -> Option<&str> {
         self.ns_prefix.as_deref()
     }
+
     pub fn set_ns_prefix(&mut self, ns_prefix: impl Into<String>) {
         self.ns_prefix = Some(ns_prefix.into());
     }
 
-    pub fn classes(&self) -> &BTreeSet<idx::Class> {
+    pub const fn classes(&self) -> &BTreeSet<idx::Class> {
         &self.classes
     }
+
     pub fn classes_insert(&mut self, idx: idx::Class) -> bool {
         self.classes.insert(idx)
     }

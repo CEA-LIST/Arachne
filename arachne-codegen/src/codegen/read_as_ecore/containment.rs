@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 //! Generates traversal of containment features, including lists and UW maps.
 
 use ecore_rs::repr::{Class, Structural, idx, structural};
@@ -46,10 +61,8 @@ impl ReadAsEcoreGenerator<'_> {
 
         if self.union_is_generated(target_class) {
             let visitor = self.union_visitor_ident(target_class);
-            let element = match element_name {
-                Some(name) => quote! { Some(#name) },
-                None => quote! { None },
-            };
+            let element =
+                element_name.map_or_else(|| quote! { None }, |name| quote! { Some(#name) });
             quote! {
                 #visitor(#writer, #element, #path_expr, #log_expr, #refs_arg);
             }

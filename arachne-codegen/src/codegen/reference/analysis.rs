@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use std::collections::BTreeSet;
 
 use ecore_rs::{prelude::idx, repr::structural};
@@ -21,7 +36,7 @@ pub struct NonContainmentRef {
     pub target_class: idx::Class,
     /// The name of the reference (e.g., "entry").
     pub reference_name: String,
-    /// Lower bound of the reference cardinality.
+    ///  Lower bound of the reference cardinality.
     pub lower_bound: usize,
     /// Upper bound of the reference cardinality (None = unbounded).
     pub upper_bound: Option<usize>,
@@ -42,7 +57,7 @@ pub struct ReferenceAnalysis {
 }
 
 impl ReferenceAnalysis {
-    pub fn has_references(&self) -> bool {
+    pub const fn has_references(&self) -> bool {
         !self.refs.is_empty()
     }
 

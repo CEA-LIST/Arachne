@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 pub mod codegen;
 pub mod config;
 pub mod error;
@@ -120,8 +135,8 @@ pub fn generate_with_report(config: Config) -> anyhow::Result<GenerationReport> 
     )?;
 
     Ok(GenerationReport {
-        input_path: config.input_path.clone(),
-        output_dir: config.output_dir.clone(),
+        input_path: config.input_path,
+        output_dir: config.output_dir,
         project_name,
         package_name: pack.name().to_string(),
         class_count: generated_class_count,
@@ -431,7 +446,7 @@ mod tests {
 
         assert!(!classifiers.contains("BoxedLog"));
         assert!(classifiers.contains(
-            "Select{union:moirai_crdt::option::Optional<Box<Union>>,__classifiers::OptionLog<Box<UnionLog>>=>Option<Box<UnionValue>>,}"
+            "Select{union:moirai_crdt::option::update::OptionUpdate<Box<Union>>,__classifiers::OptionLog<Box<UnionLog>>=>Option<Box<UnionValue>>,}"
         ));
         assert!(classifiers.contains("OptionLog<Box<UnionLog>>"));
     }
@@ -463,10 +478,10 @@ mod tests {
         let (classifiers, _references) = generate_modules_from_str(ecore);
 
         assert!(classifiers.contains(
-            "left_side:moirai_crdt::option::Optional<Box<TerminalExpression>>,__classifiers::OptionLog<Box<TerminalExpressionLog>>"
+            "left_side:moirai_crdt::option::update::OptionUpdate<Box<TerminalExpression>>,__classifiers::OptionLog<Box<TerminalExpressionLog>>"
         ));
         assert!(classifiers.contains(
-            "right_side:moirai_crdt::list::nested_list::NestedList<Box<TerminalExpression>>,__classifiers::NestedListLog<TerminalExpressionLog>=>Vec<TerminalExpressionValue>"
+            "right_side:moirai_crdt::list::update::NestedListUpdate<Box<TerminalExpression>>,__classifiers::NestedListLog<TerminalExpressionLog>=>Vec<TerminalExpressionValue>"
         ));
         assert!(classifiers.contains("every_expression:__classifiers::OptionLog<FollowByLog>"));
     }
@@ -599,7 +614,7 @@ mod tests {
 
         assert!(package.contains("pubusemoirai_protocol::event::EventasProtocolEvent;"));
         assert!(package.contains("Event(crate::classifiers::Event)"));
-        assert!(package.contains("event:__package::ProtocolEvent<Self::Op>"));
+        assert!(package.contains("event:__package::ProtocolEvent<Self::Update>"));
         assert!(package.contains("__package::ProtocolEvent::unfold(event.clone(),o)"));
         assert!(!package.contains("Event(__package::Event)"));
     }
@@ -609,8 +624,8 @@ mod tests {
         let package = generate_package_from_file("../examples/class_hierarchy.ecore");
 
         assert!(package.contains("typeCommand=ClassHierarchy;"));
-        assert!(package.contains("typeOp=ClassHierarchy;"));
-        assert!(package.contains("fnprepare(&self,command:Self::Command)->Self::Op{command}"));
+        assert!(package.contains("typeUpdate=ClassHierarchy;"));
+        assert!(package.contains("fnprepare(&self,command:Self::Command)->Self::Update{command}"));
         assert!(package.contains("_q:&__package::Read<ClassHierarchyValue>"));
         assert!(!package.contains("typeValue="));
         assert!(!package.contains("InternalizeOp"));

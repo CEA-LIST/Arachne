@@ -26,7 +26,7 @@ pub struct ReferenceGenerator<'a> {
 }
 
 impl<'a> ReferenceGenerator<'a> {
-    pub fn new(plan: &'a GenerationPlan<'a>) -> Self {
+    pub const fn new(plan: &'a GenerationPlan<'a>) -> Self {
         Self {
             ctx: &plan.model,
             analysis: &plan.references,
@@ -174,13 +174,13 @@ impl<'a> ReferenceGenerator<'a> {
                 }
 
                 let lower = proc_macro2::Literal::usize_unsuffixed(r.lower_bound);
-                let upper_token: TokenStream = match r.upper_bound {
-                    Some(u) => {
+                let upper_token: TokenStream = r.upper_bound.map_or_else(
+                    || quote! { * },
+                    |u| {
                         let lit = proc_macro2::Literal::usize_unsuffixed(u);
                         quote! { #lit }
-                    }
-                    None => quote! { * },
-                };
+                    },
+                );
 
                 Some(quote! {
                     #edge_name [#lower, #upper_token]

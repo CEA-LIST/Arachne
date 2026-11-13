@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Original implementation: Red Iron Team (OCamlPro), Arthur Carcano.
+//  Upstream code is licensed under LGPL-3.0-or-later.
+//
+//  Modifications Copyright (c) 2025, 2026 CEA LIST.
+//  CEA modifications are made available under the Apache License, Version 2.0.
+//
+//  SPDX-License-Identifier: LGPL-3.0-or-later AND Apache-2.0
+//
+//  Contributors:
+//  Red Iron Team (OCamlPro), Arthur Carcano - Original ecore.rs implementation
+//  Léo Olivier (CEA LIST) - Arachne adaptations and extensions
+//
+/////////////////////////////////////////////////////////////////////////////
+
 prelude!(repr::bounds::Bounds);
 use crate::repr::{Annot, Annots};
 
@@ -126,102 +141,127 @@ impl Structural {
     pub fn set_containment(&mut self, flag: bool) {
         self.containment = flag
     }
+
     pub fn try_set_containment(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_containment(flag)
         }
     }
+
     pub fn set_is_id(&mut self, flag: bool) {
         self.is_id = flag
     }
+
     pub fn try_set_is_id(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_is_id(flag)
         }
     }
+
     pub fn set_ordered(&mut self, flag: bool) {
         self.ordered = Some(flag);
     }
+
     pub fn try_set_ordered(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_ordered(flag)
         }
     }
+
     pub fn set_changeable(&mut self, flag: bool) {
         self.changeable = Some(flag);
     }
+
     pub fn try_set_changeable(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_changeable(flag)
         }
     }
+
     pub fn set_volatile(&mut self, flag: bool) {
         self.volatile = Some(flag);
     }
+
     pub fn try_set_volatile(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_volatile(flag)
         }
     }
-    pub fn set_transient(&mut self, flag: bool) {
+
+    pub const fn set_transient(&mut self, flag: bool) {
         self.transient = Some(flag);
     }
+
     pub fn try_set_transient(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_transient(flag)
         }
     }
-    pub fn set_derived(&mut self, flag: bool) {
+
+    pub const fn set_derived(&mut self, flag: bool) {
         self.derived = Some(flag);
     }
+
     pub fn try_set_derived(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_derived(flag)
         }
     }
+
     pub fn set_unique(&mut self, flag: bool) {
         self.unique = Some(flag);
     }
+
     pub fn try_set_unique(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_unique(flag)
         }
     }
+
     pub fn set_unsettable(&mut self, flag: bool) {
         self.unsettable = Some(flag);
     }
+
     pub fn try_set_unsettable(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_unsettable(flag)
         }
     }
+
     pub fn set_resolve_proxies(&mut self, flag: bool) {
         self.resolve_proxies = Some(flag);
     }
+
     pub fn try_set_resolve_proxies(&mut self, flag: Option<bool>) {
         if let Some(flag) = flag {
             self.set_resolve_proxies(flag)
         }
     }
+
     pub fn set_default_value(&mut self, value: impl Into<String>) {
         self.default_value = Some(value.into());
     }
+
     pub fn try_set_default_value(&mut self, value: Option<impl Into<String>>) {
         if let Some(value) = value {
             self.set_default_value(value)
         }
     }
+
     pub fn set_default_value_literal(&mut self, value: impl Into<String>) {
         self.default_value_literal = Some(value.into());
     }
+
     pub fn try_set_default_value_literal(&mut self, value: Option<impl Into<String>>) {
         if let Some(value) = value {
             self.set_default_value_literal(value)
         }
     }
+
     pub fn annotations(&self) -> &Annots {
         &self.annotations
     }
+
     pub fn add_annotation(&mut self, annot: Annot) {
         self.annotations.push(annot)
     }

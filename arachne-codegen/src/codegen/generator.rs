@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
@@ -47,7 +62,7 @@ impl<'a> Generator<'a> {
         let import_path = import.path();
 
         // Only add if not already registered
-        if self.import_set.insert(import_path.clone()) {
+        if self.import_set.insert(import_path) {
             let import_stmt = import.to_use_statement();
             self.imports.push(import_stmt);
         }

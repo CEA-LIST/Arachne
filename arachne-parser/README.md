@@ -3,6 +3,15 @@
 A parser and internal representation for the [Ecore format][ecore] used by the Eclipse Modeling
 Framework (EMF).
 
+## Origin, license and contributors
+
+This crate is a modified fork of [OCamlPro/ecore.rs](https://github.com/OCamlPro/ecore.rs).
+Upstream commit [`bbc6bfe2e7aa5481d2e4e0384116d7a4cbc70f7a`](https://github.com/OCamlPro/ecore.rs/commit/bbc6bfe2e7aa5481d2e4e0384116d7a4cbc70f7a)
+declares `LGPL-3.0-or-later` in its `Cargo.toml`. That license applies to the
+inherited code. CEA modifications are provided under Apache-2.0; these do not
+replace the upstream license. The crate therefore records both sets of terms
+as `LGPL-3.0-or-later AND Apache-2.0`.
+
 ## TODO
 
 - [ ] investigate type parameters for classes

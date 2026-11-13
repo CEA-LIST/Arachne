@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 //! Shared, validated storage decisions for record fields, transparent variants and XMI.
 
 use anyhow::{Context, Result, ensure};
@@ -27,14 +42,14 @@ use crate::codegen::{
     warnings::Warning,
 };
 
-pub(crate) struct FeaturePlan<'a> {
+pub struct FeaturePlan<'a> {
     pub feature: &'a Structural,
     pub bounds: BoundKind,
     pub storage: Storage<'a>,
     pub warnings: Vec<Warning>,
 }
 
-pub(crate) enum Storage<'a> {
+pub enum Storage<'a> {
     Attribute(AttributePlan<'a>),
     Containment {
         target: &'a Class,
@@ -43,13 +58,13 @@ pub(crate) enum Storage<'a> {
     Map(MapPlan<'a>),
 }
 
-pub(crate) struct AttributePlan<'a> {
+pub struct AttributePlan<'a> {
     pub typ: &'a Class,
     pub primitive: Primitive,
     pub collection: AttributeCollection,
 }
 
-pub(crate) enum AttributeCollection {
+pub enum AttributeCollection {
     Scalar,
     NestedList,
     Sequence,
@@ -57,7 +72,7 @@ pub(crate) enum AttributeCollection {
     Set(Set),
 }
 
-pub(crate) struct MapPlan<'a> {
+pub struct MapPlan<'a> {
     pub entry: &'a Class,
     pub key: &'a Structural,
     pub key_type: &'a Class,
@@ -80,7 +95,7 @@ impl MapPlan<'_> {
     }
 }
 
-pub(crate) struct FeatureTypes {
+pub struct FeatureTypes {
     pub payload: TokenStream,
     pub log: TokenStream,
     pub value: TokenStream,
@@ -282,7 +297,7 @@ impl<'a> FeaturePlan<'a> {
                         ],
                     },
                     AttributeCollection::Bag => FeatureTypes {
-                        payload: quote! { moirai_crdt::bag::aw_bag::AWBag<#rust_type> },
+                        payload: quote! { moirai_crdt::bag::update::BagUpdate<#rust_type> },
                         log: quote! { #path::AWBagLog<#rust_type> },
                         value: quote! { rustc_hash::FxHashMap<#rust_type, usize> },
                         imports: vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
@@ -350,13 +365,22 @@ impl<'a> FeaturePlan<'a> {
                 // The value plan has already applied any required operation
                 // box. Maps alone do not justify another Box around the payload.
                 return Ok(FeatureTypes {
-                    payload: quote! { moirai_crdt::map::uw_map::UWMap<#key, #payload> },
+                    payload: quote! { moirai_crdt::map::update::MapUpdate<#key, #payload> },
                     log: quote! { #path::UWMapLog<#key, #log> },
                     value: quote! { rustc_hash::FxHashMap<#key, #value> },
                     imports,
                 });
             }
         };
+
+        // Moirai separates the replicated data type from its update payload.
+        // Transparent union variants must carry updates, just like record fields.
+        if matches!(self.storage, Storage::Attribute(_)) {
+            let log = &types.log;
+            types.payload = quote! {
+                <#log as moirai_protocol::state::log::IsLog>::Update
+            };
+        }
 
         let wraps_many = matches!(
             &self.storage,
@@ -374,7 +398,7 @@ impl<'a> FeaturePlan<'a> {
         } = types;
         types = match self.bounds {
             BoundKind::Optional => FeatureTypes {
-                payload: quote! { moirai_crdt::option::Optional<#payload> },
+                payload: quote! { moirai_crdt::option::update::OptionUpdate<#payload> },
                 log: quote! { #path::OptionLog<#log> },
                 value: quote! { Option<#value> },
                 imports: [
@@ -384,7 +408,7 @@ impl<'a> FeaturePlan<'a> {
                 .concat(),
             },
             BoundKind::Many if wraps_many => FeatureTypes {
-                payload: quote! { moirai_crdt::list::nested_list::NestedList<#payload> },
+                payload: quote! { moirai_crdt::list::update::NestedListUpdate<#payload> },
                 log: quote! { #path::NestedListLog<#log> },
                 value: quote! { Vec<#value> },
                 imports: [imports, vec![Import::Crdt(Crdt::Nested(NestedCrdt::List))]].concat(),
@@ -407,7 +431,7 @@ impl<'a> FeaturePlan<'a> {
             value,
             imports,
         } = self.types(ctx, path, None)?;
-        // The ordinary form derives its operation from L::Op. Only recursive
+        // The ordinary form derives its operation from L::Update. Only recursive
         // fields need the explicit payload form, adapted by record!'s Boxer.
         let field = if self.boxes_operation() {
             quote! { #name: #payload, #log => #value }

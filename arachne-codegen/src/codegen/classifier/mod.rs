@@ -30,11 +30,11 @@ use crate::{
 pub const POLYMORPHIC_KIND_SUFFIX: &str = "Kind";
 pub const INHERITED_FIELD_SUFFIX: &str = "super";
 
-pub fn has_subclasses(class: &Class) -> bool {
+pub const fn has_subclasses(class: &Class) -> bool {
     !class.sub().is_empty()
 }
 
-pub fn is_instantiable_class(class: &Class) -> bool {
+pub const fn is_instantiable_class(class: &Class) -> bool {
     class.is_concrete() && !class.is_interface() && !class.is_enum()
 }
 
@@ -128,7 +128,7 @@ struct TransparentVariantSpec {
 }
 
 impl<'a> ClassGenerator<'a> {
-    pub fn new(
+    pub const fn new(
         class: &'a Class,
         ctx: &'a ModelIndex<'a>,
         cycle_analysis: &'a CycleAnalysis,
@@ -150,12 +150,10 @@ impl<'a> ClassGenerator<'a> {
                         attrs.push(AttributeGenerator::new(f, self.ctx).generate()?);
                     }
                     ecore_rs::repr::structural::Typ::EReference if f.containment => {
-                        let target_is_uninhabited = if let Some(target_idx) = f.typ {
+                        let target_is_uninhabited = f.typ.is_some_and(|target_idx| {
                             let target = &self.ctx.classes()[*target_idx];
                             is_uninhabited_polymorphic_class(self.ctx, target)
-                        } else {
-                            false
-                        };
+                        });
 
                         if !target_is_uninhabited {
                             refs.push(

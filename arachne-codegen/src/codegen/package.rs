@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use ecore_rs::repr::idx;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -84,7 +99,7 @@ impl<'a> PackageGenerator<'a> {
         value_ident_with_suffix(self.root_class_name(root), "log")
     }
 
-    fn has_references(&self) -> bool {
+    const fn has_references(&self) -> bool {
         self.ref_analysis.has_references()
     }
 
@@ -320,11 +335,11 @@ impl<'a> PackageGenerator<'a> {
             quote! {
                 #package_ident::AddReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::AddArc(o.clone()))
+                    .is_enabled(&#path::ReferenceManagerUpdate::AddArc(o.clone()))
                     .map_err(#package_rejection_name::AddReference),
                 #package_ident::RemoveReference(o) => self
                     .reference_manager_log
-                    .is_enabled(&#path::ReferenceManager::RemoveArc(o.clone()))
+                    .is_enabled(&#path::ReferenceManagerUpdate::RemoveArc(o.clone()))
                     .map_err(#package_rejection_name::RemoveReference),
             }
         } else {
@@ -367,14 +382,14 @@ impl<'a> PackageGenerator<'a> {
                         #package_ident::AddReference(o) => {
                             let mut ctx = #path::EffectContext::silent();
                             self.reference_manager_log.effect(
-                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManager::AddArc(o)),
+                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManagerUpdate::AddArc(o)),
                                 &mut ctx
                             );
                         }
                         #package_ident::RemoveReference(o) => {
                             let mut ctx = #path::EffectContext::silent();
                             self.reference_manager_log.effect(
-                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManager::RemoveArc(o)),
+                                #path::ProtocolEvent::unfold(event.clone(), #path::ReferenceManagerUpdate::RemoveArc(o)),
                                 &mut ctx
                             );
                         }
@@ -386,7 +401,7 @@ impl<'a> PackageGenerator<'a> {
                         #path::SinkEffect::Create | #path::SinkEffect::Update => {
                             let vertex_ops = sink.kind()
                                 .and_then(|kind| #path::instance_from_sink_kind(kind, sink.path()))
-                                .map(|instance| #path::ReferenceManager::AddVertex { id: instance });
+                                .map(|instance| #path::ReferenceManagerUpdate::AddVertex { id: instance });
                             if let Some(o) = vertex_ops {
                                 reference_effect_disambiguator += 1;
                                 let mut ctx = #path::EffectContext::silent();
@@ -407,7 +422,7 @@ impl<'a> PackageGenerator<'a> {
                                 #path::ProtocolEvent::unfold_with_disambiguator(
                                     event.clone(),
                                     reference_effect_disambiguator,
-                                    #path::ReferenceManager::DeleteSubtree {
+                                    #path::ReferenceManagerUpdate::DeleteSubtree {
                                         prefix: sink.path().clone(),
                                     }),
                                 &mut ctx
@@ -428,21 +443,21 @@ impl<'a> PackageGenerator<'a> {
         quote! {
             impl #path::IsLog for #package_log_name {
                 type Command = #package_ident;
-                type Op = #package_ident;
+                type Update = #package_ident;
                 type Rejection = #package_rejection_name;
 
-                fn prepare(&self, command: Self::Command) -> Self::Op {
+                fn prepare(&self, command: Self::Command) -> Self::Update {
                     command
                 }
 
-                fn is_enabled(&self, op: &Self::Op) -> Result<(), Self::Rejection> {
+                fn is_enabled(&self, op: &Self::Update) -> Result<(), Self::Rejection> {
                     match op {
                         #(#enabled_root_arms,)*
                         #reference_is_enabled
                     }
                 }
 
-                fn effect(&mut self, event: #path::ProtocolEvent<Self::Op>, _ctx: &mut #path::EffectContext<'_>) {
+                fn effect(&mut self, event: #path::ProtocolEvent<Self::Update>, _ctx: &mut #path::EffectContext<'_>) {
                     #effect
                 }
 

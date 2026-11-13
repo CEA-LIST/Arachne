@@ -1,21 +1,22 @@
 [package]
 name = "ecore_rs"
-version = "0.3.1"
 authors = [
     "Red Iron Team <red-iron@ocamlpro.com>",
+    "Arthur Carcano <arthur.carcano@ocamlpro.com>",
     "Léo Olivier <leo.olivier@cea.fr>",
 ]
 edition = "2021"
 description = "A parser for the Eclipse Modeling Framework Ecore format."
 readme = "README.md"
-license = "Apache-2.0"
+# Upstream code is LGPL-3.0-or-later; CEA modifications are Apache-2.0.
+license = "LGPL-3.0-or-later AND Apache-2.0"
 keywords = ["ecore", "eclipse", "EMF"]
 categories = ["encoding", "parser-implementations"]
+version.workspace = true
 
 [dependencies]
 log = "0.4"
 roxmltree = "0.21.1"
-anyhow = "1.0.104"
 safe_index = "0.10"
 smallvec = "1.16.2"
 

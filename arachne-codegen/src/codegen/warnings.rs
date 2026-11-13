@@ -1,3 +1,18 @@
+/////////////////////////////////////////////////////////////////////////////
+//  Copyright (c) 2025, 2026 CEA LIST.
+//
+//  This program and the accompanying materials
+//  are made available under the terms of the Apache License, Version 2.0
+//  which accompanies this distribution, and is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//  Léo Olivier -  (CEA LIST) - Initial implementation
+//
+/////////////////////////////////////////////////////////////////////////////
+
 use log::warn;
 
 /// Represents unsupported features encountered during code generation
@@ -36,7 +51,7 @@ pub enum Warning {
 
 impl Warning {
     /// Stable diagnostic codes for tools consuming the CLI JSON stream.
-    pub fn code(&self) -> &'static str {
+    pub const fn code(&self) -> &'static str {
         match self {
             Self::UnsupportedAttributeBounds { .. } => {
                 "arachne_codegen::warning::bounds_normalized"
@@ -58,7 +73,7 @@ impl Warning {
     /// Return a human-readable warning message
     pub fn message(&self) -> String {
         match self {
-            Warning::UnsupportedAttributeBounds {
+            Self::UnsupportedAttributeBounds {
                 attribute,
                 bounds,
                 applied,
@@ -68,7 +83,7 @@ impl Warning {
                     attribute, bounds, applied
                 )
             }
-            Warning::UnsupportedPropertyCombination {
+            Self::UnsupportedPropertyCombination {
                 feature,
                 properties,
                 applied,
@@ -80,19 +95,19 @@ impl Warning {
                     applied.join(", ")
                 )
             }
-            Warning::AbstractWithNoSubclass(name) => {
+            Self::AbstractWithNoSubclass(name) => {
                 format!(
                     "Abstract class `{}` has no concrete subclasses. It will be skipped.",
                     name
                 )
             }
-            Warning::OperationNotSupported(name) => {
+            Self::OperationNotSupported(name) => {
                 format!(
                     "Operation `{}` is not supported in v1 and will be skipped.",
                     name
                 )
             }
-            Warning::UnsupportedAnnotation {
+            Self::UnsupportedAnnotation {
                 feature,
                 annotation,
                 reason,
@@ -102,7 +117,7 @@ impl Warning {
                     feature, annotation, reason
                 )
             }
-            Warning::UnsupportedFeatureProperty {
+            Self::UnsupportedFeatureProperty {
                 feature,
                 property,
                 value,
@@ -112,7 +127,7 @@ impl Warning {
                     feature, property, value
                 )
             }
-            Warning::UnsupportedFeatureDependency {
+            Self::UnsupportedFeatureDependency {
                 feature,
                 dependency,
             } => {

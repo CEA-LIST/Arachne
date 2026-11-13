@@ -16,7 +16,7 @@ pub struct OperationGenerator<'a> {
 }
 
 impl<'a> OperationGenerator<'a> {
-    pub fn new(operation: &'a Operation, source_class: &'a Class, ctx: &'a Ctx) -> Self {
+    pub const fn new(operation: &'a Operation, source_class: &'a Class, ctx: &'a Ctx) -> Self {
         Self {
             operation,
             source_class,
