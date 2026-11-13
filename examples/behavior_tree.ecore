@@ -38,11 +38,11 @@
     <eClassifiers xsi:type="ecore:EClass" name="OutFlowPort" eSuperTypes="#//DataFlowPort" />
     <eClassifiers xsi:type="ecore:EClass" name="Blackboard">
         <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" containment="true" eType="#//BlackboardEntry">
-            <!-- <eAnnotations source="urn:arachne:semantics">
+            <eAnnotations source="urn:arachne:semantics">
                 <details key="datatype" value="uw-map"/>
                 <details key="key-feature" value="key"/>
                 <details key="value-feature" value="value"/>
-            </eAnnotations> -->
+            </eAnnotations>
         </eStructuralFeatures>
     </eClassifiers>
     <eClassifiers xsi:type="ecore:EClass" name="Inverter" eSuperTypes="#//Decorator" />

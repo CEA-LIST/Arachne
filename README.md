@@ -203,6 +203,38 @@ in release mode and records whether each metamodel can be parsed, generated,
 and compiled. Unsupported metamodels are expected and are reported in the
 `error` column.
 
+Results are written and flushed after every completed model, so completed rows
+survive an interrupted run. The original boolean columns remain available;
+`parse_status`, `generate_status`, and `compile_status` distinguish `passed`,
+`failed`, `skipped`, `timed_out`, and `crashed`. Here, compilation means
+`cargo check`, rather than linking or executing the generated application.
+Each stage also records its duration, exit code, failure kind and capability,
+diagnostic codes and bounded samples, warning counts, and last reported phase.
+`classification_source` distinguishes structured diagnoses, process outcomes,
+and categories inferred from error text; unrecognized failures stay `unknown`.
+
+The runner consumes Arachne and Cargo JSON diagnostics before limiting stored
+output. Successful-stage warnings are retained. `fidelity` reports known
+omissions or transformations from model warnings; `no_known_omissions` means
+checking passed without model warnings, and is not a semantic-equivalence proof.
+Ordinary compiler warnings do not change that model-fidelity classification.
+The adjacent `CSV_PATH.run.json` records source and executable hashes, revision,
+toolchain, environment settings, and run options. Rows include input hashes and,
+when available, generated lockfile hashes.
+
+Use `--keep-failures` to preserve failing inputs, generated sources, and a
+`result.json` diagnostic snapshot under `CSV_STEM-failures/RUN_ID/`.
+`--failures-dir DIRECTORY` chooses another destination. Temporary Cargo
+artifacts are still cleaned; retained reproductions are excluded from discovery
+if their destination is inside the scanned dataset. CSV paths are overwritten
+when starting a new run; use separate paths to preserve earlier reports.
+
+Containment cycle analysis uses iterative strongly connected component and DFS
+passes, with linear time and space in the expanded type graph. It prefers
+polymorphic fields, then collection fields, before selecting remaining DFS back
+edges. It checks that unboxed dependencies are acyclic. Boxing placement can
+differ from previous releases, while preserving the applicable boxing strategies.
+
 Reference results are available in the
 [coverage report](./modelset-results/MODELSET_COVERAGE_REPORT.md) and the
 [per-model CSV](./modelset-results/modelset_coverage.csv).

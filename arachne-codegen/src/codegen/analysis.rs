@@ -38,6 +38,8 @@ pub struct ClassInfo {
     pub wrapper: bool,
     pub wrapper_descendant: bool,
     pub transparent_field: Option<String>,
+    /// Participates in the generated reference graph. Filled after package slicing.
+    pub referenceable: bool,
 }
 
 /// Stores classifier names and inheritance facts once, indexed by Ecore class ID.
@@ -237,6 +239,7 @@ impl<'a> ModelIndex<'a> {
                         .iter()
                         .any(|idx| *idx != class.idx && wrappers[**idx]),
                     transparent_field: transparent[index].clone(),
+                    referenceable: false,
                 }
             })
             .collect();
@@ -328,7 +331,7 @@ pub struct GenerationPlan<'a> {
 
 impl<'a> GenerationPlan<'a> {
     pub fn new(ctx: &'a Ctx, pack: &Pack) -> Result<Self> {
-        let model = ModelIndex::new(ctx)?;
+        let mut model = ModelIndex::new(ctx)?;
         let package_classes = pack.classes().iter().copied().collect::<Vec<_>>();
         let package_set = package_classes.iter().copied().collect::<HashSet<_>>();
         let concrete_families = ctx
@@ -391,6 +394,9 @@ impl<'a> GenerationPlan<'a> {
             .collect();
         let cycles = analyze_cycles(&model)?;
         let references = ReferenceAnalysis::analyze(&model, &reachable_classes, &concrete_families);
+        for class in &references.referenceable_classes {
+            model.classes[**class].referenceable = true;
+        }
         Ok(Self {
             model,
             pack_idx: pack.idx,

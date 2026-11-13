@@ -8,7 +8,7 @@ use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
         analysis::ModelIndex,
-        cycles::CycleAnalysis,
+        cycles::{BoxingStrategy, CycleAnalysis},
         feature::{
             attribute::AttributeGenerator,
             containment::ContainmentGenerator,
@@ -20,8 +20,9 @@ use crate::{
             classifier_type_ident, classifier_type_ident_with_suffix, rust_ident, type_ident,
             value_ident_with_suffix,
         },
-        import::{Import, Macros, Protocol},
+        import::{Import, Macros},
         operation::OperationGenerator,
+        reference::projection::projected_log_type,
         warnings::Warning,
     },
 };
@@ -178,41 +179,30 @@ impl<'a> ClassGenerator<'a> {
     }
 
     /// Compute inherited field names and types from superclasses
-    fn inherited_fields(&self) -> (Vec<Ident>, Vec<TokenStream>, Vec<TokenStream>, Vec<Import>) {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
-        let inherited = self
-            .class
+    fn inherited_fields(&self) -> Vec<TokenStream> {
+        self.class
             .sup()
             .iter()
-            .map(|idx| &self.ctx.classes()[**idx])
-            .collect::<Vec<_>>();
-
-        let mut field_names = Vec::new();
-        let mut field_types = Vec::new();
-        let mut value_types = Vec::new();
-        let mut imports = Vec::new();
-        for class in inherited {
-            let field_ident = inherited_field_ident(class);
-            let log_ident = classifier_log_ident(self.ctx, class);
-            let value_ident = classifier_value_ident(self.ctx, class);
-            let is_boxed = self
-                .cycle_analysis
-                .boxing_strategy(self.class.idx, &field_ident.to_string())
-                == crate::codegen::cycles::BoxingStrategy::DirectReference;
-
-            field_names.push(field_ident);
-            if is_boxed {
-                imports.push(Import::Protocol(Protocol::BoxedLog));
-                field_types.push(quote! { #path::BoxedLog<#log_ident> });
-                value_types.push(quote! { Box<#value_ident> });
-            } else {
-                field_types.push(quote! { #log_ident });
-                value_types.push(quote! { #value_ident });
-            }
-        }
-
-        (field_names, field_types, value_types, imports)
+            .map(|idx| {
+                let class = &self.ctx.classes()[**idx];
+                let field = inherited_field_ident(class);
+                let op = classifier_ident(self.ctx, class);
+                let log = classifier_log_ident(self.ctx, class);
+                let value = classifier_value_ident(self.ctx, class);
+                // An inherited record is an embedded field. It uses the same layout
+                // decisions and explicit operation conversion as containment fields.
+                match self
+                    .cycle_analysis
+                    .boxing_strategy(self.class.idx, &field.to_string())
+                {
+                    BoxingStrategy::LogAndValue => {
+                        quote! { #field: Box<#op>, Box<#log> => Box<#value> }
+                    }
+                    BoxingStrategy::OperationOnly => quote! { #field: Box<#op>, #log => #value },
+                    BoxingStrategy::NoBox => quote! { #field: #log => #value },
+                }
+            })
+            .collect()
     }
 
     fn is_uw_map_entry_helper(&self) -> bool {
@@ -246,8 +236,16 @@ impl<'a> ClassGenerator<'a> {
             payload: payload_ty,
             log: log_ty,
             value: value_ty,
-            imports,
+            mut imports,
         } = plan.types(self.ctx, &path, None)?;
+        // The projected payload has no record to announce this EClass to the
+        // reference graph. Keep its identity without changing commands or reads.
+        let log_ty = if self.ctx.info(subclass.idx).referenceable {
+            imports.push(Import::Custom("crate::references::ProjectedLog"));
+            projected_log_type(subclass, field, log_ty, &path)
+        } else {
+            log_ty
+        };
         let warnings = plan.warnings;
 
         Ok(Some(TransparentVariantSpec {
@@ -282,13 +280,8 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (
-            inherited_field_names,
-            inherited_field_types,
-            inherited_value_types,
-            inherited_imports,
-        ) = self.inherited_fields();
-        let should_emit_feat = !inherited_field_names.is_empty()
+        let inherited_fields = self.inherited_fields();
+        let should_emit_feat = !inherited_fields.is_empty()
             || !attribute_tokens.is_empty()
             || !reference_tokens.is_empty()
             || self.ctx.info(self.class.idx).wrapper_descendant;
@@ -336,7 +329,7 @@ impl<'a> ClassGenerator<'a> {
         let record_tokens = if should_emit_feat {
             quote! {
                 #path::record!(#name {
-                    #(#inherited_field_names: #inherited_field_types => #inherited_value_types,)*
+                    #(#inherited_fields,)*
                     #(#attribute_tokens,)*
                     #(#reference_tokens,)*
                 });
@@ -364,7 +357,6 @@ impl<'a> ClassGenerator<'a> {
             [
                 macro_imports,
                 union_imports,
-                inherited_imports,
                 attribute_imports,
                 reference_imports,
                 operation_imports,
@@ -401,12 +393,7 @@ impl<'a> ClassGenerator<'a> {
         let (attributes, references) = self.process_structural_features()?;
         let (attribute_tokens, attribute_imports, attribute_warnings) = fold_fragments(attributes);
         let (reference_tokens, reference_imports, reference_warnings) = fold_fragments(references);
-        let (
-            inherited_field_names,
-            inherited_field_types,
-            inherited_value_types,
-            inherited_imports,
-        ) = self.inherited_fields();
+        let inherited_fields = self.inherited_fields();
         let family_name = polymorphic_kind_ident(self.ctx, self.class);
         let family_log = classifier_log_ident(self.ctx, self.class);
         let (family_tokens, family_imports, family_warnings) =
@@ -467,7 +454,7 @@ impl<'a> ClassGenerator<'a> {
 
         let tokens = quote! {
             #path::record!(#name {
-                #(#inherited_field_names: #inherited_field_types => #inherited_value_types,)*
+                #(#inherited_fields,)*
                 #(#attribute_tokens,)*
                 #(#reference_tokens,)*
             });
@@ -483,7 +470,6 @@ impl<'a> ClassGenerator<'a> {
                     Import::Macros(Macros::Union),
                 ],
                 family_imports,
-                inherited_imports,
                 attribute_imports,
                 reference_imports,
                 operation_imports,

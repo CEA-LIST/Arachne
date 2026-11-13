@@ -84,6 +84,8 @@ pub fn write_project(
 /// Renders the Cargo.toml file for the generated project, including dependencies on Moirai crates and other necessary libraries.
 fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -> Result<String> {
     let moirai = |name: &str| -> Result<String> {
+        // Apply identical feature settings to local and pinned dependencies so
+        // minimal builds do not accidentally inherit Moirai's default features.
         let options = match name {
             "moirai-crdt" => ", default-features = false",
             // Reference membership depends on sinks even in a minimal build.
@@ -98,15 +100,16 @@ fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -
             })?;
             Ok(format!("{{ path = {}{options} }}", toml_string(path)))
         } else {
-            Ok(
-                "{ git = \"https://github.com/CEA-LIST/Moirai.git\", \"tag\" = \"v0.8.1\" }"
-                    .to_string(),
-            )
+            Ok(format!(
+                "{{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.8.2\"{options} }}"
+            ))
         }
     };
     let protocol = moirai("moirai-protocol")?;
     let crdt = moirai("moirai-crdt")?;
     let macros = moirai("moirai-macros")?;
+    // Generate runtime dependencies only. Applications can add fuzz generators,
+    // randomness, graph comparison and footprint tooling to their own manifest.
     Ok(format!(
         "[package]\n\
         name = \"{project_name}\"\n\

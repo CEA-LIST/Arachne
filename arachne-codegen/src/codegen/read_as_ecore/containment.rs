@@ -25,11 +25,11 @@ impl ReadAsEcoreGenerator<'_> {
         if self
             .cycle_analysis
             .boxing_strategy(source_class, field_name)
-            == BoxingStrategy::NoBox
+            == BoxingStrategy::LogAndValue
         {
-            log
+            quote! { (#log).as_ref() }
         } else {
-            quote! { (#log).inner() }
+            log
         }
     }
 
@@ -170,6 +170,7 @@ impl ReadAsEcoreGenerator<'_> {
         let xml_name = feature.name.as_str();
         let key_xml_name = map.key.name.as_str();
         let xmi_type = self.xmi_type(map.entry);
+        let reference_visits = self.projected_reference_visits(map.entry, quote! { entry_path });
 
         let (value_attributes, value_children) = match &map.value.storage {
             Storage::Attribute(_) => {
@@ -182,11 +183,17 @@ impl ReadAsEcoreGenerator<'_> {
             }
             Storage::Containment { target, .. } => {
                 let value_log = map.value.unbox_log(quote! { child });
+                let value_path = if map.tracks_identity(self.ctx) {
+                    let field = value_ident(&map.value.feature.name).to_string();
+                    quote! { entry_path.clone().field(#field) }
+                } else {
+                    quote! { entry_path.clone() }
+                };
                 let visit = self.call_target_visitor(
                     target,
                     quote! { writer },
                     Some(&map.value.feature.name),
-                    quote! { entry_path.clone() },
+                    value_path,
                     value_log,
                     false,
                 );
@@ -207,6 +214,7 @@ impl ReadAsEcoreGenerator<'_> {
                     attrs.push_value("xsi:type", #xmi_type);
                     attrs.push_values(#key_xml_name, vec![#key_to_string], true);
                     #value_attributes
+                    #(#reference_visits)*
                     (#writer).element(#xml_name, &attrs, |writer| {
                         #value_children
                     });

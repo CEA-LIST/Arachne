@@ -49,8 +49,9 @@ impl ReferenceAnalysis {
     /// Analyze the Ecore model to find all non-containment references.
     ///
     /// References are projected onto the concrete classes that can actually appear
-    /// in the generated model. For example, a reference `(absract) StructuralFeature -> (abstract) Classifier`
-    /// becomes:
+    /// in the generated model. For example, consider a class diagram metamodel with two abstract classes
+    /// `StructuralFeature` and `Classifier`, and two concrete classes `Attribute` and `Reference` that inherit from `StructuralFeature`, and two concrete classes `Class` and `DataType` that inherit from `Classifier`.
+    /// A reference `(abstract) StructuralFeature -> (abstract) Classifier` becomes:
     /// - `Attribute -> Class`
     /// - `Attribute -> DataType`
     /// - `Reference -> Class`

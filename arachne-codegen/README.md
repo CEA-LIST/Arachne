@@ -95,7 +95,7 @@ The following external types are not supported: `EDate`, `EBigDecimal`, `EBigInt
 
 #### `EClass`
 
-A `EClass` is generated as a replicated object (`Record`) with one replicated field (a pair key-nested log) per feature. To deal with recursive containment, the generator use a specialized nested log (`BoxedLog`) as a wrapper around the child log.
+An `EClass` is generated as a replicated object (`Record`) with one replicated field per feature.
 
 ##### Abstract class
 
@@ -160,15 +160,15 @@ of roots, reachability, map helpers and containment cycles use the same filtered
 feature selection.
 
 | Ecore                 | Value that causes the feature to be skipped |
-| --------------------- | ----------------------------------------- |
-| `changeable`          | `false`                                   |
-| `volatile`            | `true`                                    |
-| `derived`             | `true`                                    |
-| `transient`           | `true`                                    |
-| `unsettable`          | `true`                                    |
-| `defaultValue`        | Any explicitly supplied value             |
-| `defaultValueLiteral` | Any explicitly supplied value             |
-| `resolveProxies`      | `true`                                    |
+| --------------------- | ------------------------------------------- |
+| `changeable`          | `false`                                     |
+| `volatile`            | `true`                                      |
+| `derived`             | `true`                                      |
+| `transient`           | `true`                                      |
+| `unsettable`          | `true`                                      |
+| `defaultValue`        | Any explicitly supplied value               |
+| `defaultValueLiteral` | Any explicitly supplied value               |
+| `resolveProxies`      | `true`                                      |
 
 The opposite boolean values are accepted, as are omitted properties. In particular,
 `resolveProxies=false` requires no proxy resolution. Unsupported multiplicity bounds
@@ -203,6 +203,32 @@ The code generator intentionally does not support Ecore operations at this stage
 An important challenge in generating code from a metamodel into a composition of CRDTs is the management of references. The approach to CRDT composition and nesting proposed by _Bauwens et al._ is hierarchical: a parent CRDT can propagate its conflict-resolution policy to its children using a causal reset. However, references represent relationships between siblings in the hierarchy.
 
 An auxiliary, specialized _typed graph CRDT_, called the `ReferenceManager`, is responsible for registering non-containment references between classifier instances. The generator expands polymorphic reference types to instantiable source and target class combinations and emits typed graph edge declarations with the parsed reference bounds. Containment ownership is not stored as ordinary reference arcs; it is represented by the nested object path emitted by containment logs and used by the reference manager to create vertices and delete subtrees. When interpreting the state of the model, contained elements are evaluated independently; non-containment links are then established by reading and applying the state of the `ReferenceManager`.
+
+Representation annotations preserve reference endpoints. A transparent class or a
+map-entry carrier can still be the source or target of a non-containment
+reference, including inherited references. When a projected record's identity is
+needed, the generated `references::ProjectedLog` emits its typed lifecycle events
+and forwards child effects below the projected feature. It stores the child log
+inline and preserves its commands and query responses; map payloads and read
+values remain projected.
+
+For example, a referenced transparent dictionary has its own path, its map lives
+below `.field("entries")`, and each entry lives below `.map_entry(key)`. An
+entry's contained value has a separate `.field("value")` path when either the
+entry or value is referenceable. This prevents the value's lifecycle event from
+overwriting the entry's event, gives both objects distinct XMI identifiers, and
+lets clearing a map delete its entries without deleting the dictionary itself.
+XMI serialization includes outgoing references on both projected objects.
+
+Regeneration can therefore change `ObjectPath` identifiers for referenced
+projections. Applications that persist these paths must migrate them or rebuild
+their handles from the regenerated reference graph. Unreferenced projections
+need no identity adapter. Generated manifests contain runtime dependencies and
+sink feature forwarding only. Fuzzing, randomness, graph comparison and footprint
+support (`moirai-fuzz`, `rand`, `vf2`, `deepsize`, and their feature flags) can be
+added manually when needed. The projection adapter emits no fuzz or footprint
+trait implementations. Moirai's optional `test_utils` macro hooks are recognized
+by Cargo's cfg checker without enabling or generating that feature.
 
 ## Customizing the Code Generator Mapping
 
