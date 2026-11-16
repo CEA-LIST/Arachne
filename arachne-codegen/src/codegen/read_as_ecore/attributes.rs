@@ -28,6 +28,7 @@ use crate::codegen::{
         plan::{AttributeCollection, AttributePlan, FeaturePlan, Storage},
     },
     ident::{rust_ident, value_ident},
+    reference::analysis::is_stored_reference,
 };
 
 impl ReadAsEcoreGenerator<'_> {
@@ -239,8 +240,8 @@ impl ReadAsEcoreGenerator<'_> {
     ) -> anyhow::Result<Vec<TokenStream>> {
         let mut visits = Vec::new();
 
-        for super_idx in class.sup() {
-            let super_class = self.class(*super_idx);
+        for super_idx in self.ctx.supers(class) {
+            let super_class = self.class(super_idx);
             let accessor = inherited_field_ident(super_class);
             let inherited_log = self.unbox_log_expr(
                 class.idx,
@@ -266,7 +267,11 @@ impl ReadAsEcoreGenerator<'_> {
                     log.clone(),
                     attrs.clone(),
                 )?),
-                structural::Typ::EReference if !feature.containment && self.has_references() => {
+                structural::Typ::EReference
+                    if !feature.containment
+                        && self.has_references()
+                        && is_stored_reference(feature) =>
+                {
                     let feature_key = self.reference_feature_key(class, feature);
                     let xml_name = feature.name.as_str();
                     visits.push(quote! {

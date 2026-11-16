@@ -250,19 +250,47 @@ fn parameter(node: Node<'_, '_>, ctx: &mut ClassCtx<'_, '_>) -> Res<Param> {
         node,
         (|| {
             attributes(node, TYPED_ATTRIBUTES)?;
-            empty(node)?;
-            let mut param = Param::new(
-                required(node, "name")?,
-                bounds(node)?,
-                optional_type(node, ctx)?,
-            );
+            let mut typ = optional_type(node, ctx)?;
+            for child in elements(node)? {
+                if element_name(child)? == "eGenericType" {
+                    typ = Some(generic_type(child, ctx)?);
+                }
+            }
+            let mut param = Param::new(required(node, "name")?, bounds(node)?, typ);
             if let Some(value) = boolean(node, "ordered")? {
                 param.set_ordered(value);
             }
             if let Some(value) = boolean(node, "unique")? {
                 param.set_unique(value);
             }
+            for child in elements(node)? {
+                match element_name(child)? {
+                    "eAnnotations" => param.add_annotation(annotation(child)?),
+                    "eGenericType" => {}
+                    _ => bail!(
+                        "Unsupported parameter element `{}`",
+                        child.tag_name().name()
+                    ),
+                }
+            }
             Ok(param)
+        })(),
+    )
+}
+
+/// Resolves the raw classifier of a generic type; type arguments are dropped.
+fn generic_type(node: Node<'_, '_>, ctx: &mut ClassCtx<'_, '_>) -> Res<idx::Class> {
+    located(
+        node,
+        (|| {
+            attributes(node, &["eClassifier"])?;
+            for arg in elements(node)? {
+                if element_name(arg)? != "eTypeArguments" {
+                    bail!("Unsupported generic type element `{}`", arg.tag_name().name());
+                }
+            }
+            warn!("Generic type arguments are not supported, ignoring them");
+            ctx.resolve_etype(&etype(node, required(node, "eClassifier")?)?)
         })(),
     )
 }
@@ -299,11 +327,11 @@ fn annotation(node: Node<'_, '_>) -> Res<Annot> {
                 annot.add_reference(reference);
             }
             for detail in elements(node)? {
-                if element_name(detail)? != "details" {
-                    bail!(
-                        "Unsupported annotation element `{}`",
-                        detail.tag_name().name()
-                    );
+                match element_name(detail)? {
+                    // EMF UML2 `duplicates` annotations carry redefined feature copies, not model content
+                    "contents" | "eAnnotations" => continue,
+                    "details" => {}
+                    other => bail!("Unsupported annotation element `{}`", other),
                 }
                 attributes(detail, &["key", "value"])?;
                 empty(detail)?;
@@ -362,7 +390,7 @@ fn ecore_type(node: Node<'_, '_>, typ: &str) -> Res<String> {
 /// Normalize an aliased EDataType QName for the existing Ecore link resolver.
 fn etype(node: Node<'_, '_>, typ: &str) -> Res<String> {
     if let Some((head, tail)) = typ.split_once(char::is_whitespace) {
-        if head.rsplit(':').next() == Some("EDataType") {
+        if matches!(head.rsplit(':').next(), Some("EDataType" | "EClass")) {
             return Ok(format!("{} {}", ecore_type(node, head)?, tail.trim_start()));
         }
     }

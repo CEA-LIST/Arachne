@@ -37,7 +37,7 @@ impl ToCrdt for EcoreType {
             Self::EChar => Primitive::Register(Default::default()),
             Self::EString => Primitive::List,
             // We do not support object types for CRDTs, and don't expect to encounter them
-            Self::Object => unimplemented!(),
+            _ => unimplemented!(),
         }
     }
 
@@ -52,7 +52,7 @@ impl ToCrdt for EcoreType {
             Self::EChar => Some(quote! {char }),
             Self::EString => Some(quote! { std::string::String }),
             Self::EBoolean => Some(quote! { bool }),
-            Self::Object => unimplemented!(),
+            _ => unimplemented!(),
         }
     }
 }

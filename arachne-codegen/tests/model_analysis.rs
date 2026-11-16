@@ -185,3 +185,37 @@ fn cascading_name_collisions_are_consistent_across_modules_and_runs() {
     assert!(first[1].contains("QueryValueModel2Id"));
     assert!(first[1].contains("QueryValueModelId"));
 }
+
+#[test]
+fn derived_transient_and_volatile_references_are_not_graph_edges() {
+    let parser = parse(
+        r##"
+        <eClassifiers xsi:type="ecore:EClass" name="Root">
+            <eStructuralFeatures xsi:type="ecore:EReference" name="kept" eType="#//Root"/>
+            <eStructuralFeatures xsi:type="ecore:EReference" name="computed" eType="#//Root" derived="true"/>
+            <eStructuralFeatures xsi:type="ecore:EReference" name="cached" eType="#//Root" transient="true"/>
+            <eStructuralFeatures xsi:type="ecore:EReference" name="live" eType="#//Root" volatile="true"/>
+        </eClassifiers>
+    "##,
+    );
+    let pack = parser
+        .ctx
+        .packs()
+        .iter()
+        .find(|p| p.name() == "analysis")
+        .unwrap();
+    let plan = GenerationPlan::new(&parser.ctx, pack).unwrap();
+    let names = plan
+        .references
+        .refs
+        .iter()
+        .map(|reference| reference.reference_name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["kept"]);
+    let (_, _, _, xmi, _) = generate_from_parser(&parser, pack).unwrap();
+    let xmi = xmi.build().to_string();
+    assert!(xmi.contains("root::kept"));
+    for skipped in ["computed", "cached", "live"] {
+        assert!(!xmi.contains(&format!("root::{skipped}")), "{skipped}");
+    }
+}

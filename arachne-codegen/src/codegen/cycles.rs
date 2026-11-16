@@ -188,8 +188,8 @@ impl<'a> CycleAnalyzer<'a> {
             if self.ctx.info(source).transparent_field.is_some() {
                 continue;
             }
-            for superclass_idx in class.sup() {
-                let superclass = &self.ctx.classes()[**superclass_idx];
+            for superclass_idx in self.ctx.supers(class) {
+                let superclass = &self.ctx.classes()[*superclass_idx];
                 edges.push(ContainmentEdge {
                     source,
                     target: superclass.idx,

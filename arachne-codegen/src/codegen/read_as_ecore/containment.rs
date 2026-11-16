@@ -245,8 +245,8 @@ impl ReadAsEcoreGenerator<'_> {
     ) -> anyhow::Result<Vec<TokenStream>> {
         let mut visits = Vec::new();
 
-        for super_idx in class.sup() {
-            let super_class = self.class(*super_idx);
+        for super_idx in self.ctx.supers(class) {
+            let super_class = self.class(super_idx);
             let accessor = inherited_field_ident(super_class);
             let inherited_field = accessor.to_string();
             let inherited_log =

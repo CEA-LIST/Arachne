@@ -178,11 +178,10 @@ impl<'a> ClassGenerator<'a> {
 
     /// Compute inherited field names and types from superclasses
     fn inherited_fields(&self) -> Vec<TokenStream> {
-        self.class
-            .sup()
-            .iter()
+        self.ctx
+            .supers(self.class)
             .map(|idx| {
-                let class = &self.ctx.classes()[**idx];
+                let class = &self.ctx.classes()[*idx];
                 let field = inherited_field_ident(class);
                 let op = classifier_ident(self.ctx, class);
                 let log = classifier_log_ident(self.ctx, class);

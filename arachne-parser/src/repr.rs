@@ -207,6 +207,19 @@ impl Path {
             return Ok(idx);
         }
 
+        // Support direct references to Ecore classes
+        if s.starts_with("http://www.eclipse.org/emf/2002/Ecore#//")
+            || s.starts_with("platform:/plugin/org.eclipse.emf.ecore/model/Ecore.ecore#//")
+        {
+            let name = s.split("#//").nth(1).unwrap();
+            let url = format!("http://www.eclipse.org/emf/2002/Ecore#//{}", name);
+            if let Ok(typ) = builtin::Typ::parse_etype_url(&url) {
+                if let Ok(idx) = ctx.ctx().get_builtin_idx(typ) {
+                    return Ok(idx);
+                }
+            }
+        }
+
         let rel_pref = "#//";
         if let Some(s) = s.strip_prefix(rel_pref) {
             Self::resolve_relative_etype(ctx.path().clone(), ctx.ctx_mut(), s)
@@ -278,6 +291,7 @@ pub struct Param {
     typ: Option<idx::Class>,
     ordered: Option<bool>,
     unique: Option<bool>,
+    annotations: Annots,
 }
 
 pub type Params = Vec<Param>;
@@ -294,7 +308,16 @@ impl Param {
             typ: typ.into(),
             ordered: None,
             unique: None,
+            annotations: Annots::with_capacity(2),
         }
+    }
+
+    pub fn add_annotation(&mut self, annot: Annot) {
+        self.annotations.push(annot)
+    }
+
+    pub fn annotations(&self) -> &Annots {
+        &self.annotations
     }
 
     pub fn set_ordered(&mut self, ordered: bool) {
@@ -558,6 +581,11 @@ impl Class {
 
     pub const fn typ(&self) -> &String {
         &self.typ
+    }
+
+    /// Whether this is one of Ecore's own builtin classes or datatypes.
+    pub fn is_ecore_builtin(&self) -> bool {
+        self.typ == builtin::Typ::ECORE_BUILTIN
     }
 
     pub const fn sup(&self) -> &BTreeSet<idx::Class> {

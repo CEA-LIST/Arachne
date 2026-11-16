@@ -270,6 +270,15 @@ impl<'a> ModelIndex<'a> {
     pub fn info(&self, class: idx::Class) -> &ClassInfo {
         &self.classes[*class]
     }
+
+    /// Direct superclasses that are generated; Ecore metaclasses such as `EModelElement` are not.
+    pub fn supers<'c>(&'c self, class: &'c Class) -> impl Iterator<Item = idx::Class> + 'c {
+        class
+            .sup()
+            .iter()
+            .copied()
+            .filter(|sup| !self.ctx.class(*sup).is_ecore_builtin())
+    }
     pub fn classifier_name(&self, class: idx::Class) -> &Ident {
         &self.names[*class]
     }
