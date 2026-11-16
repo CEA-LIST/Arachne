@@ -20,9 +20,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use super::ReadAsEcoreGenerator;
-use crate::codegen::{
-    ident::classifier_type_ident_with_suffix, reference::analysis::is_stored_reference,
-};
+use crate::codegen::ident::classifier_type_ident_with_suffix;
 
 impl ReadAsEcoreGenerator<'_> {
     /// Projected objects have no record fields to visit, but their references
@@ -42,9 +40,7 @@ impl ReadAsEcoreGenerator<'_> {
             );
         }
         for feature in self.ctx.supported_features(class.idx).filter(|feature| {
-            feature.kind == structural::Typ::EReference
-                && !feature.containment
-                && is_stored_reference(feature)
+            feature.kind == structural::Typ::EReference && !feature.containment
         }) {
             let feature_key = self.reference_feature_key(class, feature);
             let xml_name = &feature.name;
@@ -67,9 +63,7 @@ impl ReadAsEcoreGenerator<'_> {
         for class_idx in self.reachable_classes {
             let class = self.class(*class_idx);
             for feature in self.ctx.supported_features(class.idx).filter(|feature| {
-                feature.kind == structural::Typ::EReference
-                    && !feature.containment
-                    && is_stored_reference(feature)
+                feature.kind == structural::Typ::EReference && !feature.containment
             }) {
                 let feature_key = self.reference_feature_key(class, feature);
                 let source_family = self.concrete_family(class.idx);

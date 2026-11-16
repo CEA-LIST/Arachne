@@ -28,7 +28,6 @@ use crate::codegen::{
         plan::{AttributeCollection, AttributePlan, FeaturePlan, Storage},
     },
     ident::{rust_ident, value_ident},
-    reference::analysis::is_stored_reference,
 };
 
 impl ReadAsEcoreGenerator<'_> {
@@ -268,9 +267,7 @@ impl ReadAsEcoreGenerator<'_> {
                     attrs.clone(),
                 )?),
                 structural::Typ::EReference
-                    if !feature.containment
-                        && self.has_references()
-                        && is_stored_reference(feature) =>
+                    if !feature.containment && self.has_references() =>
                 {
                     let feature_key = self.reference_feature_key(class, feature);
                     let xml_name = feature.name.as_str();

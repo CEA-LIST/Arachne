@@ -22,8 +22,11 @@ mod utils;
 
 use std::path::PathBuf;
 
+use proc_macro2::TokenStream;
+use quote::quote;
+
 pub use config::Config;
-use ecore_rs::repr::Pack;
+use ecore_rs::repr::{Pack, structural};
 pub use error::{ArachneError, Result};
 use heck::ToSnakeCase;
 use log::{debug, info, warn};
@@ -31,7 +34,10 @@ pub use parser::EcoreParser;
 
 use crate::codegen::{
     analysis::GenerationPlan,
-    classifier::ClassGenerator,
+    classifier::{
+        ClassGenerator, classifier_log_ident, classifier_value_ident, inherited_field_ident,
+    },
+    cycles::BoxingStrategy,
     generate::{Fragment, Generate},
     generator::Generator,
     package::PackageGenerator,
@@ -45,6 +51,156 @@ const CLASSIFIERS_PATH_MOD: &str = "classifiers";
 const REFERENCES_PATH_MOD: &str = "references";
 const PACKAGE_PATH_MOD: &str = "package";
 const READ_AS_ECORE_PATH_MOD: &str = "read_as_ecore";
+
+/// Total-order float used by generated value types, which derive `Eq` and `Hash`.
+fn ordered_float() -> TokenStream {
+    quote! {
+        #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+        pub struct OrderedF64(pub f64);
+
+        #[cfg(feature = "test_utils")]
+        impl deepsize::DeepSizeOf for OrderedF64 {
+            fn deep_size_of_children(&self, _context: &mut deepsize::Context) -> usize {
+                0
+            }
+        }
+
+        /// Reproducible float accumulator, mirroring Moirai's built-in float counters.
+        #[derive(Clone, Debug, Default)]
+        pub struct OrderedF64Accumulator(bitrep::SumF64);
+
+        impl OrderedF64Accumulator {
+            fn add(&mut self, value: f64) {
+                self.0.add(value);
+            }
+
+            fn value(&self) -> f64 {
+                self.0.value()
+            }
+        }
+
+        #[cfg(feature = "test_utils")]
+        impl deepsize::DeepSizeOf for OrderedF64Accumulator {
+            fn deep_size_of_children(&self, _context: &mut deepsize::Context) -> usize {
+                0
+            }
+        }
+
+        impl Eq for OrderedF64 {}
+        impl Ord for OrderedF64 {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                self.0.total_cmp(&other.0)
+            }
+        }
+        impl std::hash::Hash for OrderedF64 {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                std::hash::Hash::hash(&self.0.to_bits(), state);
+            }
+        }
+        impl std::fmt::Display for OrderedF64 {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+        impl From<f64> for OrderedF64 {
+            fn from(value: f64) -> Self {
+                Self(value)
+            }
+        }
+        impl From<OrderedF64> for f64 {
+            fn from(value: OrderedF64) -> Self {
+                value.0
+            }
+        }
+        impl std::ops::Add for OrderedF64 {
+            type Output = Self;
+            fn add(self, rhs: Self) -> Self {
+                Self(self.0 + rhs.0)
+            }
+        }
+        impl std::ops::AddAssign for OrderedF64 {
+            fn add_assign(&mut self, rhs: Self) {
+                self.0 += rhs.0;
+            }
+        }
+        impl std::ops::SubAssign for OrderedF64 {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.0 -= rhs.0;
+            }
+        }
+        impl moirai_crdt::counter::CounterValue for OrderedF64 {
+            type Accumulator = OrderedF64Accumulator;
+
+            fn increment(accumulator: &mut Self::Accumulator, value: Self) {
+                accumulator.add(value.0);
+            }
+            fn decrement(accumulator: &mut Self::Accumulator, value: Self) {
+                accumulator.add(-value.0);
+            }
+            fn value(accumulator: &Self::Accumulator) -> Self {
+                Self(accumulator.value())
+            }
+        }
+    }
+}
+
+/// Emits the missing projection for logs boxed by `LogAndValue`.
+fn boxed_log_adapters(plan: &GenerationPlan<'_>) -> TokenStream {
+    let mut targets = std::collections::BTreeSet::new();
+
+    for class in plan.model.classes().iter() {
+        for feature in plan.model.supported_features(class.idx) {
+            if feature.kind == structural::Typ::EReference
+                && plan.cycles.boxing_strategy(class.idx, &feature.name)
+                    == BoxingStrategy::LogAndValue
+                && let Some(target) = feature.typ
+            {
+                targets.insert(target);
+            }
+        }
+        for superclass in plan.model.supers(class) {
+            let field = inherited_field_ident(plan.model.class(superclass)).to_string();
+            if plan.cycles.boxing_strategy(class.idx, &field) == BoxingStrategy::LogAndValue {
+                targets.insert(superclass);
+            }
+        }
+    }
+
+    let adapters = targets.into_iter().filter_map(|target| {
+        let info = plan.model.info(target);
+        let class = plan.model.class(target);
+        if class.is_enum()
+            || info.uninhabited
+            || info.map_entry
+            || info.transparent_field.is_some()
+        {
+            return None;
+        }
+        let log = classifier_log_ident(&plan.model, class);
+        let value = classifier_value_ident(&plan.model, class);
+        Some(quote! {
+            impl moirai_protocol::state::log::EvalNested<
+                moirai_protocol::data_type::query::Read<Box<#value>>
+            > for Box<#log> {
+                fn execute_query(
+                    &self,
+                    _query: &moirai_protocol::data_type::query::Read<Box<#value>>,
+                ) -> Box<#value> {
+                    Box::new(
+                        <#log as moirai_protocol::state::log::EvalNested<
+                            moirai_protocol::data_type::query::Read<#value>
+                        >>::execute_query(
+                            self.as_ref(),
+                            &moirai_protocol::data_type::query::Read::new(),
+                        ),
+                    )
+                }
+            }
+        })
+    });
+
+    quote! { #(#adapters)* }
+}
 
 /// Metadata about the code generation process, including input/output paths, project/package names, and statistics about the generated code
 #[derive(Debug, Clone)]
@@ -157,11 +313,17 @@ pub fn generate_from_parser<'a>(
     usize,
 )> {
     let mut classifiers = Generator::new(CLASSIFIERS_PATH_MOD);
+    classifiers.register(Fragment::new(ordered_float(), Vec::new(), Vec::new()));
     let mut references = Generator::new(REFERENCES_PATH_MOD);
     let mut package = Generator::new(PACKAGE_PATH_MOD);
     let mut read_as_ecore = Generator::new(READ_AS_ECORE_PATH_MOD);
 
     let plan = GenerationPlan::new(&parser.ctx, pack)?;
+    classifiers.register(Fragment::new(
+        boxed_log_adapters(&plan),
+        Vec::new(),
+        Vec::new(),
+    ));
 
     debug!(
         "Package '{}' has {} roots and {} reachable classes",

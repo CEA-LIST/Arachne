@@ -138,6 +138,7 @@ fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -
         moirai-macros = {macros}\n\
         petgraph = \"0.8.3\"\n\
         rustc-hash = \"2.1.3\"\n\
+        bitrep = \"0.5.1\"\n\
         arachne-xmi = {{ path = \"runtime/arachne-xmi\" }}\n\
         deepsize = {{ git = \"https://github.com/leo-olivier/deepsize.git\", optional = true, features = [\"elsa\"] }}\n\
         serde = {{ version = \"1.0.229\", features = [\"derive\"], optional = true }}\n\n\

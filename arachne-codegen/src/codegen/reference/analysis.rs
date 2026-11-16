@@ -15,10 +15,7 @@
 
 use std::collections::BTreeSet;
 
-use ecore_rs::{
-    prelude::idx,
-    repr::{Structural, structural},
-};
+use ecore_rs::{prelude::idx, repr::structural};
 use log::warn;
 use syn::Ident;
 
@@ -29,13 +26,6 @@ use crate::{
     },
     utils::hash::{HashMap, HashSet},
 };
-
-/// Derived, transient and volatile references are computed or not persisted, so they are not stored as graph edges.
-pub fn is_stored_reference(feature: &Structural) -> bool {
-    feature.derived != Some(true)
-        && feature.transient != Some(true)
-        && feature.volatile != Some(true)
-}
 
 /// A non-containment reference in the Ecore model.
 #[derive(Debug, Clone)]
@@ -102,15 +92,6 @@ impl ReferenceAnalysis {
                 if feature.containment {
                     continue;
                 }
-                if !is_stored_reference(feature) {
-                    warn!(
-                        "Reference `{}::{}` is derived, transient or volatile: it is not generated as a graph edge.",
-                        class.name(),
-                        feature.name
-                    );
-                    continue;
-                }
-
                 let target_idx: idx::Class = match feature.typ {
                     Some(t) => t,
                     None => continue,

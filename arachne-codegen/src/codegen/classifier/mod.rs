@@ -30,7 +30,7 @@ use crate::{
 pub const POLYMORPHIC_KIND_SUFFIX: &str = "Kind";
 pub const INHERITED_FIELD_SUFFIX: &str = "super";
 
-pub const fn has_subclasses(class: &Class) -> bool {
+pub fn has_subclasses(class: &Class) -> bool {
     !class.sub().is_empty()
 }
 
@@ -495,6 +495,7 @@ impl<'a> ClassGenerator<'a> {
         let tokens = if let Some((first, rest)) = variants.split_first() {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+                #[cfg_attr(feature = "test_utils", derive(deepsize::DeepSizeOf))]
                 pub enum #name {
                     #[default]
                     #first,
@@ -504,6 +505,7 @@ impl<'a> ClassGenerator<'a> {
         } else {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+                #[cfg_attr(feature = "test_utils", derive(deepsize::DeepSizeOf))]
                 pub enum #name {
                     #(#variants,)*
                 }

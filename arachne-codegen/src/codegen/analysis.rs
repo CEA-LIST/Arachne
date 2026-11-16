@@ -23,7 +23,7 @@ use std::{
 use anyhow::{Result, ensure};
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Pack, Structural, idx, structural},
+    repr::{Class, Pack, Structural, idx, structural},
 };
 use syn::Ident;
 

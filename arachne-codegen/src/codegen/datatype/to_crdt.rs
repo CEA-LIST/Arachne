@@ -47,8 +47,9 @@ impl ToCrdt for EcoreType {
             Self::EShort => Some(quote! { i16 }),
             Self::EInt => Some(quote! { i32 }),
             Self::ELong => Some(quote! { i64 }),
-            Self::EFloat => Some(quote! { f32 }),
-            Self::EDouble => Some(quote! { f64 }),
+            Self::EFloat | Self::EDouble => {
+                Some(quote! { crate::classifiers::OrderedF64 })
+            }
             Self::EChar => Some(quote! {char }),
             Self::EString => Some(quote! { std::string::String }),
             Self::EBoolean => Some(quote! { bool }),
