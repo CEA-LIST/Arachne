@@ -616,7 +616,7 @@ impl Pack {
     }
 
     /// A package is empty if it has nothing but an index, a name, and optionnaly a `sup`.
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.sub.is_empty() && self.classes.is_empty() && self.annotations.is_empty()
     }
 

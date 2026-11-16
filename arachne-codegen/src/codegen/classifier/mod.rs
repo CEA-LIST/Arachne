@@ -30,7 +30,7 @@ use crate::{
 pub const POLYMORPHIC_KIND_SUFFIX: &str = "Kind";
 pub const INHERITED_FIELD_SUFFIX: &str = "super";
 
-pub const fn has_subclasses(class: &Class) -> bool {
+pub fn has_subclasses(class: &Class) -> bool {
     !class.sub().is_empty()
 }
 
