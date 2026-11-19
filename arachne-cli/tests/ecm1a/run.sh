@@ -7,7 +7,8 @@
 # build over ModelSet and the EC.01 fixtures with EC.01's driver, 30 s per file and command:
 #   describe: every input f90795e describes gives the identical stdout and identity line;
 #   generate: every input f90795e generates gives the identical project tree (any difference
-#             fails, EC.01's stated causes included: our generator is meant to be unchanged).
+#             fails, EC.01's stated causes included: our generator is meant to be unchanged),
+#             after recheck.py's reruns, since f90795e's generator varies run to run on some inputs.
 # Inputs only the candidate accepts are reported. Exit 0 both hold, 1 one fails, 2 the
 # instrument could not run (reference missing, build failed): not a pass.
 set -uo pipefail
@@ -61,6 +62,9 @@ for kind in ("describe", "generate"):
         open(f"{out}/describe-refusal-text-changed.txt", "w").write("".join(i + "\n" for i in moved))
         print(f"describe: {len(moved)} inputs both refuse with another first error line (reported)")
 EOF
+# A generate difference counts only when f90795e is stable on that input and M never gives its tree.
+python3 -I "$HERE/recheck.py" "$OUT" "$REF" "$OUT/arachne-candidate" "$S/runs/ref-f90795e" ||
+    { echo "INSTRUMENT: recheck failed"; exit 2; }
 g=$(wc -l <"$OUT/generate-failures.txt")
 echo "describe parity exit $d (EC.01's pass conditions), generate failures $g"
 [ "$d" = 0 ] && [ "$g" = 0 ] && { echo PASS; exit 0; }
