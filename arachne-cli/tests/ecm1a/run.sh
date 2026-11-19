@@ -9,7 +9,8 @@
 #   generate: every input f90795e generates gives the identical project tree (any difference
 #             fails, EC.01's stated causes included: our generator is meant to be unchanged),
 #             after recheck.py's reruns, since f90795e's generator varies run to run on some inputs.
-#   refusal:  every input both refuse to describe gives f90795e's first error line (refusal.py).
+#   refusal:  inputs both refuse to describe whose first error line moved (refusal.py), counted
+#             (Q3 (a): his refusal sentences are taken).
 # Inputs only the candidate accepts are reported. Exit 0 all hold, 1 one fails, 2 the
 # instrument could not run (reference missing, build failed): not a pass.
 set -uo pipefail
@@ -66,11 +67,11 @@ EOF
 # A generate difference counts only when f90795e is stable on that input and M never gives its tree.
 python3 -I "$HERE/recheck.py" "$OUT" "$REF" "$OUT/arachne-candidate" "$S/runs/ref-f90795e" ||
     { echo "INSTRUMENT: recheck failed"; exit 2; }
-# Q3 (b): every input both refuse to describe gives f90795e's first error line, judged.
+# Q3 (a): the first error lines that moved are counted, not judged.
 python3 -I "$HERE/refusal.py" "$REF" "$OUT/arachne-candidate" "$S/runs/ref-f90795e/files.csv" "$OUT"
 r=$?
 [ "$r" = 2 ] && { echo "INSTRUMENT: refusal check did not run"; exit 2; }
 g=$(wc -l <"$OUT/generate-failures.txt")
-echo "describe parity exit $d (EC.01's pass conditions), generate failures $g, refusal row exit $r"
-[ "$d" = 0 ] && [ "$g" = 0 ] && [ "$r" = 0 ] && { echo PASS; exit 0; }
+echo "describe parity exit $d (EC.01's pass conditions), generate failures $g, refusal row exit $r (counted, not judged)"
+[ "$d" = 0 ] && [ "$g" = 0 ] && { echo PASS; exit 0; }
 echo FAIL; exit 1

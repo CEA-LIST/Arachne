@@ -1,4 +1,5 @@
-"""EC.M1 piece 1, O3's refusal row (spec: cea-cdrt-knowledge/spec/items/EC.M1.md, Q3 (b)).
+"""EC.M1 piece 1, O3's refusal count (spec: cea-cdrt-knowledge/spec/items/EC.M1.md, Q3 (a):
+counted, not judged; run.sh reads exit 1 as a count, exit 2 as the instrument not running).
 
     python3 -I arachne-cli/tests/ecm1a/refusal.py <ref-bin> <cand-bin> <ref-files.csv> <out-dir>
 

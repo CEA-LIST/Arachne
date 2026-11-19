@@ -8,29 +8,26 @@ uncommitted merge and on the merge commit alike. Checks:
   T2 arachne-parser: every path outside tests/ is 21dbe96's (ebc3141 plus EC.01's parser commit);
   T3 arachne-xmi: every path is ebc3141's;
   T4 arachne-codegen and arachne-cli: every path outside tests/ is f90795e's, except
-     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free),
-     and the refusal boundary (Q3 (b)) arachne-codegen/src/{parser.rs, error.rs} (present,
-     content free outside their #[cfg(test)] blocks, which stay f90795e's: T4b);
-     none of the test files ebc3141 adds there exists;
-  T5 every other path is f90795e's, except: Cargo.toml (f90795e's plus the arachne-xmi member),
-     Cargo.lock (T6), and ebc3141's README.md, REQUIREMENTS.md, modelset_coverage.py,
-     modelset-results/MODELSET_COVERAGE_REPORT.md, examples/pub_crawl.ecore, and
-     examples/README.md as git's clean three-way merge of 87d1ff7, f90795e and ebc3141;
+     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free);
+     none of the test files ebc3141 adds there exists (Q3 (a): no refusal mapping, so
+     parser.rs and error.rs are f90795e's byte for byte);
+  T5 every other path is f90795e's, examples/ included (our four examples/ tests pin its set),
+     except: Cargo.toml (f90795e's plus the arachne-xmi member), Cargo.lock (T6), and
+     ebc3141's README.md, REQUIREMENTS.md, modelset_coverage.py and
+     modelset-results/MODELSET_COVERAGE_REPORT.md;
   T6 cargo metadata --offline --locked succeeds.
 Exit 0 when all hold, 1 otherwise.
 """
 import os
 import subprocess
 import sys
-import tempfile
 
-OURS, HIS, GUIDE, BASE = "f90795e", "ebc3141", "21dbe96", "87d1ff7"
+OURS, HIS, GUIDE = "f90795e", "ebc3141", "21dbe96"
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 TESTS = ("arachne-parser/tests/", "arachne-codegen/tests/", "arachne-cli/tests/")
-BOUNDARY = ("arachne-codegen/src/parser.rs", "arachne-codegen/src/error.rs")  # Q3 (b): maps his refusals
-FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock", *BOUNDARY}
+FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock"}
 FROM_HIS = {"README.md", "REQUIREMENTS.md", "modelset_coverage.py",
-            "modelset-results/MODELSET_COVERAGE_REPORT.md", "examples/pub_crawl.ecore"}
+            "modelset-results/MODELSET_COVERAGE_REPORT.md"}
 
 
 def git(*args, check=True):
@@ -97,12 +94,6 @@ def main():
              if p.startswith(TESTS) and p in on_disk]
     compare("T4", exp, judged(("arachne-codegen/", "arachne-cli/")) | set(added))
 
-    def inline_tests(data):
-        return data[data.find(b"#[cfg(test)]"):] if b"#[cfg(test)]" in data else b""
-    report("T4b", [f"inline tests changed {p}" for p in BOUNDARY if p in on_disk and
-                   inline_tests(open(os.path.join(REPO, p), "rb").read())
-                   != inline_tests(git("show", f"{OURS}:{p}"))])
-
     crates = ("arachne-parser/", "arachne-xmi/", "arachne-codegen/", "arachne-cli/")
     exp = {p: s for p, s in tree(OURS).items() if not p.startswith(crates)}
     exp.update({p: s for p, s in tree(HIS, *FROM_HIS).items()})
@@ -110,14 +101,6 @@ def main():
     toml = git("show", f"{OURS}:Cargo.toml").replace(
         b'"arachne-parser"]', b'"arachne-parser", "arachne-xmi"]', 1)
     exp["Cargo.toml"] = blob(toml)
-    with tempfile.TemporaryDirectory(dir=os.environ.get("ECM1_SCRATCH")) as tmp:
-        files = []
-        for rev in (OURS, BASE, HIS):  # git merge-file <current> <base> <other>
-            files.append(os.path.join(tmp, rev))
-            with open(files[-1], "wb") as f:
-                f.write(git("show", f"{rev}:examples/README.md"))
-        merged = subprocess.run(["git", "merge-file", "-p", *files], capture_output=True)
-    exp["examples/README.md"] = blob(merged.stdout) if merged.returncode == 0 else "unclean-merge"
     compare("T5", exp, {p for p in on_disk if not p.startswith(crates)})
 
     meta = subprocess.run(["cargo", "metadata", "--offline", "--locked", "--format-version", "1"],

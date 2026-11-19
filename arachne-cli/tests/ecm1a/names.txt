@@ -53,6 +53,10 @@ S1 xml_adapter :: parses_aliases_entities_and_forward_links ok
 S1 xml_adapter :: rejects_duplicate_annotation_keys ok
 S1 xml_adapter :: rejects_malformed_xml_without_panicking ok
 S1 xml_adapter :: rejects_unsupported_ecore_with_element_positions ok
+S2 arachne_xmi :: tests::indexes_reference_targets_deterministically ok
+S2 arachne_xmi :: tests::merges_repeated_feature_values ok
+S2 arachne_xmi :: tests::path_identifier_is_stable_and_distinguishes_paths ok
+S2 arachne_xmi :: tests::writes_deterministic_escaped_xmi ok
 S3 ar01_regeneration :: ar01_the_five_checked_in_crates_regenerate_byte_for_byte ok
 S3 ar02_descriptor_declarations :: ar02_d1_sysml_describes_the_declarations_hand_read_from_the_ecore ok
 S3 ar02_descriptor_declarations :: ar02_d2_sysml_is_todays_descriptor_plus_the_declarations_and_nothing_else ok
