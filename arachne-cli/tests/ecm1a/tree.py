@@ -8,9 +8,10 @@ uncommitted merge and on the merge commit alike. Checks:
   T2 arachne-parser: every path outside tests/ is 21dbe96's (ebc3141 plus EC.01's parser commit);
   T3 arachne-xmi: every path is ebc3141's;
   T4 arachne-codegen and arachne-cli: every path outside tests/ is f90795e's, except
-     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free);
-     none of the test files ebc3141 adds there exists (Q3 (a): no refusal mapping, so
-     parser.rs and error.rs are f90795e's byte for byte);
+     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free) and,
+     since round 2, the refusal boundary arachne-codegen/src/{parser.rs,error.rs} and
+     arachne-cli/src/main.rs (present, content judged by O4 and O2);
+     none of the test files ebc3141 adds there exists;
   T5 every other path is f90795e's, examples/ included (our four examples/ tests pin its set),
      except: Cargo.toml (f90795e's plus the arachne-xmi member), Cargo.lock (T6), and
      ebc3141's README.md, REQUIREMENTS.md, modelset_coverage.py and
@@ -25,7 +26,9 @@ import sys
 OURS, HIS, GUIDE = "f90795e", "ebc3141", "21dbe96"
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 TESTS = ("arachne-parser/tests/", "arachne-codegen/tests/", "arachne-cli/tests/")
-FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock"}
+FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock",
+        # round 2: the refusal boundary, content judged by O4 (his.sh) and O2
+        "arachne-codegen/src/parser.rs", "arachne-codegen/src/error.rs", "arachne-cli/src/main.rs"}
 FROM_HIS = {"README.md", "REQUIREMENTS.md", "modelset_coverage.py",
             "modelset-results/MODELSET_COVERAGE_REPORT.md"}
 

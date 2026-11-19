@@ -1,0 +1,31 @@
+--- a/arachne-parser/src/parser.rs
++++ b/arachne-parser/src/parser.rs
+@@ -238,7 +238,7 @@
+                 .into_iter()
+                 .flat_map(str::split_whitespace);
+             while let Some(superclass) = supertypes.next() {
+-                let superclass = if superclass.rsplit(':').next() == Some("EClass") {
++                let superclass = if superclass.rsplit(':').next() == Some("EClass") && false {
+                     let head = ecore_type(node, superclass)?;
+                     let path = supertypes
+                         .next()
+@@ -501,7 +501,7 @@
+ /// Normalize an aliased Ecore classifier QName for the existing Ecore link resolver.
+ fn etype(node: Node<'_, '_>, typ: &str) -> Res<String> {
+     if let Some((head, tail)) = typ.split_once(char::is_whitespace) {
+-        if matches!(head.rsplit(':').next(), Some("EDataType" | "EClass")) {
++        if matches!(head.rsplit(':').next(), Some("EDataType")) {
+             return Ok(format!("{} {}", ecore_type(node, head)?, tail.trim_start()));
+         }
+     }
+--- a/arachne-parser/src/repr.rs
++++ b/arachne-parser/src/repr.rs
+@@ -193,7 +193,7 @@
+             return Ok(idx);
+         }
+ 
+-        if let Some(classifier) = ecore::classifier_path(s) {
++        if let Some(classifier) = ecore::classifier_path(s).filter(|_| false) {
+             return Self::resolve_ecore_classifier(ctx, classifier);
+         }
+ 
