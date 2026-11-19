@@ -9,7 +9,8 @@
 #   generate: every input f90795e generates gives the identical project tree (any difference
 #             fails, EC.01's stated causes included: our generator is meant to be unchanged),
 #             after recheck.py's reruns, since f90795e's generator varies run to run on some inputs.
-# Inputs only the candidate accepts are reported. Exit 0 both hold, 1 one fails, 2 the
+#   refusal:  every input both refuse to describe gives f90795e's first error line (refusal.py).
+# Inputs only the candidate accepts are reported. Exit 0 all hold, 1 one fails, 2 the
 # instrument could not run (reference missing, build failed): not a pass.
 set -uo pipefail
 export LC_ALL=C CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_DEBUG=0
@@ -57,7 +58,7 @@ for kind in ("describe", "generate"):
     bad = [r for r in rows if r["class"].startswith(("differ", "left-only", "missing"))]
     open(f"{out}/{kind}-failures.txt", "w").write("".join(f"{r['id']} {r['class']}\n" for r in bad))
     print(f"{kind}: {len(bad)} inputs f90795e accepts that differ or are lost")
-    if kind == "describe":  # reported, not judged: the refusal sentence the model editor's eval reads
+    if kind == "describe":  # reported, not judged: the last three stderr lines (refusal.py judges the first)
         moved = [r["id"] for r in rows if r["class"] == "both-refused" and r["left_detail"] != r["right_detail"]]
         open(f"{out}/describe-refusal-text-changed.txt", "w").write("".join(i + "\n" for i in moved))
         print(f"describe: {len(moved)} inputs both refuse with another first error line (reported)")
@@ -65,7 +66,11 @@ EOF
 # A generate difference counts only when f90795e is stable on that input and M never gives its tree.
 python3 -I "$HERE/recheck.py" "$OUT" "$REF" "$OUT/arachne-candidate" "$S/runs/ref-f90795e" ||
     { echo "INSTRUMENT: recheck failed"; exit 2; }
+# Q3 (b): every input both refuse to describe gives f90795e's first error line, judged.
+python3 -I "$HERE/refusal.py" "$REF" "$OUT/arachne-candidate" "$S/runs/ref-f90795e/files.csv" "$OUT"
+r=$?
+[ "$r" = 2 ] && { echo "INSTRUMENT: refusal check did not run"; exit 2; }
 g=$(wc -l <"$OUT/generate-failures.txt")
-echo "describe parity exit $d (EC.01's pass conditions), generate failures $g"
-[ "$d" = 0 ] && [ "$g" = 0 ] && { echo PASS; exit 0; }
+echo "describe parity exit $d (EC.01's pass conditions), generate failures $g, refusal row exit $r"
+[ "$d" = 0 ] && [ "$g" = 0 ] && [ "$r" = 0 ] && { echo PASS; exit 0; }
 echo FAIL; exit 1

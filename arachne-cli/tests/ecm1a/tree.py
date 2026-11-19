@@ -8,7 +8,9 @@ uncommitted merge and on the merge commit alike. Checks:
   T2 arachne-parser: every path outside tests/ is 21dbe96's (ebc3141 plus EC.01's parser commit);
   T3 arachne-xmi: every path is ebc3141's;
   T4 arachne-codegen and arachne-cli: every path outside tests/ is f90795e's, except
-     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free);
+     arachne-codegen/src/resources.rs and arachne-codegen/Cargo.toml (present, content free),
+     and the refusal boundary (Q3 (b)) arachne-codegen/src/{parser.rs, error.rs} (present,
+     content free outside their #[cfg(test)] blocks, which stay f90795e's: T4b);
      none of the test files ebc3141 adds there exists;
   T5 every other path is f90795e's, except: Cargo.toml (f90795e's plus the arachne-xmi member),
      Cargo.lock (T6), and ebc3141's README.md, REQUIREMENTS.md, modelset_coverage.py,
@@ -25,7 +27,8 @@ import tempfile
 OURS, HIS, GUIDE, BASE = "f90795e", "ebc3141", "21dbe96", "87d1ff7"
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 TESTS = ("arachne-parser/tests/", "arachne-codegen/tests/", "arachne-cli/tests/")
-FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock"}
+BOUNDARY = ("arachne-codegen/src/parser.rs", "arachne-codegen/src/error.rs")  # Q3 (b): maps his refusals
+FREE = {"arachne-codegen/src/resources.rs", "arachne-codegen/Cargo.toml", "Cargo.lock", *BOUNDARY}
 FROM_HIS = {"README.md", "REQUIREMENTS.md", "modelset_coverage.py",
             "modelset-results/MODELSET_COVERAGE_REPORT.md", "examples/pub_crawl.ecore"}
 
@@ -93,6 +96,12 @@ def main():
                             "arachne-codegen", "arachne-cli").decode().split()
              if p.startswith(TESTS) and p in on_disk]
     compare("T4", exp, judged(("arachne-codegen/", "arachne-cli/")) | set(added))
+
+    def inline_tests(data):
+        return data[data.find(b"#[cfg(test)]"):] if b"#[cfg(test)]" in data else b""
+    report("T4b", [f"inline tests changed {p}" for p in BOUNDARY if p in on_disk and
+                   inline_tests(open(os.path.join(REPO, p), "rb").read())
+                   != inline_tests(git("show", f"{OURS}:{p}"))])
 
     crates = ("arachne-parser/", "arachne-xmi/", "arachne-codegen/", "arachne-cli/")
     exp = {p: s for p, s in tree(OURS).items() if not p.startswith(crates)}
