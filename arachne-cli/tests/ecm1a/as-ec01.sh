@@ -6,6 +6,10 @@
 # Every other command passes through unchanged.
 real=${ECM1A_REAL:?ECM1A_REAL names the arachne binary}
 stub=${ECM1A_STUB:?ECM1A_STUB names an existing folder}
+# 3 GiB of address space per process, both builds alike: some ModelSet inputs grow past 20 GB
+# under generate before the 30 s deadline, and four of them at once exhaust the machine; no core files.
+ulimit -v 3145728
+ulimit -c 0
 if [ "$1" = generate ]; then
     shift
     [ "$1" = --diagnostics-json ] && shift
