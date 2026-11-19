@@ -1,0 +1,337 @@
+{
+  "classes": {
+    "Address": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Course": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "ILaboratory": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Laboratory": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Teacher"
+          },
+          "name": "researchers",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Teacher"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "ILaboratory"
+      ]
+    },
+    "Person": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Researcher": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "identityReference",
+            "many": true,
+            "target": "Researcher"
+          },
+          "name": "manages",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Researcher"
+        }
+      ],
+      "superTypes": []
+    },
+    "Student": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "StudentKind",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "StudentKind",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "kind",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": true,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "StudentID",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "eOpposite": "advises",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "reference",
+            "many": false,
+            "target": "Teacher"
+          },
+          "name": "advisor",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Teacher"
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "Course"
+          },
+          "name": "enrolls",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Course"
+        }
+      ],
+      "superTypes": [
+        "Person"
+      ]
+    },
+    "Teacher": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "address",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "eOpposite": "advisor",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "reference",
+            "many": true,
+            "target": "Student"
+          },
+          "name": "advises",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Student"
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "identityReference",
+            "many": true,
+            "target": "Course"
+          },
+          "name": "teaches",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Course"
+        }
+      ],
+      "superTypes": [
+        "Person",
+        "Researcher"
+      ]
+    }
+  },
+  "enums": {
+    "StudentKind": [
+      "MASTER",
+      "PHD"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": null,
+  "package": "laboratory",
+  "rootClasses": [
+    "Address",
+    "Course",
+    "Laboratory",
+    "Student"
+  ]
+}

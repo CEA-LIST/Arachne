@@ -1,0 +1,481 @@
+{
+  "classes": {
+    "BackEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Dir"
+          },
+          "name": "value",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Dir"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Dir": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "k",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "key": {
+                "kind": "str"
+              },
+              "kind": "keyed"
+            },
+            "target": "Mid"
+          },
+          "name": "sub",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "SubEntry"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "DirEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Dir"
+          },
+          "name": "value",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Dir"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Holder": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "tick",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "key": {
+                "kind": "str"
+              },
+              "kind": "keyed"
+            },
+            "target": "Dir"
+          },
+          "name": "bag",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "DirEntry"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Mid": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "k",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "key": {
+                "kind": "str"
+              },
+              "kind": "keyed"
+            },
+            "target": "Mid"
+          },
+          "name": "sub",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "MidEntry"
+        },
+        {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "key": {
+                "kind": "str"
+              },
+              "kind": "keyed"
+            },
+            "target": "Dir"
+          },
+          "name": "dirs",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "BackEntry"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "MidEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Mid"
+          },
+          "name": "value",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Mid"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "SubEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "Mid"
+          },
+          "name": "value",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Mid"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "http://www.example.org/st05rec",
+  "package": "st05rec",
+  "rootClasses": [
+    "Holder"
+  ]
+}

@@ -1,0 +1,83 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - behaviortree #2
+    class Root [ecore:EClass] #10
+      structural features:
+      - `behaviortrees`: EReference of [0, ∞[ `BehaviorTree`
+      - `main`: EReference of [1, 1] `BehaviorTree`
+    class BehaviorTree [ecore:EClass] #11
+      structural features:
+      - `ID`: EAttribute of [1, 1] `EString`
+      - `child`: EReference of [1, 1] `TreeNode`
+      - `blackboard`: EReference of [1, 1] `Blackboard`
+    class TreeNode [ecore:EClass] #12
+      subers: ExecutionNode, Decorator, ControlNode, SubTree
+      structural features:
+      - `ID`: EAttribute of [1, 1] `EString`
+      - `name`: EAttribute of [0, 1] `EString`
+    class Blackboard [ecore:EClass] #13
+      structural features:
+      - `entries`: EReference of [0, ∞[ `BlackboardEntry`
+    class Status [ecore:EEnum] #14
+    class ExecutionNode [ecore:EClass] #15
+      supers: TreeNode
+      subers: Action, Condition
+      structural features:
+      - `outflowports`: EReference of [0, ∞[ `OutFlowPort`
+      - `inflowports`: EReference of [0, ∞[ `InFlowPort`
+    class OutFlowPort [ecore:EClass] #16
+      supers: DataFlowPort
+    class InFlowPort [ecore:EClass] #17
+      supers: DataFlowPort
+    class Decorator [ecore:EClass] #18
+      supers: TreeNode
+      subers: Inverter
+      structural features:
+      - `child`: EReference of [1, 1] `TreeNode`
+    class ControlNode [ecore:EClass] #19
+      supers: TreeNode
+      subers: Sequence, Fallback
+      structural features:
+      - `children`: EReference of [0, ∞[ `TreeNode`
+    class Sequence [ecore:EClass] #20
+      supers: ControlNode
+    class Fallback [ecore:EClass] #21
+      supers: ControlNode
+    class Action [ecore:EClass] #22
+      supers: ExecutionNode
+      subers: OpenDoor, EnterRoom, CloseDoor
+    class Condition [ecore:EClass] #23
+      supers: ExecutionNode
+      subers: IsDoorOpen
+    class DataFlowPort [ecore:EClass] #24
+      subers: OutFlowPort, InFlowPort
+      structural features:
+      - `entry`: EReference of [0, 1] `BlackboardEntry`
+    class BlackboardEntry [ecore:EClass] #25
+      structural features:
+      - `key`: EAttribute of [1, 1] `EString`
+      - `value`: EAttribute of [1, 1] `EString`
+    class Inverter [ecore:EClass] #26
+      supers: Decorator
+    class IsDoorOpen [ecore:EClass] #27
+      supers: Condition
+    class OpenDoor [ecore:EClass] #28
+      supers: Action
+    class EnterRoom [ecore:EClass] #29
+      supers: Action
+    class CloseDoor [ecore:EClass] #30
+      supers: Action
+    class SubTree [ecore:EClass] #31
+      supers: TreeNode
+      structural features:
+      - `tree`: EReference of [1, 1] `BehaviorTree`

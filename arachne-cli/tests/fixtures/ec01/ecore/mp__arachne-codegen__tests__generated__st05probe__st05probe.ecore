@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AR.01 (cea-cdrt-knowledge/spec/items/AR.01.md), oracle A3: the metamodel of
+  ST.05's K7 (cea-cdrt-knowledge/spec/items/ST.05.md, round 3, the round-2
+  probe), which moirai-interp/tests/st05_recursive_keyed_class.rs builds in code
+  from st05.metamodel.json (probe_descriptor). It is st05.ecore with Box.sub, a
+  keyed containment of Mid, copied onto Mid: Mid.sub holds Mid, a record class
+  (no subclass) whose keyed collection holds its own class. Package and nsURI
+  are renamed st05probe; generated_crates.rs holds the descriptor Arachne
+  writes for it equal to K7's, but for those two.
+-->
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="st05probe" nsURI="http://www.example.org/st05probe" nsPrefix="st05probe">
+    <eClassifiers xsi:type="ecore:EClass" name="Holder">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="tick" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="inner" lowerBound="0" upperBound="1" eType="#//Box" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="bag" lowerBound="0" upperBound="-1" eType="#//BoxEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="shapes" lowerBound="0" upperBound="-1" eType="#//ShapeEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="bins" lowerBound="0" upperBound="-1" eType="#//BinEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Box">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="k" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="note" lowerBound="0" upperBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="mid" lowerBound="0" upperBound="1" eType="#//Mid" containment="true"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="sub" lowerBound="0" upperBound="-1" eType="#//SubEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Mid">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="k" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="sub" lowerBound="0" upperBound="-1" eType="#//SubEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Shape" abstract="true">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="n" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="parts" lowerBound="0" upperBound="-1" eType="#//PartEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="A" eSuperTypes="#//Shape"/>
+    <eClassifiers xsi:type="ecore:EClass" name="B" eSuperTypes="#//Shape"/>
+    <eClassifiers xsi:type="ecore:EClass" name="Bin">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="k" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="BigBin" eSuperTypes="#//Bin"/>
+    <eClassifiers xsi:type="ecore:EClass" name="BoxEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Box" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="ShapeEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Shape" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="BinEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Bin" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="SubEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Mid" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="PartEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Mid" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>

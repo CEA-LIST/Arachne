@@ -1,0 +1,93 @@
+{
+  "classes": {
+    "A": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "bool",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "flag",
+              "wins": "enable"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "b",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "B": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "bool",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "flag",
+              "wins": "enable"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "b",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "C": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "http://www.example.org/multiple_inheritance",
+  "package": "multiple_inheritance",
+  "rootClasses": [
+    "C"
+  ]
+}

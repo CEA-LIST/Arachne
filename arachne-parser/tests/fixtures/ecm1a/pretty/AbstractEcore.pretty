@@ -1,0 +1,41 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - rootpackage #2
+    class AbstractClass1 [ecore:EClass] #10
+      subers: ConcreteClass1, ConcreteClass2
+      structural features:
+      - `name`: EAttribute of [0, 1] `EString`
+    class ConcreteClass1 [ecore:EClass] #11
+      supers: AbstractClass1
+      structural features:
+      - `newAttribute`: EAttribute of [1, 1] `EnumDefinition`
+      - `refersClass2`: EReference of [0, 1] `ConcreteClass2`
+      - `simple1_1_Reference`: EReference of [1, 1] `ConcreteClass3`
+      - `IDAtribute`: EAttribute of [0, 1] `EString`
+    class EnumDefinition [ecore:EEnum] #12
+    class ConcreteClass2 [ecore:EClass] #13
+      supers: AbstractClass1, AbstractClass2
+      structural features:
+      - `refersClass2`: EReference of [0, ∞[ `ConcreteClass1`
+      - `newAttribute`: EAttribute of [0, 1] `DataType1`
+      - `simple1_N_Reference`: EReference of [0, ∞[ `ConcreteClass3`
+    class ConcreteClass3 [ecore:EClass] #14
+    class DataType1 [ecore:EDataType] #15
+    class AbstractClass2 [ecore:EClass] #16
+      subers: ConcreteClass2
+    class ConcreteClass4 [ecore:EClass] #17
+      supers: Interface1
+      structural features:
+      - `containmentReference`: EReference of [0, ∞[ `ConcreteClass2`
+    class Interface1 [ecore:EClass] #18
+      subers: ConcreteClass4

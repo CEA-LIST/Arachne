@@ -1,0 +1,45 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - test #2
+    class Foo [ecore:EClass] #10
+      structural features:
+      - `myString`: EAttribute of [0, 1] `EString`
+      - `myInt`: EAttribute of [0, 1] `EInt`
+      - `myBoolean`: EAttribute of [0, 1] `EBoolean`
+      - `myChar`: EAttribute of [0, 1] `EChar`
+      - `myLong`: EAttribute of [0, 1] `ELong`
+      - `myFloat`: EAttribute of [0, 1] `EFloat`
+      - `myDouble`: EAttribute of [0, 1] `EDouble`
+      - `myByte`: EAttribute of [0, 1] `EByte`
+      - `myShort`: EAttribute of [0, 1] `EShort`
+      - `bounds0inf`: EAttribute of [0, ∞[ `EShort`
+      - `bounds1inf`: EAttribute of [1, ∞[ `EShort`
+      - `bounds01`: EAttribute of [0, 1] `EShort`
+      - `bounds11`: EAttribute of [1, 1] `EShort`
+      - `boundsninf`: EAttribute of [5, ∞[ `EShort`
+      - `boundsnm`: EAttribute of [5, 10] `EShort`
+      - `simpleList`: EAttribute of [0, ∞[ `EBoolean`
+      - `uniqueList`: EAttribute of [0, ∞[ `EShort`
+      - `bag`: EAttribute of [0, ∞[ `EShort`
+      - `set`: EAttribute of [0, ∞[ `EShort`
+    class Bar [ecore:EClass] #11
+      structural features:
+      - `myFoo`: EReference of [0, 1] `Foo`
+      - `health`: EAttribute of [0, 1] `EInt`
+    class Abstract [ecore:EClass] #12
+      subers: Baz
+      structural features:
+      - `name`: EAttribute of [0, 1] `EString`
+      - `foo`: EReference of [1, 1] `Foo`
+    class Baz [ecore:EClass] #13
+      supers: Abstract

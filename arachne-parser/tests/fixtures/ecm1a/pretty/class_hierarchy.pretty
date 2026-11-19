@@ -1,0 +1,48 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - class_hierarchy #2
+    class ModelElement [ecore:EClass] #10
+      subers: Classifier, Package, StructuralFeature
+      structural features:
+      - `name`: EAttribute of [1, 1] `EString`
+    class Classifier [ecore:EClass] #11
+      supers: ModelElement
+      subers: Class, DataType
+    class Package [ecore:EClass] #12
+      supers: ModelElement
+      structural features:
+      - `content`: EReference of [0, ∞[ `ModelElement`
+    class StructuralFeature [ecore:EClass] #13
+      supers: ModelElement
+      subers: Attribute, Reference
+      structural features:
+      - `lower`: EAttribute of [1, 1] `EInt`
+      - `upper`: EAttribute of [1, 1] `EInt`
+      - `isOrdered`: EAttribute of [1, 1] `EBoolean`
+      - `isUnique`: EAttribute of [1, 1] `EBoolean`
+      - `typ`: EReference of [1, 1] `Classifier`
+    class Attribute [ecore:EClass] #14
+      supers: StructuralFeature
+    class Reference [ecore:EClass] #15
+      supers: StructuralFeature
+      structural features:
+      - `isContainer`: EAttribute of [1, 1] `EBoolean`
+      - `opposite`: EReference of [0, 1] `Reference`
+    class Class [ecore:EClass] #16
+      supers: Classifier
+      structural features:
+      - `isAbstract`: EAttribute of [1, 1] `EBoolean`
+      - `supertypes`: EReference of [0, ∞[ `Class`
+      - `features`: EReference of [0, ∞[ `StructuralFeature`
+    class DataType [ecore:EClass] #17
+      supers: Classifier

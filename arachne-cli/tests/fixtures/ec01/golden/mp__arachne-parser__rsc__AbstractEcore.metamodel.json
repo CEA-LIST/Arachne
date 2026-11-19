@@ -1,0 +1,314 @@
+{
+  "classes": {
+    "AbstractClass1": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "AbstractClass2": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "ConcreteClass1": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "EnumDefinition",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "EnumDefinition",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "newAttribute",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": true,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "IDAtribute",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "eOpposite": "refersClass2",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "reference",
+            "many": false,
+            "target": "ConcreteClass2"
+          },
+          "name": "refersClass2",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ConcreteClass2"
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "ConcreteClass3"
+          },
+          "name": "simple1_1_Reference",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "ConcreteClass3"
+        }
+      ],
+      "superTypes": [
+        "AbstractClass1"
+      ]
+    },
+    "ConcreteClass2": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "newAttribute",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "eOpposite": "refersClass2",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "reference",
+            "many": true,
+            "target": "ConcreteClass1"
+          },
+          "name": "refersClass2",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ConcreteClass1"
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "identityReference",
+            "many": true,
+            "target": "ConcreteClass3"
+          },
+          "name": "simple1_N_Reference",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ConcreteClass3"
+        }
+      ],
+      "superTypes": [
+        "AbstractClass1",
+        "AbstractClass2"
+      ]
+    },
+    "ConcreteClass3": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "ConcreteClass4": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "ConcreteClass2"
+          },
+          "name": "containmentReference",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ConcreteClass2"
+        }
+      ],
+      "references": [],
+      "superTypes": [
+        "Interface1"
+      ]
+    },
+    "DataType1": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Interface1": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {
+    "EnumDefinition": [
+      "enumValue1",
+      "enumValue2"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": null,
+  "package": "rootpackage",
+  "rootClasses": [
+    "ConcreteClass1",
+    "ConcreteClass3",
+    "ConcreteClass4",
+    "DataType1"
+  ]
+}

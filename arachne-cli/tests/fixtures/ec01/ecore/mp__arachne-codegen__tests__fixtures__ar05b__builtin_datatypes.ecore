@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AR.05b: a synthetic metamodel that reaches two of Ecore's own attributes, EAnnotation.source
+     and ENamedElement.name, and gives each a datatype through a package-level urn:arachne:semantics
+     detail. The oracle also reads it with that package annotation removed. -->
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="builtinregs"
+    nsURI="http://www.example.org/builtinregs"
+    nsPrefix="builtinregs">
+  <eAnnotations source="urn:arachne:semantics">
+    <details key="ecore::EAnnotation.source" value="mv-register"/>
+    <details key="ecore::ENamedElement.name" value="lww-register"/>
+  </eAnnotations>
+  <eClassifiers xsi:type="ecore:EClass" name="Model">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="parts" upperBound="-1"
+        eType="#//Part" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Part"
+      eSuperTypes="http://www.eclipse.org/emf/2002/Ecore#//ENamedElement">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="label"
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+</ecore:EPackage>

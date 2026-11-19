@@ -1,0 +1,95 @@
+{
+  "classes": {
+    "A": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "B": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "A"
+      ]
+    },
+    "C": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "property",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": [
+        "B"
+      ]
+    }
+  },
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "http://www.example.org/abstract_inherits_concrete",
+  "package": "abstract_inherits_concrete",
+  "rootClasses": [
+    "A",
+    "C"
+  ]
+}

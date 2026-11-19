@@ -1,0 +1,24 @@
+- [root] #0
+  - [builtin] #1
+    class Object [ecore:Builtin] #0
+    class EByte [ecore:Builtin] #1
+    class EShort [ecore:Builtin] #2
+    class EInt [ecore:Builtin] #3
+    class ELong [ecore:Builtin] #4
+    class EFloat [ecore:Builtin] #5
+    class EDouble [ecore:Builtin] #6
+    class EBoolean [ecore:Builtin] #7
+    class EChar [ecore:Builtin] #8
+    class EString [ecore:Builtin] #9
+  - abstract_inherits_concrete #2
+    class A [ecore:EClass] #10
+      subers: B
+      structural features:
+      - `name`: EAttribute of [1, 1] `EString`
+    class B [ecore:EClass] #11
+      supers: A
+      subers: C
+    class C [ecore:EClass] #12
+      supers: B
+      structural features:
+      - `property`: EAttribute of [1, 1] `EInt`

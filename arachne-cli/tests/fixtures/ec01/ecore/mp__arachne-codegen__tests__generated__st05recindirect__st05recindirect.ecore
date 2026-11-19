@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ST.05 round 3, OB4 (cea-cdrt-knowledge/spec/items/ST.05.md): can Arachne
+  generate a runtime for record classes that reach themselves through keyed
+  collections? Holder.bag holds Dir, Dir.sub holds Mid, Mid.sub holds Mid (a
+  direct cycle) and Mid.dirs holds Dir (an indirect cycle, Dir to Mid to
+  Dir). Neither Dir nor Mid has a subclass.
+-->
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="st05recindirect" nsURI="http://www.example.org/st05recindirect" nsPrefix="st05rec">
+    <eClassifiers xsi:type="ecore:EClass" name="Holder">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="tick" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="bag" lowerBound="0" upperBound="-1" eType="#//DirEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Dir">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="k" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="sub" lowerBound="0" upperBound="-1" eType="#//SubEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Mid">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="k" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="dirs" lowerBound="0" upperBound="-1" eType="#//BackEntry" containment="true">
+            <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations>
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="DirEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Dir" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="SubEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Mid" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="MidEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Mid" containment="true"/>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="BackEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="value" lowerBound="1" upperBound="1" eType="#//Dir" containment="true"/>
+    </eClassifiers>
+</ecore:EPackage>
