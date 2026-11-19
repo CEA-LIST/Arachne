@@ -265,8 +265,8 @@ fn run_describe(args: DescribeArgs) -> Result<()> {
     // installed, so a refusal from here — a metamodel using Ecore's own classes, say — used to
     // exit 1 in silence. `error` keeps stdout a descriptor and says why when there is none.
     init_logger_at("error");
-    let parser = arachne_codegen::EcoreParser::from_file(&args.input)
-        .map_err(|e| anyhow!("Failed to parse '{}': {}", args.input.display(), e))?;
+    // The parser's error goes out unchanged: it is the line Léo's `generate` prints for the same file.
+    let parser = arachne_codegen::EcoreParser::from_file(&args.input)?;
     let pack = arachne_codegen::find_user_package(&parser.ctx)?;
     let descriptor = arachne_codegen::descriptor_json(&parser.ctx, pack)?;
     let rendered = format!("{descriptor:#}\n");
