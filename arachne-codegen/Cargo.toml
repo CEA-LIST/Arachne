@@ -32,3 +32,5 @@ moirai-crdt = { version = "*", path = "../../moirai-model-plane/moirai-crdt" }
 moirai-macros = { version = "*", path = "../../moirai-model-plane/moirai-macros" }
 moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
 pathdiff = "0.2"
+# `resources.rs` scans Ecore text for relative resource references; the merged parser no longer re-exports it.
+regex = "1.6"

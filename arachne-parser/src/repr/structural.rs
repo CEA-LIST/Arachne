@@ -62,17 +62,17 @@ pub struct Structural {
     pub unsettable: Option<bool>,
     /// Indicates whether the feature value is unique. Default is true.
     pub unique: Option<bool>,
-    /// Raw Ecore default value, if explicitly specified.
+    /// XML-decoded Ecore default value, if explicitly specified.
     pub default_value: Option<String>,
-    /// Raw Ecore default value literal, if explicitly specified.
+    /// XML-decoded Ecore default value literal, if explicitly specified.
     pub default_value_literal: Option<String>,
     /// Annotations associated with the feature.
     pub annotations: Annots,
     /// Indicates whether the feature value should resolve proxies.
     pub resolve_proxies: Option<bool>,
-    /// Raw `eKeys` of the reference, in document order; they are not resolved.
+    /// Raw `eKeys` paths in document order, not resolved.
     pub keys: Vec<String>,
-    /// Raw `eOpposite` of the reference, *e.g.* `#//Class/feature`; it is not resolved.
+    /// Raw `eOpposite` path, not resolved or enforced.
     pub opposite: Option<String>,
 }
 impl Structural {
@@ -230,25 +230,19 @@ impl Structural {
     pub fn annotations(&self) -> &Annots {
         &self.annotations
     }
-    pub fn add_annotation(&mut self, annot: Annot) {
-        self.annotations.push(annot)
-    }
-    /// Raw `eKeys` of the reference, in document order.
-    ///
-    /// These are the paths of the target's attributes that identify a target within the
-    /// reference, as written in the XML attribute, *e.g.* `#//Item/name`, and are not resolved.
     pub fn keys(&self) -> &[String] {
         &self.keys
     }
     pub fn add_key(&mut self, key: impl Into<String>) {
         self.keys.push(key.into())
     }
-    /// Raw `eOpposite` of the reference, as written in the XML attribute, *e.g.*
-    /// `#//Class/feature`; it is not resolved, and nothing keeps the two ends in step.
     pub fn opposite(&self) -> Option<&str> {
         self.opposite.as_deref()
     }
     pub fn set_opposite(&mut self, opposite: impl Into<String>) {
         self.opposite = Some(opposite.into())
+    }
+    pub fn add_annotation(&mut self, annot: Annot) {
+        self.annotations.push(annot)
     }
 }

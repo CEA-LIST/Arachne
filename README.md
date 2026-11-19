@@ -61,21 +61,38 @@ You can programmatically create one or several replicas of a generated CRDT, and
 
 ```rust
 // Create two replicas of the generated CRDT, each with a unique identifier and a list of replicas it can communicate with.
-let mut replica_a = Replica::<MyGeneratedCRDT>::bootstrap("a", &["a", "b"]);
-let mut replica_b = Replica::<MyGeneratedCRDT>::bootstrap("b", &["a", "b"]);
+use moirai_protocol::{
+    broadcast::tcsb::Tcsb,
+    crdt::query::Read,
+    replica::{IsReplica, Replica},
+};
+
+type ModelReplica = Replica<MyGeneratedLog, Tcsb<MyGeneratedCRDT>>;
+let mut replica_a = ModelReplica::bootstrap("a".into(), &["a", "b"]);
+let mut replica_b = ModelReplica::bootstrap("b".into(), &["a", "b"]);
 
 // Perform an operation on replica A
-let event_a = replica_a.send(MyGeneratedCRDT::SomeOperation { /* ... */ });
+let event_a = replica_a.send(MyGeneratedCRDT::SomeOperation { /* ... */ })
+    .expect("operation should be enabled");
 // Read the current state of replica A
-let returned_value_a = replica_a.query(Read::new());
+let returned_value_a = replica_a.query(&Read::new());
 
 // B receives the operation from A and applies it to its local state
 replica_b.receive(event_a);
 // Read the current state of replica B
-let returned_value_b = replica_b.query(Read::new());
+let returned_value_b = replica_b.query(&Read::new());
 
 // A and B have delivered the same operations in a causally consistent order, and thus have converged to the same state.
 assert_eq!(returned_value_a, returned_value_b);
+```
+
+Generated projects also expose a `ReadAsEcore` query that streams the replicated model as a standard Ecore XMI format.
+
+```rust
+use my_generated_crdt::read_as_ecore::ReadAsEcore;
+
+let xmi: Vec<u8> = replica_a.query(&ReadAsEcore::new());
+std::fs::write("model.xmi", xmi)?;
 ```
 
 ## Repository organization
@@ -84,6 +101,8 @@ assert_eq!(returned_value_a, returned_value_b);
   See the [parser README](./arachne-parser/README.md).
 - `arachne-codegen`: mapping analysis and Rust code generation.
   See the [codegen README](./arachne-codegen/README.md).
+- `arachne-xmi`: shared, `quick-xml`-backed XMI serialization runtime used by
+  generated projects.
 - `arachne-cli`: command-line interface exposed as `arachne`.
   See the [CLI README](./arachne-cli/README.md).
 - `examples`: input Ecore metamodels used to exercise the generator.
@@ -183,6 +202,38 @@ On Windows, `py -3` can be used instead of `python3`. The script builds Arachne
 in release mode and records whether each metamodel can be parsed, generated,
 and compiled. Unsupported metamodels are expected and are reported in the
 `error` column.
+
+Results are written and flushed after every completed model, so completed rows
+survive an interrupted run. The original boolean columns remain available;
+`parse_status`, `generate_status`, and `compile_status` distinguish `passed`,
+`failed`, `skipped`, `timed_out`, and `crashed`. Here, compilation means
+`cargo check`, rather than linking or executing the generated application.
+Each stage also records its duration, exit code, failure kind and capability,
+diagnostic codes and bounded samples, warning counts, and last reported phase.
+`classification_source` distinguishes structured diagnoses, process outcomes,
+and categories inferred from error text; unrecognized failures stay `unknown`.
+
+The runner consumes Arachne and Cargo JSON diagnostics before limiting stored
+output. Successful-stage warnings are retained. `fidelity` reports known
+omissions or transformations from model warnings; `no_known_omissions` means
+checking passed without model warnings, and is not a semantic-equivalence proof.
+Ordinary compiler warnings do not change that model-fidelity classification.
+The adjacent `CSV_PATH.run.json` records source and executable hashes, revision,
+toolchain, environment settings, and run options. Rows include input hashes and,
+when available, generated lockfile hashes.
+
+Use `--keep-failures` to preserve failing inputs, generated sources, and a
+`result.json` diagnostic snapshot under `CSV_STEM-failures/RUN_ID/`.
+`--failures-dir DIRECTORY` chooses another destination. Temporary Cargo
+artifacts are still cleaned; retained reproductions are excluded from discovery
+if their destination is inside the scanned dataset. CSV paths are overwritten
+when starting a new run; use separate paths to preserve earlier reports.
+
+Containment cycle analysis uses iterative strongly connected component and DFS
+passes, with linear time and space in the expanded type graph. It prefers
+polymorphic fields, then collection fields, before selecting remaining DFS back
+edges. It checks that unboxed dependencies are acyclic. Boxing placement can
+differ from previous releases, while preserving the applicable boxing strategies.
 
 Reference results are available in the
 [coverage report](./modelset-results/MODELSET_COVERAGE_REPORT.md) and the

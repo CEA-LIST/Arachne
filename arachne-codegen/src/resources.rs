@@ -14,10 +14,10 @@ use std::{
 use anyhow::{Context, bail};
 use ecore_rs::{
     ctx::Ctx,
-    parser::raw::Parser,
-    prelude::regex::Regex,
+    parser,
     repr::{self, ecore, idx},
 };
+use regex::Regex;
 use serde_json::{Value, json};
 
 use crate::{ArachneError, EcoreParser, codegen::descriptor, find_user_package};
@@ -116,7 +116,7 @@ impl Loader {
         })?;
 
         let mut ctx = Ctx::with_capacity(7, 7);
-        Parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
+        parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
         let pack_path = pack.path(&ctx);
         let own_classes: Vec<_> = pack
