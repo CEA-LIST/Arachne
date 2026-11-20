@@ -1,12 +1,6 @@
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Class, Structural, annot::Val, structural::Typ as StructuralTyp},
-};
+use ecore_rs::repr::{Class, Structural, annot::Val, structural::Typ as StructuralTyp};
 
-use crate::codegen::{
-    datatype::crdt::{Counter, Flag, Primitive, Register, Set},
-    ecore::map_entry_spec,
-};
+use crate::codegen::datatype::crdt::{Counter, Flag, Primitive, Register, Set};
 
 const SEMANTICS_SOURCE: &str = "urn:arachne:semantics";
 const DATATYPE_KEY: &str = "datatype";
@@ -38,62 +32,6 @@ pub fn datatype_override(feature: &Structural) -> Option<DatatypeOverride> {
     parse_datatype_override(feature.kind, value)
 }
 
-/// The `datatype` a metamodel gives an attribute of one of Ecore's own classes, or `None`.
-///
-/// No element of a metamodel file declares `EAnnotation.source` or
-/// `EStringToStringMapEntry.key` and `.value`: Arachne builds Ecore's classes in, so there is no
-/// feature to annotate. A metamodel names them instead in a `urn:arachne:semantics` annotation
-/// on one of its own packages, one detail per feature, keyed by the feature as the descriptor
-/// lists it and valued by the spelling a feature-level `datatype` takes:
-///
-/// ```xml
-/// <eAnnotations source="urn:arachne:semantics">
-///   <details key="ecore::EAnnotation.source" value="mv-register"/>
-/// </eAnnotations>
-/// ```
-///
-/// Only the attributes of Ecore's own classes are reached this way; a metamodel's own feature
-/// carries its annotation itself. A metamodel that writes no such detail is described and generated as
-/// before.
-pub fn ecore_feature_datatype<'a>(
-    ctx: &'a Ctx,
-    class: &Class,
-    feature: &Structural,
-) -> Option<&'a Val> {
-    if feature.kind != StructuralTyp::EAttribute || !ctx.is_ecore_class(class.idx) {
-        return None;
-    }
-    let key = format!(
-        "{}::{}.{}",
-        ecore_rs::repr::ecore::PACKAGE_NAME,
-        class.name(),
-        feature.name
-    );
-    ctx.pack_indices()
-        .filter(|pack| Some(*pack) != ctx.ecore_pack())
-        .flat_map(|pack| ctx[pack].annotations())
-        .filter(|annot| annot.source() == SEMANTICS_SOURCE)
-        .find_map(|annot| annot.details().get(&key))
-}
-
-/// [`datatype_override`], or for a feature of one of Ecore's own classes the override its
-/// metamodel names in a package annotation ([`ecore_feature_datatype`]).
-pub fn datatype_override_in(ctx: &Ctx, feature: &Structural) -> Option<DatatypeOverride> {
-    datatype_override(feature).or_else(|| {
-        let class = ctx
-            .ecore_classes()
-            .values()
-            .map(|idx| &ctx[*idx])
-            .find(|class| {
-                class
-                    .structural()
-                    .iter()
-                    .any(|own| std::ptr::eq(own, feature))
-            })?;
-        parse_datatype_override(feature.kind, ecore_feature_datatype(ctx, class, feature)?)
-    })
-}
-
 pub fn uw_map_spec(feature: &Structural) -> Option<UwMapSpec> {
     let annot = feature
         .annotations()
@@ -116,12 +54,6 @@ pub fn uw_map_spec(feature: &Structural) -> Option<UwMapSpec> {
             .cloned()
             .unwrap_or_else(|| "value".to_string()),
     })
-}
-
-/// The map a containment is generated as, if any: by its `uw-map` annotation, or by EMF's map
-/// entry convention if it contains Ecore's own `EStringToStringMapEntry`.
-pub fn map_spec(ctx: &Ctx, feature: &Structural) -> Option<UwMapSpec> {
-    uw_map_spec(feature).or_else(|| map_entry_spec(ctx, feature))
 }
 
 pub fn transparent_field(class: &Class) -> Option<String> {

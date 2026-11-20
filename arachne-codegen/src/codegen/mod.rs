@@ -1,3 +1,4 @@
+pub mod analysis;
 pub(crate) mod annotation;
 pub mod classifier;
 pub mod cycles;
@@ -11,8 +12,8 @@ mod ident;
 mod import;
 mod operation;
 pub mod package;
+mod reachability;
 pub mod read_as_ecore;
 pub mod reference;
 pub mod semantics;
-mod value;
 mod warnings;

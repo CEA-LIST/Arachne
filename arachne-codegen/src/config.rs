@@ -7,25 +7,6 @@ pub enum Formatting {
     Prettyplease,
 }
 
-/// How the `path` dependencies on the Moirai workspace are written into the
-/// generated `Cargo.toml`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum MoiraiPathStyle {
-    /// Relative to the generated project directory.
-    ///
-    /// This is the default: it keeps the generated project buildable on any
-    /// machine, as long as it is moved together with the Moirai workspace it
-    /// was generated against (the sibling-repository layout the rest of the
-    /// toolchain already assumes).
-    #[default]
-    Relative,
-    /// Absolute, canonicalised paths.
-    ///
-    /// Machine-specific — only useful when the generated project is meant to
-    /// stay on the machine that produced it.
-    Absolute,
-}
-
 /// Configuration for the Arachne code generator
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -35,10 +16,8 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Optional generated project name (Cargo package name)
     pub project_name: Option<String>,
-    /// Path to the Moirai workspace root
-    pub moirai_root: PathBuf,
-    /// How Moirai `path` dependencies are written into the generated manifest
-    pub moirai_path_style: MoiraiPathStyle,
+    /// Local Moirai workspace to use instead of the pinned Git revision.
+    pub moirai_path: Option<PathBuf>,
     /// Format output code
     pub format_code: Formatting,
 }
@@ -51,8 +30,7 @@ impl Config {
             input_path,
             output_dir: PathBuf::from(".output/generated_project"),
             project_name: None,
-            moirai_root: PathBuf::from("../moirai"),
-            moirai_path_style: MoiraiPathStyle::default(),
+            moirai_path: None,
             format_code: Formatting::Prettyplease,
         }
     }
@@ -69,16 +47,8 @@ impl Config {
         self
     }
 
-    /// Sets the path to the Moirai workspace root
-    pub fn with_moirai_root(mut self, moirai_root: impl Into<PathBuf>) -> Self {
-        self.moirai_root = moirai_root.into();
-        self
-    }
-
-    /// Sets how Moirai `path` dependencies are written into the generated
-    /// `Cargo.toml`.
-    pub fn with_moirai_path_style(mut self, style: MoiraiPathStyle) -> Self {
-        self.moirai_path_style = style;
+    pub fn with_moirai_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.moirai_path = Some(path.into());
         self
     }
 
@@ -96,12 +66,23 @@ impl Config {
             )));
         }
 
+        if let Some(path) = &self.moirai_path {
+            for name in ["moirai-protocol", "moirai-crdt", "moirai-macros"] {
+                if !path.join(name).join("Cargo.toml").is_file() {
+                    return Err(crate::error::ArachneError::Config(format!(
+                        "Moirai workspace is missing {name}/Cargo.toml: {}",
+                        path.display()
+                    )));
+                }
+            }
+        }
+
         Ok(())
     }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self::new("./examples/behavior_tree.ecore")
+        Self::new("./examples/bt.ecore")
     }
 }

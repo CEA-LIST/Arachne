@@ -1,6 +1,6 @@
 [package]
 name = "arachne-codegen"
-version = "0.2.1"
+version = "0.3.1"
 edition = "2024"
 description = "Code generator for Arachne"
 
@@ -8,29 +8,21 @@ description = "Code generator for Arachne"
 ecore_rs = { version = "*", path = "../arachne-parser" }
 proc-macro2 = "1.0.106"
 quote = "1.0.44"
-syn = "2.0.114"
-prettyplease = "0.2.37"
+syn = "3.0.6"
+prettyplease = "0.3"
 anyhow = "1.0"
+thiserror = "2.0"
+rustc-hash = "2.1.3"
+heck = "0.5.0"
+log = "0.4.29"
+owo-colors = "4"
+arachne-xmi = { version = "*", path = "../arachne-xmi" }
+# `describe`: the descriptor, its digest, and the merge rules read from `moirai-semantics`.
 # `Serialize` on the shared merge vocabulary, so the descriptor and
 # `moirai-semantics`'s parser cannot drift on a tag name.
 serde = "1.0"
 serde_json = "1.0"
-# The metamodel digest: SHA-256 over the compact descriptor. Keep `serde_json`
-# without `preserve_order`, or the digest would depend on a file's key order.
 sha2 = "0.10"
-thiserror = "1.0"
-rustc-hash = "2.1.1"
-heck = "0.5.0"
-log = "0.4.29"
-owo-colors = "4"
-xml-builder = "0.5.4"
-# One Moirai for the whole repository, the model-plane checkout the generated
-# crates already build against: the generator and what it generates cannot be
-# allowed to see two different versions of the interface.
-moirai-protocol = { version = "*", path = "../../moirai-model-plane/moirai-protocol" }
-moirai-crdt = { version = "*", path = "../../moirai-model-plane/moirai-crdt" }
-moirai-macros = { version = "*", path = "../../moirai-model-plane/moirai-macros" }
 moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
-pathdiff = "0.2"
 # `resources.rs` scans Ecore text for relative resource references; the merged parser no longer re-exports it.
 regex = "1.6"

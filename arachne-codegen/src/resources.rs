@@ -1,4 +1,4 @@
-//! Local Ecore resource resolution for project generation.
+//! Local Ecore resource resolution for `describe`.
 //!
 //! The parser deliberately resolves only names within a resource and Ecore built-ins.
 //! Rewrite relative resource references to qualified local forward references, then
@@ -24,13 +24,18 @@ use crate::{ArachneError, EcoreParser, codegen::descriptor, find_user_package};
 
 pub(crate) struct Resources {
     pub parser: EcoreParser,
-    pub own_classes: Vec<idx::Class>,
     pub descriptor: Value,
     dependencies: BTreeMap<String, Value>,
     origins: BTreeMap<String, String>,
 }
 
-impl Resources {
+/// What `arachne describe` writes: the descriptor, and the descriptor of each model it depends on, by digest.
+pub struct Described {
+    pub descriptor: Value,
+    dependencies: BTreeMap<String, Value>,
+}
+
+impl Described {
     pub fn write_dependencies(&self, output: &Path) -> anyhow::Result<()> {
         if !self.dependencies.is_empty() {
             let directory = output.join("dependencies");
@@ -44,7 +49,27 @@ impl Resources {
         }
         Ok(())
     }
+}
 
+/// Describes `path`. The file is read alone first, so every file that was described before keeps
+/// its descriptor and, when it is refused, the parser's own error. Only a file the parser refuses
+/// is resolved against the resources it names; when that fails too, the parser's error stands.
+pub fn describe(path: &Path) -> crate::Result<Described> {
+    match EcoreParser::from_file(path) {
+        Ok(parser) => Ok(Described {
+            descriptor: descriptor::descriptor_json(&parser.ctx, find_user_package(&parser.ctx)?)?,
+            dependencies: BTreeMap::new(),
+        }),
+        Err(refused) => load(path)
+            .map(|resources| Described {
+                descriptor: resources.descriptor.clone(),
+                dependencies: resources.dependencies.clone(),
+            })
+            .map_err(|_| refused),
+    }
+}
+
+impl Resources {
     fn qualified_name(&self, class: idx::Class) -> anyhow::Result<String> {
         let name = self.parser.ctx[class].name();
         Ok(if self.origins.contains_key(name) {
@@ -155,7 +180,6 @@ impl Loader {
         }
         let resource = Rc::new(Resources {
             parser: EcoreParser { ctx },
-            own_classes,
             descriptor,
             dependencies,
             origins,

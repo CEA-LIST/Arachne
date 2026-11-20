@@ -1,201 +1,29 @@
-use std::str::FromStr;
+use ecore_rs::repr::Structural;
 
-use ecore_rs::{
-    ctx::Ctx,
-    repr::{Structural, builtin::Typ},
-};
-use quote::quote;
-
+use super::plan::FeaturePlan;
 use crate::{
     CLASSIFIERS_PATH_MOD,
     codegen::{
-        annotation::{DatatypeOverride, datatype_override_in},
-        datatype::{
-            crdt::{Bag, Collection, Crdt, Named, NestedCrdt, Primitive, Set, SimpleCrdt},
-            to_crdt::ToCrdt,
-        },
-        feature::{
-            bounds::{BoundKind, normalize_bounds},
-            typed_element::unsupported_feature_properties,
-        },
+        analysis::ModelIndex,
         generate::{Fragment, Generate},
         generator::PRIVATE_MOD_PREFIX,
-        ident::{classifier_type_ident, rust_ident, value_ident},
-        import::{Import, Log},
-        value,
     },
 };
 
 pub struct AttributeGenerator<'a> {
     attribute: &'a Structural,
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
 }
 
 impl<'a> AttributeGenerator<'a> {
-    pub fn new(attribute: &'a Structural, ctx: &'a Ctx) -> Self {
-        assert_eq!(attribute.kind, ecore_rs::repr::structural::Typ::EAttribute);
+    pub fn new(attribute: &'a Structural, ctx: &'a ModelIndex<'a>) -> Self {
         Self { attribute, ctx }
     }
 }
 
-impl<'a> Generate for AttributeGenerator<'a> {
+impl Generate for AttributeGenerator<'_> {
     fn generate(&self) -> anyhow::Result<Fragment> {
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD)).unwrap();
-
-        let (bound_kind, mut warnings) =
-            normalize_bounds(self.attribute.bounds, &self.attribute.name);
-
-        unsupported_feature_properties(self.attribute, &mut warnings);
-
-        let name = value_ident(&self.attribute.name);
-        let class_typ = self
-            .ctx
-            .classes()
-            .get(*self.attribute.typ.unwrap())
-            .unwrap();
-
-        let (rust_typ, mut crdt) = if class_typ.is_enum() {
-            let enum_name = classifier_type_ident(self.ctx, class_typ);
-            (
-                Some(quote! { #enum_name }),
-                Primitive::Register(Default::default()),
-            )
-        } else {
-            let typ: Typ = FromStr::from_str(class_typ.name())
-                .unwrap_or_else(|_| panic!("Failed to parse type: {}", class_typ.name()));
-            (ToCrdt::to_rust_type(&typ), ToCrdt::to_crdt_container(&typ))
-        };
-
-        if let Some(override_typ) = datatype_override_in(self.ctx, self.attribute) {
-            match override_typ {
-                DatatypeOverride::Primitive(primitive) => {
-                    crdt = primitive;
-                }
-                DatatypeOverride::Set(_) => {}
-            }
-        }
-
-        let (log_type, crdt_inner, log_import) = match &crdt {
-            Primitive::Counter(_) => {
-                let rust_typ = rust_typ.clone().expect("Counter should have a rust type");
-                let type_name = rust_ident(crdt.name());
-                (
-                    quote! { #path::VecLog },
-                    quote! { #path::#type_name<#rust_typ> },
-                    Import::Log(Log::Vec),
-                )
-            }
-            Primitive::Flag(_) => {
-                let type_name = rust_ident(crdt.name());
-                (
-                    quote! { #path::VecLog },
-                    quote! { #path::#type_name },
-                    Import::Log(Log::Vec),
-                )
-            }
-            Primitive::Register(_) => {
-                let rust_typ = rust_typ.clone().expect("Register should have a rust type");
-                let type_name = rust_ident(crdt.name());
-                (
-                    quote! { #path::VecLog },
-                    quote! { #path::#type_name<#rust_typ> },
-                    Import::Log(Log::Vec),
-                )
-            }
-            Primitive::List => {
-                // EString -> List<char>, uses GraphLog as log type
-                let type_name = rust_ident(crdt.name());
-                (
-                    quote! { #path::GraphLog },
-                    quote! { #path::#type_name<char> },
-                    Import::Log(Log::Graph),
-                )
-            }
-        };
-
-        // The leaf's read-out, computed once: every shape below either reads
-        // as the leaf does or wraps it.
-        let leaf_value = value::leaf(&crdt, rust_typ.as_ref(), &path);
-
-        let (field_type, field_value, imports) = match (
-            bound_kind,
-            // Default to true if not specified, as per Ecore spec
-            self.attribute.unique.unwrap_or(true),
-            self.attribute.ordered.unwrap_or(true),
-        ) {
-            (BoundKind::Single, _, _) => (
-                quote! { #log_type<#crdt_inner> },
-                leaf_value,
-                vec![
-                    log_import,
-                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
-                ],
-            ),
-            (BoundKind::Optional, _, _) => (
-                quote! { #path::OptionLog<#log_type<#crdt_inner>> },
-                leaf_value.optional(),
-                vec![
-                    log_import,
-                    Import::Crdt(Crdt::Nested(NestedCrdt::Optional)),
-                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
-                ],
-            ),
-            (BoundKind::Many, false, true) => (
-                quote! { #path::NestedListLog<#log_type<#crdt_inner>> },
-                leaf_value.sequence(),
-                vec![
-                    log_import,
-                    Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(crdt))),
-                    Import::Crdt(Crdt::Nested(NestedCrdt::List)),
-                ],
-            ),
-            (BoundKind::Many, true, true) => {
-                let element_type = rust_typ
-                    .clone()
-                    .expect("Unique ordered attributes should have a Rust element type");
-                (
-                    quote! { #path::GraphLog<#path::List<#element_type>> },
-                    value::Value::plain(element_type.clone()).sequence(),
-                    vec![
-                        Import::Log(Log::Graph),
-                        Import::Crdt(Crdt::Simple(SimpleCrdt::Primitive(Primitive::List))),
-                    ],
-                )
-            }
-            (BoundKind::Many, false, false) => (
-                quote! { #path::AWBagLog<#rust_typ> },
-                value::bag(&quote! { #rust_typ }, &path),
-                vec![Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(
-                    Collection::Bag(Bag::AWBag),
-                )))],
-            ),
-            (BoundKind::Many, true, false) => {
-                let set_typ = match datatype_override_in(self.ctx, self.attribute) {
-                    Some(DatatypeOverride::Set(set)) => set,
-                    _ => Set::AWSet,
-                };
-                let set_name = rust_ident(set_typ.name());
-                let field_value = value::set(&set_typ, &quote! { #rust_typ }, &path);
-                (
-                    quote! { #path::VecLog<#path::#set_name<#rust_typ>> },
-                    field_value,
-                    vec![
-                        Import::Log(Log::Vec),
-                        Import::Crdt(Crdt::Simple(SimpleCrdt::Collection(Collection::Set(
-                            set_typ,
-                        )))),
-                    ],
-                )
-            }
-        };
-
-        let (value_type, value_imports) = field_value.into_parts();
-        let mut imports = imports;
-        imports.extend(value_imports);
-
-        let tokens = quote! { #name: #field_type => #value_type };
-
-        Ok(Fragment::new(tokens, imports, warnings))
+        let path = syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, CLASSIFIERS_PATH_MOD))?;
+        FeaturePlan::attribute(self.ctx, self.attribute)?.into_field(self.ctx, &path)
     }
 }

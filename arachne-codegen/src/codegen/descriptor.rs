@@ -152,7 +152,12 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     let generated_set: HashSet<idx::Class> = generated.iter().copied().collect();
 
-    let roots = crate::compute_top_level_roots(ctx, own_classes, &generated, &generated_set);
+    let roots = crate::codegen::reachability::compute_top_level_roots(
+        ctx,
+        own_classes,
+        &generated,
+        &generated_set,
+    );
     if roots.is_empty() {
         return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
     }
@@ -172,7 +177,11 @@ pub(crate) fn descriptor_with_roots(
 
     let mut reachable: HashSet<idx::Class> = HashSet::new();
     for root in &roots {
-        reachable.extend(crate::collect_reachable_classes(ctx, *root, &described_set));
+        reachable.extend(crate::codegen::reachability::collect_reachable_classes(
+            ctx,
+            *root,
+            &described_set,
+        ));
     }
     reachable.extend(
         package_classes
@@ -184,7 +193,7 @@ pub(crate) fn descriptor_with_roots(
     // exactly as `generate_from_parser` leaves it out.
     reachable.retain(|class| {
         !ctx.is_ecore_class(*class)
-            || !crate::codegen::classifier::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
+            || !crate::codegen::reachability::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
     });
 
     let mut root_names: Vec<String> = roots

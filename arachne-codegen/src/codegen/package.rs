@@ -1,4 +1,4 @@
-use ecore_rs::{ctx::Ctx, repr::idx};
+use ecore_rs::repr::idx;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
@@ -6,6 +6,7 @@ use syn::Ident;
 use crate::{
     CLASSIFIERS_PATH_MOD, PACKAGE_PATH_MOD,
     codegen::{
+        analysis::{GenerationPlan, ModelIndex},
         classifier::{
             has_codegen_polymorphic_family, polymorphic_kind_ident, polymorphic_kind_log_ident,
         },
@@ -31,33 +32,27 @@ fn classifiers_path() -> syn::Path {
 }
 
 pub struct PackageGenerator<'a> {
-    ctx: &'a Ctx,
+    ctx: &'a ModelIndex<'a>,
     pack_idx: idx::Pack,
-    root_class_indices: Vec<idx::Class>,
+    root_class_indices: &'a [idx::Class],
     ref_analysis: &'a ReferenceAnalysis,
 }
 
 impl<'a> PackageGenerator<'a> {
-    pub fn new(
-        ctx: &'a Ctx,
-        pack_idx: idx::Pack,
-        root_class_indices: Vec<idx::Class>,
-        ref_analysis: &'a ReferenceAnalysis,
-    ) -> Self {
+    pub fn new(plan: &'a GenerationPlan<'a>) -> Self {
         Self {
-            ctx,
-            pack_idx,
-            root_class_indices,
-            ref_analysis,
+            ctx: &plan.model,
+            pack_idx: plan.pack_idx,
+            root_class_indices: &plan.roots,
+            ref_analysis: &plan.references,
         }
     }
 
-    fn roots(&self) -> Vec<RootMeta> {
+    fn roots(&self) -> impl Iterator<Item = RootMeta> + '_ {
         self.root_class_indices
             .iter()
             .copied()
             .map(|class_idx| RootMeta { class_idx })
-            .collect()
     }
 
     fn root_class_name(&self, root: RootMeta) -> &str {
@@ -93,24 +88,27 @@ impl<'a> PackageGenerator<'a> {
         self.ref_analysis.has_references()
     }
 
+    fn package_name(&self) -> &str {
+        self.ctx.packs().get(self.pack_idx).unwrap().name()
+    }
+
     fn imports(&self) -> Vec<Import> {
         let mut imports = vec![
             Import::Protocol(Protocol::Read),
             Import::Protocol(Protocol::EvalNested),
             Import::Protocol(Protocol::IsLog),
             Import::Protocol(Protocol::Version),
+            Import::Protocol(Protocol::Frontier),
             Import::Custom("moirai_protocol::event::Event as ProtocolEvent"),
-            Import::Protocol(Protocol::QueryOperation),
-            Import::Protocol(Protocol::SinkEffect),
             Import::Protocol(Protocol::EffectContext),
-            Import::Protocol(Protocol::SinkCollector),
         ];
 
         if self.has_references() {
             imports.extend([
+                Import::Protocol(Protocol::SinkEffect),
+                Import::Protocol(Protocol::SinkCollector),
                 Import::Protocol(Protocol::FairPolicy),
                 Import::Log(Log::Vec),
-                Import::Custom("petgraph::graph::DiGraph"),
                 Import::Custom("crate::references::*"),
             ]);
         }
@@ -121,10 +119,10 @@ impl<'a> PackageGenerator<'a> {
     fn generate_package_enum(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_ident = type_ident(package_name);
         let classifiers = classifiers_path();
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             quote! { #variant(#classifiers::#variant) }
         });
@@ -136,7 +134,6 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone)]
-            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub enum #package_ident {
                 #(#root_variants),*
                 #reference_variants
@@ -147,19 +144,19 @@ impl<'a> PackageGenerator<'a> {
     fn generate_package_rejection_enum(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
         let reference_log_ty = quote! { #path::VecLog<#path::ReferenceManager<#path::FairPolicy>> };
         let classifiers = classifiers_path();
 
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! {
                 #variant(<#classifiers::#log_ty as #path::IsLog>::Rejection)
             }
         });
-        let root_display_arms = self.roots().into_iter().map(|root| {
+        let root_display_arms = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let label = variant.to_string();
             quote! {
@@ -202,27 +199,19 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_package_value_struct(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let classifiers = classifiers_path();
-        let root_fields = self.roots().into_iter().map(|root| {
+        let root_fields = self.roots().map(|root| {
             let field = value_ident(self.root_class_name(root));
             let value_ty = self.root_value_ident(root);
             quote! { pub #field: #classifiers::#value_ty }
         });
         let refs_field = if self.has_references() {
-            // petgraph::Graph doesn't implement Serialize/Deserialize,
-            // so we skip the refs field during serde and default it on deserialization.
-            // v0.7 took the `Value` associated type off the CRDT trait, so the
-            // reference manager's read-out is named outright: the typed graph
-            // macro reads a `VecLog<ReferenceManager<P>>` as a
-            // `DiGraph<Instance, Ref>` (`moirai-macros/src/typed_graph.rs`),
-            // over the vertex and edge kinds `reference/mod.rs` always names.
             quote! {
-                #[cfg_attr(feature = "serde", serde(skip))]
-                pub refs: #path::DiGraph<#path::Instance, #path::Ref>,
+                pub refs: petgraph::graph::DiGraph<#path::Instance, #path::Ref>,
             }
         } else {
             quote! {}
@@ -230,7 +219,6 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone, Default)]
-            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub struct #package_value_name {
                 #(#root_fields,)*
                 #refs_field
@@ -239,18 +227,18 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_package_log_struct(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
         let classifiers = classifiers_path();
 
-        let root_fields = self.roots().into_iter().map(|root| {
+        let root_fields = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! { #field: #classifiers::#log_ty }
         });
-        let root_getters = self.roots().into_iter().map(|root| {
+        let root_getters = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             let log_ty = self.root_log_ident(root);
             quote! {
@@ -278,7 +266,6 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone, Default)]
-            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub struct #package_log_name {
                 #(#root_fields,)*
                 #reference_field
@@ -294,12 +281,12 @@ impl<'a> PackageGenerator<'a> {
     fn generate_is_log_impl(&self) -> TokenStream {
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let package_ident = type_ident(package_name);
         let package_rejection_name = type_ident_with_suffix(package_name, "Rejection");
 
-        let enabled_root_arms = self.roots().into_iter().map(|root| {
+        let enabled_root_arms = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let field = self.root_field_ident(root);
             quote! {
@@ -309,15 +296,15 @@ impl<'a> PackageGenerator<'a> {
                     .map_err(#package_rejection_name::#variant)
             }
         });
-        let stabilize_roots = self.roots().into_iter().map(|root| {
+        let stabilize_roots = self.roots().map(|root| {
             let field = self.root_field_ident(root);
-            quote! { self.#field.stabilize(version); }
+            quote! { self.#field.stabilize(frontier); }
         });
-        let redundant_roots = self.roots().into_iter().map(|root| {
+        let redundant_roots = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             quote! { self.#field.redundant_by_parent(version, conservative); }
         });
-        let default_checks = self.roots().into_iter().map(|root| {
+        let default_checks = self.roots().map(|root| {
             let field = self.root_field_ident(root);
             quote! { self.#field.is_default() }
         });
@@ -342,7 +329,7 @@ impl<'a> PackageGenerator<'a> {
             quote! {}
         };
         let stabilize_refs = if self.has_references() {
-            quote! { self.reference_manager_log.stabilize(version); }
+            quote! { self.reference_manager_log.stabilize(frontier); }
         } else {
             quote! {}
         };
@@ -351,7 +338,7 @@ impl<'a> PackageGenerator<'a> {
         } else {
             quote! {}
         };
-        let root_variants = self.roots().into_iter().map(|root| {
+        let root_variants = self.roots().map(|root| {
             let variant = self.root_variant_ident(root);
             let log_field = self.root_field_ident(root);
             let field_stringify = value_ident(self.root_class_name(root)).to_string();
@@ -457,7 +444,7 @@ impl<'a> PackageGenerator<'a> {
                     #effect
                 }
 
-                fn stabilize(&mut self, version: &#path::Version) {
+                fn stabilize(&mut self, frontier: &#path::CausalFrontier) {
                     #(#stabilize_roots)*
                     #stabilize_refs
                 }
@@ -475,72 +462,43 @@ impl<'a> PackageGenerator<'a> {
     }
 
     fn generate_eval_nested_impl(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
+        let package_name = self.package_name();
         let package_log_name = type_ident_with_suffix(package_name, "Log");
         let package_value_name = type_ident_with_suffix(package_name, "Value");
         let path: syn::Path =
             syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
 
-        let root_reads = self.roots().into_iter().map(|root| {
+        let root_reads = self.roots().map(|root| {
             let field_name = value_ident(self.root_class_name(root));
             let log_field = self.root_field_ident(root);
-            quote! { #field_name: self.#log_field.execute_query(&#path::Read::new()) }
+            let value_ty = self.root_value_ident(root);
+            let classifiers = classifiers_path();
+            quote! {
+                #field_name: self.#log_field.execute_query(
+                    &#path::Read::<#classifiers::#value_ty>::new()
+                )
+            }
         });
         let refs_field = if self.has_references() {
-            quote! { refs: self.reference_manager_log.execute_query(&#path::Read::new()), }
+            quote! {
+                refs: self.reference_manager_log.execute_query(
+                    &#path::Read::<petgraph::graph::DiGraph<#path::Instance, #path::Ref>>::new()
+                ),
+            }
         } else {
             quote! {}
         };
 
-        // The package's own value type, named outright: v0.7's `IsLog` has no
-        // `Value` associated type to project it through.
         quote! {
             impl #path::EvalNested<#path::Read<#package_value_name>> for #package_log_name {
                 fn execute_query(
                     &self,
                     _q: &#path::Read<#package_value_name>,
-                ) -> <#path::Read<#package_value_name> as #path::QueryOperation>::Response {
+                ) -> #package_value_name {
                     #package_value_name {
                         #(#root_reads,)*
                         #refs_field
                     }
-                }
-            }
-        }
-    }
-
-    /// Generate the `QueryableLog` impl for the package log.
-    ///
-    /// This enables the `GET /api/state` endpoint in `GenericNode` by providing
-    /// a concrete function that calls `replica.query(Read::new())` and serializes
-    /// the resulting `Value` to JSON.
-    ///
-    /// Each generated package gets this automatically — downstream code just needs
-    /// to call `node.enable_state_query()` before `node.run()`.
-    fn generate_queryable_log_impl(&self) -> TokenStream {
-        let package_name = self.ctx.packs().get(self.pack_idx).unwrap().name();
-        let package_log_name = type_ident_with_suffix(package_name, "Log");
-        let package_ident = type_ident(package_name);
-        let package_value_name = type_ident_with_suffix(package_name, "Value");
-        let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, PACKAGE_PATH_MOD)).unwrap();
-
-        quote! {
-            /// Auto-generated [`QueryableLog`] impl — enables `GET /api/state` in `GenericNode`.
-            ///
-            /// Calls `replica.query(Read::new())` to evaluate the full CRDT state via
-            /// the `EvalNested<Read<Value>>` chain, then serializes the result to JSON.
-            impl moirai_network::query::QueryableLog for #package_log_name {
-                fn query_state_json(
-                    replica: &moirai_protocol::replica::Replica<
-                        Self,
-                        moirai_protocol::broadcast::tcsb::Tcsb<#package_ident>,
-                    >,
-                ) -> serde_json::Value {
-                    use moirai_protocol::replica::IsReplica;
-                    let value: #package_value_name = replica.query(&#path::Read::new());
-                    serde_json::to_value(&value)
-                        .unwrap_or_else(|e| serde_json::json!({ "error": format!("serialize: {}", e) }))
                 }
             }
         }
@@ -555,7 +513,6 @@ impl<'a> Generate for PackageGenerator<'a> {
         let package_log = self.generate_package_log_struct();
         let is_log_impl = self.generate_is_log_impl();
         let eval_nested_impl = self.generate_eval_nested_impl();
-        let queryable_log_impl = self.generate_queryable_log_impl();
 
         let tokens = quote! {
             #package_enum
@@ -564,7 +521,6 @@ impl<'a> Generate for PackageGenerator<'a> {
             #package_log
             #is_log_impl
             #eval_nested_impl
-            #queryable_log_impl
         };
 
         let imports = self.imports();
