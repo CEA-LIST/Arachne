@@ -67,13 +67,6 @@ pub enum ArachneError {
     /// or key its classifiers without clashing; the text says which.
     #[error("subpackage refused: {0}")]
     Subpackage(String),
-
-    /// A map keyed by an enum would be written with the enum's `Ctx` index, which names
-    /// nothing a reader of the descriptor can resolve; refused until it is written by name.
-    #[error(
-        "`{class}.{feature}` is a map with an enum key, which the descriptor cannot write by name"
-    )]
-    EnumKeyedMap { class: String, feature: String },
 }
 
 /// Specialized Result type for Arachne

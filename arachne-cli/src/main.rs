@@ -425,7 +425,6 @@ fn error_category(err: &anyhow::Error, stage: &str) -> (&'static str, &'static s
             ArachneError::NoConcreteEClass(_) => ("root_selection", "unsupported_feature"),
             ArachneError::UnlistedComponent(..) => ("root_selection", "unsupported_feature"),
             ArachneError::NoValidPackageFound => ("package_selection", "unsupported_feature"),
-            ArachneError::EnumKeyedMap { .. } => ("invalid_model", "unsupported_feature"),
             ArachneError::DuplicateDescriptorClass(_)
             | ArachneError::DescriptorNotClosed { .. } => ("invalid_model", "invalid_input"),
             ArachneError::Subpackage(_) => ("invalid_model", "invalid_input"),

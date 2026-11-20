@@ -243,12 +243,12 @@ pub fn merge_json(rule: &MergeRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
     Ok(match rule {
         MergeRule::Attribute { shape, leaf } => json!({
             "kind": "attribute",
-            "shape": to_value(shape),
+            "shape": shape_json(shape, ctx, root)?,
             "leaf": leaf_json(leaf, ctx, root)?,
         }),
         MergeRule::Containment { shape, target } => json!({
             "kind": "containment",
-            "shape": to_value(shape),
+            "shape": shape_json(shape, ctx, root)?,
             "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::Reference { many, target } => json!({
@@ -843,6 +843,19 @@ fn set_tie(datatype: Option<&Val>) -> SetTie {
 /* ---------- rendering ---------- */
 
 /// A leaf, with an enum's class by name.
+/// A shape as the descriptor spells it: an enum key by the enum's name, since its slot is a `Ctx` index.
+fn shape_json(shape: &Shape, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match shape {
+        Shape::Keyed {
+            key: KeyKind::Enum { class },
+        } => json!({
+            "kind": "keyed",
+            "key": { "kind": "enum", "class": class_name(*class, ctx, root)? },
+        }),
+        other => to_value(other),
+    })
+}
+
 fn leaf_json(leaf: &LeafRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
     Ok(match leaf {
         LeafRule::Enum { class, tie } => json!({

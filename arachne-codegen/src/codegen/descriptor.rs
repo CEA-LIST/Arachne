@@ -137,8 +137,7 @@ const FORMAT_VERSION: u64 = 2;
 /// [`ArachneError::NoEClass`] when it declares no EClass at all, or
 /// [`ArachneError::NoConcreteEClass`] when it declares none but abstract ones and interfaces;
 /// with [`ArachneError::DescriptorNotClosed`] when a name the descriptor
-/// writes is not one it writes; and with [`ArachneError::EnumKeyedMap`] for
-/// a map keyed by an enum.
+/// writes is not one it writes.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
     let own_classes = tree_classes(ctx, pack);
     descriptor_with_roots(ctx, pack, &own_classes)
@@ -551,20 +550,6 @@ fn add_semantics(
     written: &HashSet<idx::Class>,
 ) -> Result<()> {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
-    // The key's slot is a `Ctx` index, which names nothing a reader of the descriptor can resolve.
-    if let MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } = &merge
-        && matches!(
-            shape,
-            Shape::Keyed {
-                key: KeyKind::Enum { .. }
-            }
-        )
-    {
-        return Err(ArachneError::EnumKeyedMap {
-            class: semantics::descriptor_class_name(ctx, pack, class.idx)?,
-            feature: feature.name.clone(),
-        });
-    }
     // The merge rule's own class names (`merge.target`, `merge.leaf.class`) are names too.
     let named = match &merge {
         MergeRule::Containment { target, .. }
@@ -576,7 +561,16 @@ fn add_semantics(
         } => Some(*class),
         _ => None,
     };
-    if let Some(slot) = named {
+    let key = match &merge {
+        MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } => match shape {
+            Shape::Keyed {
+                key: KeyKind::Enum { class },
+            } => Some(*class),
+            _ => None,
+        },
+        _ => None,
+    };
+    for slot in named.into_iter().chain(key) {
         require(ctx, pack, class, idx::Class::from(slot.index()), written)?;
     }
     entry["facets"] = semantics::facets_json(feature);
