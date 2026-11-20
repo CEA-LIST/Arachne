@@ -15,7 +15,9 @@ ns_prefix	0
 operation	0
 refused	1
 resolve_proxies	0
+same_key/root	0
 super_type_order	0
 transient	0
+unlisted/root	0
 unsettable	0
 volatile	0

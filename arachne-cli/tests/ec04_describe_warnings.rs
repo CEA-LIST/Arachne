@@ -5,7 +5,9 @@
 //!
 //! `fixtures/ec04/expected/warnings.tsv` holds the hand-written warning lines of each fixture, one
 //! fixture per construct kind plus `clean` (explicit Ecore defaults, nothing dropped), `combined`
-//! (sort, dedup, a subpackage class), `refused` and `cross/root` (a class imported from another file).
+//! (sort, dedup, a subpackage class), `refused`, `cross/root` (a class imported from another file),
+//! `unlisted/root` (an imported class its own file's descriptor does not list) and `same_key/root`
+//! (a subpackage class under the key of a class a transitively loaded file declares).
 //! `<name>.out`, `<name>.err` and `exit.tsv` are what the 76c9caf build printed for the same file.
 
 use std::{fs, path::PathBuf, process::Command};
@@ -26,7 +28,7 @@ fn table(name: &str) -> Vec<Vec<String>> {
 fn describe_names_every_dropped_construct_and_keeps_its_output() {
     let exits = table("exit.tsv");
     let rows = table("warnings.tsv");
-    assert_eq!(rows.len(), 21, "warnings.tsv registers 21 fixtures");
+    assert_eq!(rows.len(), 23, "warnings.tsv registers 23 fixtures");
     let mut failures = Vec::new();
     for row in &rows {
         let name = &row[0];

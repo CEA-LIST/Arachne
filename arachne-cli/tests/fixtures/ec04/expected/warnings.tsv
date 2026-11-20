@@ -15,7 +15,9 @@ ns_prefix	warning: dropped nsPrefix at p
 operation	warning: dropped eOperation at Root.reset
 refused
 resolve_proxies	warning: dropped resolveProxies at Root.next
+same_key/root	warning: dropped eOperation at dep2::X.pong
 super_type_order	warning: dropped superTypeOrder at C
 transient	warning: dropped transient at Root.scratch
+unlisted/root	warning: dropped eOperation at parts::Part.inspect
 unsettable	warning: dropped unsettable at Root.note
 volatile	warning: dropped volatile at Root.cache

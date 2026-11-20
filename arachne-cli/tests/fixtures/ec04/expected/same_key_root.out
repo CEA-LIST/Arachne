@@ -1,0 +1,100 @@
+{
+  "classes": {
+    "Car": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "optional"
+            },
+            "target": "lib::A"
+          },
+          "name": "a",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "lib::A"
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "optional"
+            },
+            "target": "dep2::X"
+          },
+          "name": "x",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "dep2::X"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "dep2::X": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "lib::A": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "origin": "http://example.org/ec04/same_key/lib",
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "6e39ad93c90d48e1e6c82baec191335d7e3929524769610b8d32bf2ad0624dfe",
+      "nsURI": "http://example.org/ec04/same_key/lib"
+    },
+    {
+      "digest": "fe5ac4f2f2887fa72508019643317b51e4aa6c819e40991b906650ee2f15887e",
+      "nsURI": "http://example.org/ec04/same_key/dep2"
+    }
+  ],
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ec04/same_key/root",
+  "package": "cars",
+  "packages": {
+    "dep2": {
+      "nsPrefix": null,
+      "nsURI": "http://example.org/ec04/same_key/root/dep2"
+    }
+  },
+  "rootClasses": [
+    "Car"
+  ]
+}
