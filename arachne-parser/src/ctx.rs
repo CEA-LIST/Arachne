@@ -37,6 +37,8 @@ pub struct Ctx {
     ecore_map: HashMap<ecore::Typ, idx::Class>,
     forward_ref_classes: BTreeSet<idx::Class>,
     forward_ref_packs: BTreeSet<idx::Pack>,
+    /// Lets a forward-referenced package be defined after the classes it was referenced for.
+    fill_forward_packs: bool,
 }
 
 impl std::ops::Index<idx::Class> for Ctx {
@@ -115,6 +117,7 @@ impl Ctx {
             ecore_map: HashMap::new(),
             forward_ref_classes: BTreeSet::new(),
             forward_ref_packs: BTreeSet::new(),
+            fill_forward_packs: false,
         };
         slf.populate_builtin()
             .expect("[fatal] failed to populate builtin classes");
@@ -123,6 +126,17 @@ impl Ctx {
 
     pub fn parse(txt: impl AsRef<str>) -> Res<Self> {
         let mut slf = Self::with_capacity(7, 7);
+        parser::parse(txt.as_ref(), &mut slf)?;
+        slf.finalize()?;
+        Ok(slf)
+    }
+
+    /// Same as [`Self::parse`], but a package referenced before its definition is filled by it.
+    ///
+    /// [`Self::parse`] refuses that (`add_pack`): its callers generate the first package only.
+    pub fn parse_filling_forward_packs(txt: impl AsRef<str>) -> Res<Self> {
+        let mut slf = Self::with_capacity(7, 7);
+        slf.fill_forward_packs = true;
         parser::parse(txt.as_ref(), &mut slf)?;
         slf.finalize()?;
         Ok(slf)
@@ -440,7 +454,7 @@ impl Ctx {
             if self.forward_ref_packs.contains(&p_idx) {
                 self.forward_ref_packs.remove(&p_idx);
                 // the package should be empty at this point, since we're currently defining it
-                if !self[p_idx].is_empty() {
+                if !self.fill_forward_packs && !self[p_idx].is_empty() {
                     bail!("failed to define previously forward-referenced package: not empty")
                 }
                 return Ok(p_idx);

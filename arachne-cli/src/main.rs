@@ -267,12 +267,20 @@ fn run_describe(args: DescribeArgs) -> Result<()> {
     init_logger_at("error");
     // The parser's error goes out unchanged: it is the line Léo's `generate` prints for the same file.
     // An unreadable file names its path as in f90795e; told apart by variant, never by message.
-    let parser = arachne_codegen::EcoreParser::from_file(&args.input).map_err(|e| match e {
-        e @ arachne_codegen::ArachneError::FileRead(_) => {
-            anyhow!("Failed to parse '{}': {e}", args.input.display())
-        }
-        e => anyhow::Error::from(e),
-    })?;
+    let parser = fs::read_to_string(&args.input)
+        .map_err(|e| {
+            anyhow!(
+                "Failed to parse '{}': {}",
+                args.input.display(),
+                arachne_codegen::ArachneError::from(e)
+            )
+        })
+        .and_then(|text| {
+            // Describe reads a package referenced before its definition; `generate` refuses it.
+            let ctx = ecore_rs::ctx::Ctx::parse_filling_forward_packs(text)
+                .map_err(arachne_codegen::ArachneError::from)?;
+            Ok(arachne_codegen::EcoreParser { ctx })
+        })?;
     let pack = arachne_codegen::find_user_package(&parser.ctx)?;
     let descriptor = arachne_codegen::descriptor_json(&parser.ctx, pack)?;
     let rendered = format!("{descriptor:#}\n");
