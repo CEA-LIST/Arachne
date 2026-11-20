@@ -12,6 +12,8 @@
 //! - G1: guards, green before and after: the code of both files (every line that is a `//`
 //!   comment, and every blank line, removed) is the code at `6606ed9`;
 //!   `datatype/to_crdt.rs` and every file under `examples/` are byte for byte as at `6606ed9`.
+//!   EC.M1b (`spec/items/EC.M1b.md`): `to_crdt.rs` is now Léo's at `ebc3141` (its tree check holds
+//!   it there), and `examples/` gains his `pub_crawl.ecore` and his run-command lines in `README.md`.
 //!
 //! ```bash
 //! nice -n 10 cargo test -j 2 -p arachne-codegen --test ar06_doc_comments
@@ -26,20 +28,18 @@ use sha2::{Digest, Sha256};
 
 const DESCRIPTOR_RS: &str = "arachne-codegen/src/codegen/descriptor.rs";
 const SEMANTICS_RS: &str = "arachne-codegen/src/codegen/semantics.rs";
-const TO_CRDT_RS: &str = "arachne-codegen/src/codegen/datatype/to_crdt.rs";
 
 /// sha256 of each file's code at `6606ed9`, as [`code_only`] reads it.
 const DESCRIPTOR_CODE_SHA256: &str =
     "ba22340b161d4e515d622bfe3fd2c6ebf2db47e13eb97a530252065a53c78f4f";
 const SEMANTICS_CODE_SHA256: &str =
     "f1764fa68c791c6fb856cbf0e75c65d0ae3d7262f771b89795c9c7b7a101c24f";
-/// sha256 of `datatype/to_crdt.rs` at `6606ed9`.
-const TO_CRDT_SHA256: &str = "2de8d2e8927b67d61f81d5055ac6a92809991aa259a96227e216602411dd4218";
 /// sha256 of [`examples_listing`] at `6606ed9`.
 // SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): five descriptors and the digest fixture under
 // `examples/` are regenerated with the identity rule (`si10_shipped_descriptors.rs`, D6); every
 // other file keeps its bytes. `18f1dba2...` before.
-const EXAMPLES_SHA256: &str = "d4e287a6c1602e0687163a0d404338394459a1a8cda40afc6e551905dcbd7a37";
+// EC.M1b (`spec/items/EC.M1b.md`): his `pub_crawl.ecore` and `README.md` lines added; `d4e287a6...` before.
+const EXAMPLES_SHA256: &str = "df07256b23260c7e914f4c89d889b298bffedef9b84bfdf71c04958990cb80f8";
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -219,18 +219,11 @@ fn ar06_g1_only_comments_move() {
         DESCRIPTOR_RS,
         SEMANTICS_RS,
     );
-    let observed = [
-        (
-            TO_CRDT_RS.to_string(),
-            sha256(read(TO_CRDT_RS).as_bytes()),
-            TO_CRDT_SHA256,
-        ),
-        (
-            "examples/".to_string(),
-            sha256(examples_listing().as_bytes()),
-            EXAMPLES_SHA256,
-        ),
-    ];
+    let observed = [(
+        "examples/".to_string(),
+        sha256(examples_listing().as_bytes()),
+        EXAMPLES_SHA256,
+    )];
     let moved: Vec<String> = observed
         .iter()
         .filter(|(_, got, want)| got != want)

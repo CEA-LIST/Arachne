@@ -91,6 +91,7 @@ dependencies = [
  "moirai-semantics",
  "reqwest",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

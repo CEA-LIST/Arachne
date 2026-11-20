@@ -3,8 +3,9 @@
 //! - G1, G2: for a synthetic metamodel whose package carries a `urn:arachne:semantics` detail
 //!   for one of Ecore's own attributes, the field the generator emits for that attribute is the
 //!   construction the descriptor's merge rule names, and the rule is the register the detail
-//!   names; without the detail both keep text. Ground truth: the fixture's details, and the table
-//!   in `construction` below, written here and not taken from the generator.
+//!   names; without the detail both keep text. Ground truth: the fixture's details. Since EC.M1b
+//!   (`spec/items/EC.M1b.md`) Léo's generator replaces the one compared here, so G1 and G2 check
+//!   the descriptor's half only; the generator half is listed for Cam there.
 //! - H1: `examples/sysml/sysml.ecore`'s header comment no longer claims byte identity with
 //!   SysON's file, says it is XML-equal once the `urn:arachne:semantics` annotations are removed,
 //!   and names the 12 expanded elements; no byte outside that comment moved (sha256 pinned at
@@ -22,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use arachne_codegen::{EcoreParser, descriptor_json, find_user_package, generate_from_parser};
+use arachne_codegen::{EcoreParser, descriptor_json, find_user_package};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -57,19 +58,12 @@ fn read(relative: &str) -> String {
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("set-up: {}: {e}", path.display()))
 }
 
-/// The descriptor and the classifiers the generator emits, for one `.ecore` text.
-fn describe_and_generate(text: &str) -> (Value, String) {
+/// The descriptor of one `.ecore` text. EC.M1b (spec/items/EC.M1b.md): his generator replaces the
+/// one G1 and G2 compared against, so they keep the descriptor half only.
+fn describe(text: &str) -> Value {
     let parser = EcoreParser::from_string(text).expect("set-up: the fixture parses");
     let pack = find_user_package(&parser.ctx).expect("set-up: a user package");
-    let descriptor = descriptor_json(&parser.ctx, pack).expect("set-up: describe");
-    let (classifiers, _, _, _) = generate_from_parser(&parser, pack).expect("set-up: generate");
-    let code: String = classifiers
-        .build()
-        .to_string()
-        .split_whitespace()
-        .collect::<String>()
-        .replace("__classifiers::", "");
-    (descriptor, code)
+    descriptor_json(&parser.ctx, pack).expect("set-up: describe")
 }
 
 /// The descriptor entry of one attribute.
@@ -82,63 +76,22 @@ fn attribute<'a>(descriptor: &'a Value, class: &str, name: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("the descriptor has no attribute `{class}.{name}`"))
 }
 
-/// The field type the generator wrote for `field` in `record!(<record> { ... })`, whitespace
-/// and the `__classifiers::` path removed.
-fn emitted_field(code: &str, record: &str, field: &str) -> String {
-    let start = code
-        .find(&format!("record!({record}{{"))
-        .unwrap_or_else(|| panic!("the generator emits no record `{record}`"));
-    let body = &code[start..];
-    let body = &body[..body.find("});").expect("a record ends")];
-    let at = [format!("{{{field}:"), format!(",{field}:")]
-        .iter()
-        .find_map(|prefix| body.find(prefix.as_str()).map(|at| at + prefix.len()))
-        .unwrap_or_else(|| panic!("record `{record}` has no field `{field}`: {body}"));
-    let rest = &body[at..];
-    rest[..rest.find("=>").expect("a field type ends at `=>`")].to_string()
-}
-
-/// The construction a single-valued string attribute's rule names, stated here rather than taken
-/// from the generator: the leaf's log, inside `OptionLog` for an optional attribute.
-fn construction(merge: &Value) -> String {
-    assert_eq!(merge["kind"], "attribute", "not an attribute rule: {merge}");
-    let leaf = &merge["leaf"];
-    let leaf = match (leaf["kind"].as_str(), leaf["tie"].as_str()) {
-        (Some("text"), _) => "GraphLog<List<char>>".to_string(),
-        (Some("register"), Some("mv")) => "VecLog<MVRegister<std::string::String>>".to_string(),
-        (Some("register"), Some("lww")) => "VecLog<LwwRegister<std::string::String>>".to_string(),
-        _ => panic!("no construction stated for leaf {leaf}"),
-    };
-    match merge["shape"]["kind"].as_str() {
-        Some("optional") => format!("OptionLog<{leaf}>"),
-        Some("single") => leaf,
-        _ => panic!("no construction stated for shape {}", merge["shape"]),
-    }
-}
-
-/// `(descriptor class, generated record, attribute)` for the attributes G1 and G2 read.
-const FIELDS: [(&str, &str, &str); 3] = [
-    ("ecore::EAnnotation", "EcoreEAnnotation", "source"),
-    ("ecore::ENamedElement", "EcoreENamedElement", "name"),
-    ("Part", "Part", "label"),
+/// `(descriptor class, attribute)` for the attributes G1 and G2 read.
+const FIELDS: [(&str, &str); 3] = [
+    ("ecore::EAnnotation", "source"),
+    ("ecore::ENamedElement", "name"),
+    ("Part", "label"),
 ];
 
 fn check(text: &str, expected: [(Value, Value); 3]) {
-    let (descriptor, code) = describe_and_generate(text);
+    let descriptor = describe(text);
     let mut failures = Vec::new();
-    for ((class, record, name), (annotation, leaf)) in FIELDS.iter().zip(expected) {
+    for ((class, name), (annotation, leaf)) in FIELDS.iter().zip(expected) {
         let entry = attribute(&descriptor, class, name);
         if entry["annotation"] != annotation || entry["merge"]["leaf"] != leaf {
             failures.push(format!(
                 "descriptor `{class}.{name}`: annotation {} and leaf {}, expected {annotation} and {leaf}",
                 entry["annotation"], entry["merge"]["leaf"]
-            ));
-        }
-        let expected = construction(&entry["merge"]);
-        let emitted = emitted_field(&code, record, name);
-        if emitted != expected {
-            failures.push(format!(
-                "`{class}.{name}`: the descriptor names `{expected}` and the generator emits `{emitted}`"
             ));
         }
     }

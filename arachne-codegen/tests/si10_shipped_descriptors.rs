@@ -433,15 +433,20 @@ fn si10_d5_the_generated_crates_keep_their_descriptors() {
 
 /// Every file under `examples/` after SI.10, with its sha256: the five moved descriptors and the
 /// digest fixture at their new bytes, every other file at the bytes it held at `25ede18`
-/// (`sha256sum`, spec time).
-const EXAMPLES_AFTER: [(&str, &str); 25] = [
+/// (`sha256sum`, spec time). EC.M1b (`spec/items/EC.M1b.md`): `README.md` takes Léo's run-command
+/// lines (`3463d7c5...` before) and his `pub_crawl.ecore` is added, at its bytes at `ebc3141`.
+const EXAMPLES_AFTER: [(&str, &str); 26] = [
+    (
+        "pub_crawl.ecore",
+        "6739f4ec74652d201a805f09b957d2819ec2417f92be31fd0674e64f61f693ea",
+    ),
     (
         "GENERIC_NETWORK_GUIDE.md",
         "01ab74a6ad9ea4e0f7cf0465b10661f8953d095eafef3bb87d684ccc9c15adac",
     ),
     (
         "README.md",
-        "3463d7c5a2c6374e6bad364137eb89c0d838999b7da85307bbf50a9077efe3f5",
+        "d59d4f0672e541cb415a12828c008659418363d512f0752c2b5a673fa1d74523",
     ),
     (
         "SimpleUML.ecore",

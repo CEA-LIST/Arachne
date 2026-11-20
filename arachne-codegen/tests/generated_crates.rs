@@ -45,7 +45,7 @@ fn generate_build_and_test_with(
     let config = Config::new(manifest_dir.join(metamodel))
         .with_output_dir(&output)
         .with_project_name(project)
-        .with_moirai_root(&moirai);
+        .with_moirai_path(&moirai);
     if let Err(error) = generate_with_report(config) {
         panic!("generating `{metamodel}` failed: {error:#}");
     }

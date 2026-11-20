@@ -393,6 +393,9 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
     // AR.04 (spec/items/AR.04.md, section 6): the annotated SysML metamodel and its descriptor
     // are added under `examples/sysml/`, a directory no node's METAMODEL_DIR reads.
     const AR04_ADDED: [&str; 2] = ["sysml/sysml.ecore", "sysml/sysml.metamodel.json"];
+    // EC.M1b (spec/items/EC.M1b.md): Léo's `pub_crawl.ecore` is added; its bytes are pinned by
+    // `si10_d6_examples_holds_exactly_the_registered_files` and EC.M1b's tree check.
+    const ECM1B_ADDED: &str = "pub_crawl.ecore";
     let examples = repo().join("examples");
     let mut fail = Vec::new();
     for (file, today) in OTHERS.iter().chain(std::iter::once(&UML_FILE)) {
@@ -467,7 +470,8 @@ fn ed16a_c3_nothing_else_under_examples_moves() {
         let known = OTHERS.iter().any(|(f, _)| f == p)
             || UML_FILE.0 == p
             || MAY_CHANGE.contains(&p.as_str())
-            || AR04_ADDED.contains(&p.as_str());
+            || AR04_ADDED.contains(&p.as_str())
+            || p.as_str() == ECM1B_ADDED;
         if !known {
             fail.push(format!("unexpected file examples/{p}"));
         }

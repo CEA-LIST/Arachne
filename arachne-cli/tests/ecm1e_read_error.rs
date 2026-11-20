@@ -10,7 +10,11 @@ fn first_stderr_line(input: &Path) -> String {
         .arg(input)
         .output()
         .expect("run arachne describe");
-    assert!(!out.status.success(), "describe should exit non-zero on {}", input.display());
+    assert!(
+        !out.status.success(),
+        "describe should exit non-zero on {}",
+        input.display()
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     let mut line = String::new();
     let mut chars = stderr.lines().next().unwrap_or("").chars();

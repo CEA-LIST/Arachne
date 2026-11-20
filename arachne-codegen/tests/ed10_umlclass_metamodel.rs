@@ -1070,6 +1070,9 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
     // AR.04 (spec/items/AR.04.md, section 6): the annotated SysML metamodel and its descriptor
     // are added under `examples/sysml/`, a directory no node's METAMODEL_DIR reads.
     const AR04_ADDED: [&str; 2] = ["sysml/sysml.ecore", "sysml/sysml.metamodel.json"];
+    // EC.M1b (spec/items/EC.M1b.md): Léo's `pub_crawl.ecore` is added; its bytes are pinned by
+    // `si10_d6_examples_holds_exactly_the_registered_files` and EC.M1b's tree check.
+    const ECM1B_ADDED: &str = "pub_crawl.ecore";
     let examples = repo().join("examples");
     let mut differing = Vec::new();
     for (file, today) in TODAY {
@@ -1121,6 +1124,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
                 && !TODAY.iter().any(|(f, _)| f == p)
                 && !NEW.contains(&p.as_str())
                 && !AR04_ADDED.contains(&p.as_str())
+                && p.as_str() != ECM1B_ADDED
         })
         .collect();
     println!(
