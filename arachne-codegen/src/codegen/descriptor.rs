@@ -400,7 +400,33 @@ pub(crate) fn descriptor_with_roots(
             dropped.push(("eDataType", key, String::new()));
         }
     }
-    DROPPED.with_borrow_mut(|builds| builds.push((pack.name().to_owned(), dropped)));
+    // The operations of classes this descriptor does not list: a descriptor that imports the
+    // package may list them, and `import_class` leaves operations behind.
+    let unlisted = package_classes
+        .iter()
+        .map(|idx| &ctx[*idx])
+        .filter(|class| semantics::is_eclass(class) && !written.contains(&class.idx))
+        .filter_map(|class| {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx).ok()?;
+            Some(
+                class
+                    .operations()
+                    .iter()
+                    .map(move |operation| ("eOperation", key.clone(), operation.name().to_owned())),
+            )
+        })
+        .flatten()
+        .collect();
+    DROPPED.with_borrow_mut(|builds| {
+        if let Some(builds) = builds {
+            builds.push(Build {
+                pack: pack.name().to_owned(),
+                ns_uri: pack.ns_uri().map(str::to_owned),
+                dropped,
+                unlisted,
+            });
+        }
+    });
     Ok(descriptor)
 }
 
@@ -409,15 +435,32 @@ pub(crate) fn descriptor_with_roots(
 /// classifier's.
 type Dropped = (&'static str, String, String);
 
+/// What one descriptor build dropped, and the package it described.
+struct Build {
+    pack: String,
+    ns_uri: Option<String>,
+    dropped: Vec<Dropped>,
+    /// Operations of the classes the descriptor does not list, for a descriptor that imports them.
+    unlisted: Vec<Dropped>,
+}
+
 thread_local! {
-    /// What each descriptor built on this thread dropped, with the package it described. `describe`
-    /// builds a dependency's descriptor before the one that imports it, so the last is the file's.
-    static DROPPED: RefCell<Vec<(String, Vec<Dropped>)>> = const { RefCell::new(Vec::new()) };
+    /// The builds since [`record_dropped`] on this thread, `None` while nothing asked for them:
+    /// `describe` builds a dependency's descriptor before the one that imports it, so the last is
+    /// the file's.
+    static DROPPED: RefCell<Option<Vec<Build>>> = const { RefCell::new(None) };
+}
+
+/// Starts recording what the descriptors built on this thread drop, for [`take_dropped`], and
+/// forgets what was recorded before. Without it, building a descriptor records nothing.
+pub fn record_dropped() {
+    DROPPED.replace(Some(Vec::new()));
 }
 
 /// The `warning: dropped <kind> at <location>` lines of the descriptor `describe` just built, byte
 /// sorted and unique, for the classifiers `descriptor` lists, the package and its datatypes.
-/// Empties the record.
+/// Stops the recording of this thread, which holds the builds since [`record_dropped`]: call it
+/// after the one `describe` that follows.
 pub fn take_dropped(descriptor: &Value) -> Vec<String> {
     let line = |(kind, class, member): &Dropped| {
         let at = if member.is_empty() {
@@ -427,19 +470,26 @@ pub fn take_dropped(descriptor: &Value) -> Vec<String> {
         };
         format!("warning: dropped {kind} at {at}")
     };
-    let mut builds = DROPPED.take();
+    let mut builds = DROPPED.take().unwrap_or_default();
     let mut lines: BTreeSet<String> = builds
         .pop()
         .into_iter()
-        .flat_map(|(_, dropped)| dropped)
+        .flat_map(|build| build.dropped)
         .map(|dropped| line(&dropped))
         .collect();
     // `import_class` copies everything of a dependency's class but its operations, which only the
-    // dependency's own build saw, under the key the importing descriptor writes.
-    for (pack, dropped) in builds {
-        for (kind, class, member) in dropped.into_iter().filter(|d| d.0 == "eOperation") {
-            let key = format!("{pack}::{class}");
-            if descriptor["classes"].get(&key).is_some() {
+    // dependency's own build saw, under the key the importing descriptor writes. The class it
+    // wrote has the dependency's nsURI as origin; a class of another package under that key has
+    // not.
+    for build in builds {
+        for (kind, class, member) in build.dropped.into_iter().chain(build.unlisted) {
+            let key = format!("{}::{class}", build.pack);
+            let from_build = build.ns_uri.as_deref().is_some_and(|ns_uri| {
+                descriptor["classes"]
+                    .get(&key)
+                    .is_some_and(|written| written["origin"] == ns_uri)
+            });
+            if kind == "eOperation" && from_build {
                 lines.insert(line(&(kind, key, member)));
             }
         }

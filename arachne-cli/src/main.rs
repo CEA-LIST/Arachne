@@ -270,6 +270,7 @@ fn run_describe(args: DescribeArgs, json: bool) -> Result<()> {
     if !json {
         init_logger_at("error");
     }
+    arachne_codegen::codegen::descriptor::record_dropped();
     // The parser's error goes out unchanged: it is the line Léo's `generate` prints for the same file.
     // An unreadable file names its path as in f90795e; told apart by variant, never by message.
     let described = arachne_codegen::describe(&args.input).map_err(|e| match e {
