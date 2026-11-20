@@ -21,6 +21,8 @@ Judged:
      in ecm1k/no-eclass.txt: their root package declares no EClass, which Léo's guard refuses too;
      our earlier description of them read datatypes as classes), which describe refuses with the
      root-class line first and a later line saying `declares no EClass`: 35 of 39 described.
+     EC.M1j (spec EC.M1j.md): describe takes roots from the whole package tree, and the 4 ASMLogo
+     copies declare their EClasses in a subpackage, so all 39 are described.
 Counted: inputs only the candidate reads, by the rule whose off build gives his line (else by the
 rules whose off build refuses, else `unattributed`); inputs both parsers read that our describe
 refuses after the parse. Writes his.csv and his-failures.txt.
@@ -39,8 +41,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 ENV = dict(os.environ, RUST_LOG="error")
-ROOT_LINE = "[ERROR arachne] Error: Failed to find a root class in `"
-NO_ECLASS = "declares no EClass"
 
 
 def cap():
@@ -79,10 +79,6 @@ def main(his, cand, files, out, *offs):
             hp, _ = run([his, "parse", "-q", p], p)
             hs, hl = ("ok", "") if hp == "ok" else run([his, "generate", "-o", os.path.join(tmp, "g"), p], p)
             cp = run([cand, "parse", "-q", p], p)[0] if cs != "ok" and hp == "ok" else ""
-            if r["id"] in noecl:  # J3's registered refusals: the cause line too
-                q = subprocess.run([cand, "describe", p], capture_output=True, timeout=30, preexec_fn=cap, env=ENV)
-                cs = cs if q.returncode > 0 and not q.stdout and cl.startswith(ROOT_LINE) \
-                    and NO_ECLASS in ANSI.sub("", q.stderr.decode("utf-8", "replace")) else "J3 cause not met"
             offl = {}
             if hp != "ok" and cl != hl:  # J1 not equal, or only the candidate reads: try each rule off
                 for rule, b in off.items():
@@ -111,9 +107,7 @@ def main(his, cand, files, out, *offs):
                 ("refused with another line by " + "+".join(refusing) if refusing else "unattributed"))
         else:
             cls = "both read"
-        if i in noecl and cs != "refused":
-            cls = "J3 subpackage-order no-EClass not refused with its cause; " + cls
-        elif i in subpkg - noecl and cs != "ok":
+        if i in subpkg and cs != "ok":
             cls = "J3 subpackage-order not described; " + cls
         bad = cls.startswith(("J1 differ", "J2", "J3"))
         counts[cls.split(";")[0]] += 1

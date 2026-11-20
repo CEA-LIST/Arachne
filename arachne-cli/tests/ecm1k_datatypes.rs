@@ -215,9 +215,12 @@ fn input(id: &str) -> PathBuf {
 
 #[test]
 fn the_registered_corpus_files_move_as_registered() {
-    let (no_eclass, no_root) = (ids("no-eclass.txt"), ids("no-root.txt"));
+    // EC.M1j: the 8 whose subpackages declare an EClass are described now (ecm1j/described.txt).
+    let moved = fs::read_to_string(tests_dir().join("ecm1j/described.txt")).unwrap();
+    let (mut no_eclass, no_root) = (ids("no-eclass.txt"), ids("no-root.txt"));
+    no_eclass.retain(|id| !moved.lines().any(|m| m == id));
     let read = [ids("changed.txt"), ids("abstract-roots.txt")].concat();
-    assert_eq!((no_eclass.len(), no_root.len(), read.len()), (34, 7, 147));
+    assert_eq!((no_eclass.len(), no_root.len(), read.len()), (26, 7, 147));
     let mut failures = Vec::new();
     for id in &no_eclass {
         let out = describe(&input(id), None);
@@ -256,7 +259,7 @@ fn the_registered_corpus_files_move_as_registered() {
     }
     assert!(
         failures.is_empty(),
-        "{} of 188 registered files: {failures:#?}",
+        "{} of 180 registered files: {failures:#?}",
         failures.len()
     );
 }

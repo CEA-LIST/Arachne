@@ -9,6 +9,9 @@
 //! subpackage class from a written class, so their descriptors were not closed; they now refuse
 //! alike, and each twin claim holds on a closed variant (`fixtures/ecm1i/closed/`) whose forward
 //! reference sits in a class describe does not write.
+//!
+//! EC.M1j (spec: cea-cdrt-knowledge/spec/items/EC.M1j.md): describe writes the whole package tree, so
+//! the open twins now describe alike, the subpackage class keyed by its `::` path.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -65,26 +68,18 @@ fn reads_as_reordered(case: &str) {
     );
 }
 
-/// The open twins refuse alike: nothing on stdout, the same stderr, which says the descriptor is
-/// not closed and names `class` and one of `missing` on one line.
-fn refuse_alike_as_not_closed(forward: &str, reordered: &str, class: &str, missing: &[&str]) {
+/// The open twins describe alike, stdout and stderr, and the descriptor writes `key`.
+fn describe_alike(forward: &str, reordered: &str, key: &str) {
     let (got, want) = (describe(forward), describe(reordered));
     assert!(
-        !got.status.success() && !want.status.success(),
-        "{forward} and {reordered} refuse"
+        got.status.success() && want.status.success(),
+        "{forward} and {reordered} describe: {}",
+        String::from_utf8_lossy(&got.stderr)
     );
-    assert!(
-        got.stdout.is_empty() && want.stdout.is_empty(),
-        "no descriptor"
-    );
-    let stderr = String::from_utf8_lossy(&got.stderr);
-    assert_eq!(stderr, String::from_utf8_lossy(&want.stderr));
-    assert!(
-        stderr.lines().any(|l| l.contains("descriptor not closed")
-            && l.contains(class)
-            && missing.iter().any(|m| l.contains(m))),
-        "{forward}: {stderr}"
-    );
+    assert_eq!(got.stdout, want.stdout, "{forward}: stdout");
+    assert_eq!(got.stderr, want.stderr, "{forward}: stderr");
+    let d: serde_json::Value = serde_json::from_slice(&got.stdout).expect("a JSON descriptor");
+    assert!(d["classes"].get(key).is_some(), "{forward}: no `{key}`");
 }
 
 fn describe_refuses(name: &str) {
@@ -116,18 +111,17 @@ fn describe_reads_a_nested_forward_package_as_its_reordered_twin() {
 }
 
 #[test]
-fn leos_fixture_and_its_twin_refuse_alike_as_not_closed() {
+fn leos_fixture_and_its_twin_describe_alike() {
     // leo_forward.ecore is the text of Léo's `rejects_interpackage_links`: `A.toB` names `sub/B`.
-    refuse_alike_as_not_closed("leo_forward.ecore", "leo_reordered.ecore", "A", &["B"]);
+    describe_alike("leo_forward.ecore", "leo_reordered.ecore", "sub::B");
 }
 
 #[test]
-fn the_nested_forward_package_and_its_twin_refuse_alike_as_not_closed() {
-    refuse_alike_as_not_closed(
+fn the_nested_forward_package_and_its_twin_describe_alike() {
+    describe_alike(
         "nested_forward.ecore",
         "nested_reordered.ecore",
-        "Shop",
-        &["Item", "Tag"],
+        "catalog::detail::Tag",
     );
 }
 

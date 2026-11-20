@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="app" nsURI="urn:app" nsPrefix="app">
+  <eClassifiers xsi:type="ecore:EClass" name="A">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="d" eType="dep.ecore#//D" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="mine" upperBound="-1" eType="#//dep/D" containment="true"/>
+  </eClassifiers>
+  <eSubpackages name="dep" nsURI="urn:app/dep" nsPrefix="appdep">
+    <eClassifiers xsi:type="ecore:EClass" name="D"/>
+  </eSubpackages>
+</ecore:EPackage>

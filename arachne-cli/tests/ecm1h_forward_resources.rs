@@ -14,6 +14,9 @@
 //! that were not closed. They now refuse alike, and each twin claim holds on a closed variant
 //! (`fixtures/ecm1i/closed/cN`) whose forward reference sits in class `early/H`, which describe does
 //! not write.
+//!
+//! EC.M1j (spec: cea-cdrt-knowledge/spec/items/EC.M1j.md): describe writes the whole package tree, so
+//! the open twins of c1 to c6 now describe alike too, byte for byte as above.
 
 use std::{
     collections::BTreeMap,
@@ -81,8 +84,15 @@ fn text(b: &[u8]) -> String {
 /// Describe reads the closed `<case>/forward/root.ecore` exactly as `<case>/reordered/root.ecore`;
 /// returns the forward run's `-o` folder.
 fn reads_as_reordered(case: &str) -> PathBuf {
-    let fwd = closed(&format!("{case}/forward/root.ecore"));
-    let reo = closed(&format!("{case}/reordered/root.ecore"));
+    twins_agree(
+        case,
+        &closed(&format!("{case}/forward/root.ecore")),
+        &closed(&format!("{case}/reordered/root.ecore")),
+    )
+}
+
+/// Both twins describe, with the same stdout and stderr, and with `-o` the same files.
+fn twins_agree(case: &str, fwd: &Path, reo: &Path) -> PathBuf {
     let want = describe(&reo, None);
     assert!(
         want.status.success(),
@@ -164,36 +174,13 @@ fn c6_cross_file_supertype_beside_a_forward_package() {
 }
 
 #[test]
-fn the_open_twins_refuse_alike_as_not_closed() {
+fn the_open_twins_describe_alike() {
     for case in ["c1", "c2", "c3", "c4", "c5", "c6"] {
-        let fwd = fixture(&format!("{case}/forward/root.ecore"));
-        let reo = fixture(&format!("{case}/reordered/root.ecore"));
-        let (got, want) = (describe(&fwd, None), describe(&reo, None));
-        assert!(
-            !got.status.success() && !want.status.success(),
-            "{case}: both twins refuse"
+        twins_agree(
+            &format!("{case}-open"),
+            &fixture(&format!("{case}/forward/root.ecore")),
+            &fixture(&format!("{case}/reordered/root.ecore")),
         );
-        assert!(
-            got.stdout.is_empty() && want.stdout.is_empty(),
-            "{case}: no descriptor"
-        );
-        // The parser's position lines (`at ..., line N, column M`) name each twin's own lines.
-        let unplaced = |o: &Output| -> Vec<String> {
-            text(&o.stderr)
-                .lines()
-                .filter(|l| !l.trim_start().starts_with("at `"))
-                .map(str::to_owned)
-                .collect()
-        };
-        assert_eq!(unplaced(&got), unplaced(&want), "{case}: stderr");
-        assert!(
-            text(&got.stderr).contains("descriptor not closed"),
-            "{case}: {}",
-            text(&got.stderr)
-        );
-        let dir = scratch(&format!("{case}-open"));
-        assert!(!describe(&fwd, Some(&dir)).status.success());
-        assert!(files(&dir).is_empty(), "{case}: -o wrote a file");
     }
 }
 

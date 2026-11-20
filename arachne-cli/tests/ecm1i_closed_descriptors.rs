@@ -7,17 +7,19 @@
 //! with `-o`; `ecore::EObject` is listed when a written name refers to it; a plain reference target
 //! no root reaches is written. When the resource loader refuses, the first stderr line stays the
 //! parser's and the loader's cause follows on one `caused by: ` line.
+//!
+//! EC.M1j (spec: cea-cdrt-knowledge/spec/items/EC.M1j.md): describe now writes the whole package tree,
+//! so the subpackage fixtures and the registered `refused.txt` inputs below are described, closed,
+//! with the subpackage classes keyed by their `::` path.
 
 use std::{
     fs,
     path::{Path, PathBuf},
     process::{Command, Output},
-    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use serde_json::{Value, json};
 
-const NOT_CLOSED: &str = "descriptor not closed";
 const CORPUS: &str =
     "/volatile/home/vp242103/datasets/modelset/unpacked/modelset/raw-data/repo-ecore-all/data";
 
@@ -34,18 +36,6 @@ fn describe(input: &Path, out: Option<&Path>) -> Output {
         cmd.arg("-o").arg(out.join("metamodel.json"));
     }
     cmd.output().expect("run arachne describe")
-}
-
-fn scratch(label: &str) -> PathBuf {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "ecm1i-{label}-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst)
-    ));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 /// Stderr lines with ANSI colour codes removed.
@@ -118,63 +108,48 @@ fn closed(input: &Path) -> Value {
     d
 }
 
-/// Describe refuses `input`: nothing on stdout, nothing written with `-o`, and one stderr line says
-/// the descriptor is not closed and names `class` and `missing`; returns the stderr lines.
-fn refused_naming(input: &Path, class: &str, missing: &str) -> Vec<String> {
-    let out = describe(input, None);
-    assert!(
-        !out.status.success(),
-        "describe should refuse {}",
-        input.display()
-    );
-    assert!(
-        out.stdout.is_empty(),
-        "no descriptor for {}",
-        input.display()
-    );
-    let lines = err_lines(&out);
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.contains(NOT_CLOSED) && l.contains(class) && l.contains(missing)),
-        "{}: no line saying `{NOT_CLOSED}` naming `{class}` and `{missing}`: {lines:?}",
-        input.display()
-    );
-    let dir = scratch("refused");
-    assert!(!describe(input, Some(&dir)).status.success());
+#[test]
+fn a_supertype_from_a_subpackage_is_written_not_dropped() {
+    let d = closed(&fixture("ecm1i/sub_supertype.ecore"));
     assert_eq!(
-        fs::read_dir(&dir).unwrap().count(),
-        0,
-        "{}: -o wrote a file",
-        input.display()
+        d["classes"]["Term"]["superTypes"],
+        json!(["expressions::Expression"])
     );
-    lines
 }
 
 #[test]
-fn a_supertype_from_a_subpackage_is_refused_not_dropped() {
-    refused_naming(&fixture("ecm1i/sub_supertype.ecore"), "Term", "Expression");
+fn a_containment_target_from_a_subpackage_is_written() {
+    let d = closed(&fixture("ecm1i/sub_containment.ecore"));
+    assert_eq!(
+        d["classes"]["System"]["containments"][0]["target"],
+        "nodes::Node"
+    );
 }
 
 #[test]
-fn a_containment_target_from_a_subpackage_is_refused() {
-    refused_naming(&fixture("ecm1i/sub_containment.ecore"), "System", "Node");
+fn an_enum_from_a_subpackage_is_written() {
+    let d = closed(&fixture("ecm1i/sub_enum.ecore"));
+    assert_eq!(d["enums"], json!({"kinds::State": ["OPEN", "DONE"]}));
+    assert_eq!(
+        d["classes"]["Task"]["attributes"][0]["enum"],
+        "kinds::State"
+    );
 }
 
 #[test]
-fn an_enum_from_a_subpackage_is_refused() {
-    refused_naming(&fixture("ecm1i/sub_enum.ecore"), "Task", "State");
+fn a_target_named_like_a_written_class_is_kept_apart_by_its_path() {
+    // `#//sub/Node` beside the root's own `Node`: two classes, two keys.
+    let d = closed(&fixture("ecm1i/same_name_target.ecore"));
+    let refs = &d["classes"]["Root"]["references"];
+    assert_eq!(refs[0]["target"], "sub::Node", "{refs}");
+    assert!(d["classes"].get("Node").is_some() && d["classes"].get("sub::Node").is_some());
 }
 
 #[test]
-fn a_target_named_like_a_written_class_is_refused_by_identity() {
-    // `#//sub/Node` beside the root's own `Node`: the name resolves, the class is not written.
-    refused_naming(&fixture("ecm1i/same_name_target.ecore"), "Root", "Node");
-}
-
-#[test]
-fn a_supertype_named_like_a_written_class_is_refused_by_identity() {
-    refused_naming(&fixture("ecm1i/same_name_supertype.ecore"), "Leaf", "Node");
+fn a_supertype_named_like_a_written_class_is_kept_apart_by_its_path() {
+    let d = closed(&fixture("ecm1i/same_name_supertype.ecore"));
+    assert_eq!(d["classes"]["Leaf"]["superTypes"], json!(["sub::Node"]));
+    assert!(d["classes"].get("Node").is_some());
 }
 
 #[test]
@@ -206,26 +181,13 @@ fn a_reference_target_no_root_reaches_is_written() {
 }
 
 #[test]
-fn a_dependency_that_is_not_closed_refuses_the_root() {
-    // EC.M1h's c2 and c5: the root is closed, the dependency it writes under dependencies/ is not.
-    for (root, line1, class, missing) in [
-        (
-            "ecm1h/c2/forward/root.ecore",
-            "[ERROR arachne] Error: Failed to parse Ecore metamodel: unsupported `eType` path `dep.ecore#//E`",
-            "G",
-            "F",
-        ),
-        (
-            "ecm1h/c5/forward/root.ecore",
-            "[ERROR arachne] Error: Failed to parse Ecore metamodel: unsupported `eType` path `mid.ecore#//M`",
-            "N",
-            "Q",
-        ),
-    ] {
-        let lines = refused_naming(&fixture(root), class, missing);
-        assert_eq!(lines[0], line1, "{root}: the first line stays the parser's");
+fn a_dependency_with_a_subpackage_is_described_whole() {
+    // EC.M1h's c2 and c5: the dependency names a class of its own subpackage, which it now writes.
+    for root in ["ecm1h/c2/forward/root.ecore", "ecm1h/c5/forward/root.ecore"] {
+        closed(&fixture(root));
     }
-    refused_naming(&fixture("ecm1h/c2/forward/dep.ecore"), "G", "F");
+    let d = closed(&fixture("ecm1h/c2/forward/dep.ecore"));
+    assert!(d["classes"].get("inner::F").is_some(), "{}", d["classes"]);
 }
 
 fn is_cause(line: &str) -> bool {
@@ -308,16 +270,8 @@ fn the_registered_modelset_files_refuse_or_load_closed() {
     let (refused, changed) = (corpus_ids("refused.txt"), corpus_ids("changed.txt"));
     assert_eq!((refused.len(), changed.len()), (42, 68));
     let mut failures = Vec::new();
-    for id in &refused {
-        let out = describe(&corpus_path(id), None);
-        if out.status.success()
-            || !out.stdout.is_empty()
-            || !err_lines(&out).iter().any(|l| l.contains(NOT_CLOSED))
-        {
-            failures.push(format!("not refused as not closed: {id}"));
-        }
-    }
-    for id in &changed {
+    // EC.M1j: the refused ones named a subpackage class; the tree is now described, closed.
+    for id in refused.iter().chain(&changed) {
         let out = describe(&corpus_path(id), None);
         let ok = out.status.success()
             && serde_json::from_slice::<Value>(&out.stdout).is_ok_and(|d| {
