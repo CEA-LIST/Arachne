@@ -289,7 +289,12 @@ fn run_describe(args: DescribeArgs, json: bool) -> Result<()> {
         }
         None => print!("{rendered}"),
     }
-    // On stderr, so the descriptor on stdout stays a descriptor.
+    // On stderr, so the descriptor on stdout stays a descriptor; what it left out comes first.
+    if !json {
+        for line in arachne_codegen::codegen::descriptor::take_dropped(descriptor) {
+            eprintln!("{line}");
+        }
+    }
     eprintln!("{}", metamodel_id(descriptor));
 
     Ok(())

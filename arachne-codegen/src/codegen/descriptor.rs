@@ -111,11 +111,14 @@
 //! nothing else, so a reformatted file keeps its models and an edited one
 //! does not.
 
-use std::collections::HashSet;
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashSet},
+};
 
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Pack, builtin, idx, structural},
+    repr::{Annots, Class, Pack, builtin, idx, structural},
 };
 use log::warn;
 use moirai_semantics::{KeyKind, LeafRule, MergeRule, Shape};
@@ -334,7 +337,9 @@ pub(crate) fn descriptor_with_roots(
         .collect::<Result<_>>()?;
     // By the key the class is written under, so a refusal names the same class on every run.
     included.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut dropped = Vec::new();
     for (key, class) in included {
+        dropped_in_class(ctx, pack, class, &key, &mut dropped);
         if classes
             .insert(key.clone(), class_descriptor(ctx, pack, class, &written)?)
             .is_some()
@@ -358,6 +363,13 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     package_enums.sort_unstable_by_key(|class| class.name());
     for class in package_enums {
+        dropped_in_class(
+            ctx,
+            pack,
+            class,
+            &semantics::descriptor_class_name(ctx, pack, class.idx)?,
+            &mut dropped,
+        );
         let literals: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
         enums.insert(
             semantics::descriptor_class_name(ctx, pack, class.idx)?,
@@ -376,7 +388,138 @@ pub(crate) fn descriptor_with_roots(
     if let Some(packages) = packages {
         descriptor["packages"] = Value::Object(packages);
     }
+    if pack.ns_prefix().is_some() {
+        dropped.push(("nsPrefix", pack.name().to_owned(), String::new()));
+    }
+    if has_foreign_annotation(pack.annotations()) {
+        dropped.push(("eAnnotation", pack.name().to_owned(), String::new()));
+    }
+    for class in own_classes.iter().map(|class| &ctx[*class]) {
+        if class.typ() == "ecore:EDataType" {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+            dropped.push(("eDataType", key, String::new()));
+        }
+    }
+    DROPPED.with_borrow_mut(|builds| builds.push((pack.name().to_owned(), dropped)));
     Ok(descriptor)
+}
+
+/// A construct a descriptor build read and did not write: its kind, the classifier (the package
+/// for a package's own) and the feature, operation or literal, empty when the construct is the
+/// classifier's.
+type Dropped = (&'static str, String, String);
+
+thread_local! {
+    /// What each descriptor built on this thread dropped, with the package it described. `describe`
+    /// builds a dependency's descriptor before the one that imports it, so the last is the file's.
+    static DROPPED: RefCell<Vec<(String, Vec<Dropped>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The `warning: dropped <kind> at <location>` lines of the descriptor `describe` just built, byte
+/// sorted and unique, for the classifiers `descriptor` lists, the package and its datatypes.
+/// Empties the record.
+pub fn take_dropped(descriptor: &Value) -> Vec<String> {
+    let line = |(kind, class, member): &Dropped| {
+        let at = if member.is_empty() {
+            class.clone()
+        } else {
+            format!("{class}.{member}")
+        };
+        format!("warning: dropped {kind} at {at}")
+    };
+    let mut builds = DROPPED.take();
+    let mut lines: BTreeSet<String> = builds
+        .pop()
+        .into_iter()
+        .flat_map(|(_, dropped)| dropped)
+        .map(|dropped| line(&dropped))
+        .collect();
+    // `import_class` copies everything of a dependency's class but its operations, which only the
+    // dependency's own build saw, under the key the importing descriptor writes.
+    for (pack, dropped) in builds {
+        for (kind, class, member) in dropped.into_iter().filter(|d| d.0 == "eOperation") {
+            let key = format!("{pack}::{class}");
+            if descriptor["classes"].get(&key).is_some() {
+                lines.insert(line(&(kind, key, member)));
+            }
+        }
+    }
+    lines.into_iter().collect()
+}
+
+/// An annotation of a source the descriptor does not read.
+fn has_foreign_annotation(annotations: &Annots) -> bool {
+    annotations.iter().any(|annotation| {
+        !matches!(
+            annotation.source(),
+            "urn:arachne:semantics" | "urn:arachne:representation" | "subsets" | "redefines"
+        )
+    })
+}
+
+/// What `class` (written under `key`) and its members say that the descriptor does not.
+fn dropped_in_class(ctx: &Ctx, pack: &Pack, class: &Class, key: &str, out: &mut Vec<Dropped>) {
+    let mut at = |kind, member: &str| out.push((kind, key.to_owned(), member.to_owned()));
+    if has_foreign_annotation(class.annotations()) {
+        at("eAnnotation", "");
+    }
+    if semantics::is_eclass(class) {
+        let declared: Vec<String> = class
+            .sup()
+            .iter()
+            .filter_map(|sup| semantics::descriptor_class_name(ctx, pack, *sup).ok())
+            .collect();
+        for (kind, hit) in [
+            ("interface", class.is_interface()),
+            (
+                "instanceClassName",
+                class.instance_class_name().or(class.inst_name()).is_some(),
+            ),
+            ("superTypeOrder", !declared.is_sorted()),
+        ] {
+            if hit {
+                at(kind, "");
+            }
+        }
+    }
+    for operation in class.operations() {
+        at("eOperation", operation.name());
+    }
+    for literal in class.literals() {
+        if literal.value().is_some() {
+            at("literalValue", literal.name());
+        }
+        if has_foreign_annotation(literal.annotations()) {
+            at("eAnnotation", literal.name());
+        }
+    }
+    for feature in class.structural() {
+        if has_foreign_annotation(&feature.annotations) {
+            at("eAnnotation", &feature.name);
+        }
+        let bounds = feature.bounds;
+        for (kind, hit) in [
+            ("changeable", feature.changeable == Some(false)),
+            ("volatile", feature.volatile == Some(true)),
+            ("transient", feature.transient == Some(true)),
+            ("derived", feature.derived == Some(true)),
+            ("unsettable", feature.unsettable == Some(true)),
+            ("resolveProxies", feature.resolve_proxies == Some(false)),
+            (
+                "defaultValueLiteral",
+                feature.default_value_literal.is_some() || feature.default_value.is_some(),
+            ),
+            ("eKeys", !feature.keys.is_empty()),
+            (
+                "bounds",
+                bounds.lbound >= 2 || !matches!(bounds.ubound, Some(1) | None),
+            ),
+        ] {
+            if hit {
+                at(kind, &feature.name);
+            }
+        }
+    }
 }
 
 /// The digest half of a metamodel's identity: SHA-256, lowercase hex, over
