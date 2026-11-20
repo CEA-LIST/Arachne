@@ -436,8 +436,8 @@ fn ar02_d3_every_other_metamodel_that_declares_an_opposite_carries_it() {
         ),
         (
             "arachne-parser/rsc/AbstractEcore.ecore",
-            "f7ccba64b8f14c2e8992ce6f205d2fe2d8176f43209acc6f3d72c3ab79323721",
-            "b6dde99121707ec0aeae484e9362568394eeeff54f00b976a5157ddb31ffc245",
+            "c45b4f1b6dfc4d0b2fbda647c3ac0ad55c53128da7475f4dbed2aa12b8036797",
+            "910304ef097a97619d97531127494c0d5ca2de61b918eef8fd73003b25d7eee5",
             // AbstractEcore.ecore:17, 25
             vec![
                 // Both ends are named `refersClass2`, as the file declares them.
@@ -455,8 +455,8 @@ fn ar02_d3_every_other_metamodel_that_declares_an_opposite_carries_it() {
         ),
         (
             "arachne-parser/rsc/ExampleEcore.ecore",
-            "f5722f0b5b44bbe0818ef4dda2078c1a95281dfbc5289ae344a8d96ece919970",
-            "0f3cdf919b06f7118850c0c396fc49fc156e26fd41f224889d76052825eb26cb",
+            "4da742e26eaad38f9b24572cbe909469580c09c0084cb7597645c8ca6722c5a6",
+            "3d46ea8d23b17765843e62694f2a910e16a1025a650e1e992fe325aba6acfe95",
             // ExampleEcore.ecore:16, 24
             vec![
                 ("Teacher", "advises", json!({"eOpposite": "advisor"})),

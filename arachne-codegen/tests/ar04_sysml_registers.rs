@@ -617,7 +617,7 @@ fn ar04_r4_no_other_metamodel_and_no_default_moves() {
         ),
         (
             "arachne-parser/rsc/AbstractEcore.ecore",
-            "b6dde99121707ec0aeae484e9362568394eeeff54f00b976a5157ddb31ffc245",
+            "910304ef097a97619d97531127494c0d5ca2de61b918eef8fd73003b25d7eee5",
         ),
         (
             "arachne-parser/rsc/bt.ecore",
@@ -625,7 +625,7 @@ fn ar04_r4_no_other_metamodel_and_no_default_moves() {
         ),
         (
             "arachne-parser/rsc/ExampleEcore.ecore",
-            "0f3cdf919b06f7118850c0c396fc49fc156e26fd41f224889d76052825eb26cb",
+            "3d46ea8d23b17765843e62694f2a910e16a1025a650e1e992fe325aba6acfe95",
         ),
         (
             "examples/behavior_tree.ecore",
