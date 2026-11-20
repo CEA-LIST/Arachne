@@ -420,9 +420,8 @@ fn error_category(err: &anyhow::Error, stage: &str) -> (&'static str, &'static s
             ArachneError::FileRead(_) | ArachneError::Config(_) => {
                 ("configuration", "infrastructure")
             }
-            ArachneError::RootClassNotFound(_) | ArachneError::NoEClass(_) => {
-                ("root_selection", "unsupported_feature")
-            }
+            ArachneError::RootClassNotFound(_) => ("root_selection", "unsupported_feature"),
+            ArachneError::NoEClass(_) => ("root_selection", "unsupported_feature"),
             ArachneError::NoValidPackageFound => ("package_selection", "unsupported_feature"),
             ArachneError::EnumKeyedMap { .. } => ("invalid_model", "unsupported_feature"),
             ArachneError::DuplicateDescriptorClass(_)
