@@ -426,6 +426,7 @@ fn error_category(err: &anyhow::Error, stage: &str) -> (&'static str, &'static s
             ArachneError::EnumKeyedMap { .. } => ("invalid_model", "unsupported_feature"),
             ArachneError::DuplicateDescriptorClass(_)
             | ArachneError::DescriptorNotClosed { .. } => ("invalid_model", "invalid_input"),
+            ArachneError::Subpackage(_) => ("invalid_model", "invalid_input"),
             ArachneError::InvalidModel(_) => ("invalid_model", "invalid_input"),
             ArachneError::SynParse(_) => ("generated_syntax", "implementation_bug"),
             ArachneError::EcoreParse(_) => ("parse_error", "unknown"),

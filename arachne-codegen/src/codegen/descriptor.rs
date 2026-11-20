@@ -133,8 +133,53 @@ const FORMAT_VERSION: u64 = 2;
 /// writes is not one it writes; and with [`ArachneError::EnumKeyedMap`] for
 /// a map keyed by an enum.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
-    let own_classes: Vec<_> = pack.classes().iter().copied().collect();
+    let own_classes = tree_classes(ctx, pack);
     descriptor_with_roots(ctx, pack, &own_classes)
+}
+
+/// The classes of `pack` and of its subpackages at every depth.
+pub(crate) fn tree_classes(ctx: &Ctx, pack: &Pack) -> Vec<idx::Class> {
+    let mut classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    for sub in pack.sub() {
+        classes.extend(tree_classes(ctx, &ctx[*sub]));
+    }
+    classes
+}
+
+/// The `packages` map: every subpackage of `pack` at every depth by its root-relative path. A
+/// subpackage that has no nsURI of its own, shares one, or is named `ecore` (which would key its
+/// classifiers like Ecore's own) is refused, as a subpackage nsURI is what names its namespace.
+fn subpackages(
+    ctx: &Ctx,
+    pack: &Pack,
+    prefix: &str,
+    seen: &mut Vec<String>,
+    map: &mut Map<String, Value>,
+) -> Result<()> {
+    for sub in pack.sub() {
+        let sub = &ctx[*sub];
+        let path = format!("{prefix}{}", sub.name());
+        if path == ecore_rs::repr::ecore::PACKAGE_NAME {
+            return Err(ArachneError::Subpackage(format!(
+                "`{path}` would key its classifiers like Ecore's own"
+            )));
+        }
+        let Some(ns_uri) = sub.ns_uri() else {
+            return Err(ArachneError::Subpackage(format!("`{path}` has no nsURI")));
+        };
+        if seen.iter().any(|seen| seen == ns_uri) {
+            return Err(ArachneError::Subpackage(format!(
+                "`{path}` shares the nsURI `{ns_uri}`"
+            )));
+        }
+        seen.push(ns_uri.to_string());
+        map.insert(
+            path.clone(),
+            json!({"nsURI": ns_uri, "nsPrefix": sub.ns_prefix()}),
+        );
+        subpackages(ctx, sub, &format!("{path}::"), seen, map)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn descriptor_with_roots(
@@ -144,7 +189,7 @@ pub(crate) fn descriptor_with_roots(
 ) -> Result<Value> {
     // The class set `describe` reaches: the package's classes, then Ecore's own but
     // `EObject`, which the generator never emits.
-    let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    let package_classes = tree_classes(ctx, pack);
     let ecore_classes: Vec<idx::Class> = match ctx.ecore_pack() {
         Some(ecore_pack) => ctx[ecore_pack]
             .classes()
@@ -275,17 +320,31 @@ pub(crate) fn descriptor_with_roots(
     package_enums.sort_unstable_by_key(|class| class.name());
     for class in package_enums {
         let literals: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
-        enums.insert(class.name().to_string(), json!(literals));
+        enums.insert(
+            semantics::descriptor_class_name(ctx, class.idx),
+            json!(literals),
+        );
     }
 
-    Ok(json!({
+    let mut descriptor = json!({
         "formatVersion": FORMAT_VERSION,
         "package": pack.name(),
         "nsURI": pack.ns_uri(),
         "rootClasses": root_names,
         "classes": classes,
         "enums": enums,
-    }))
+    });
+    // Only a descriptor that writes a subpackage classifier says where the subpackages are.
+    if written
+        .iter()
+        .any(|class| ctx[*class].path.last() != pack.idx && !ctx.is_ecore_class(*class))
+    {
+        let mut packages = Map::new();
+        let mut seen: Vec<String> = pack.ns_uri().map(str::to_string).into_iter().collect();
+        subpackages(ctx, pack, "", &mut seen, &mut packages)?;
+        descriptor["packages"] = Value::Object(packages);
+    }
+    Ok(descriptor)
 }
 
 /// The digest half of a metamodel's identity: SHA-256, lowercase hex, over
@@ -516,14 +575,15 @@ fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
     }
 }
 
-/// The last two segments of a `#//Class/feature` fragment: the class and the
-/// feature it names.
-fn class_and_feature(reference: &str) -> (&str, &str) {
+/// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it (`a::Class`),
+/// and the feature.
+fn class_and_feature(reference: &str) -> (String, &str) {
     let path = reference.rsplit('#').next().unwrap_or(reference);
-    let mut segments = path.rsplit('/');
-    let feature = segments.next().unwrap_or("");
-    let class = segments.next().unwrap_or("");
-    (class, feature)
+    let (class, feature) = path
+        .trim_start_matches('/')
+        .rsplit_once('/')
+        .unwrap_or(("", path));
+    (class.replace('/', "::"), feature)
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the
@@ -546,7 +606,10 @@ fn attribute_kind(
     let target = &ctx[target];
 
     if semantics::is_eenum(target) {
-        return Some(("enum", Some(target.name().to_string())));
+        return Some((
+            "enum",
+            Some(semantics::descriptor_class_name(ctx, feature.typ?)),
+        ));
     }
 
     let kind = match semantics::value_builtin(target) {

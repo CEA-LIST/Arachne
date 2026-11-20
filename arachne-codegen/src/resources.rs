@@ -168,10 +168,8 @@ impl Loader {
         parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
         let pack_path = pack.path(&ctx);
-        let own_classes: Vec<_> = pack
-            .classes()
-            .iter()
-            .copied()
+        let own_classes: Vec<_> = descriptor::tree_classes(&ctx, pack)
+            .into_iter()
             .filter(|class| !requested.contains_key(ctx[*class].name()))
             .collect();
         let mut origins = BTreeMap::new();
@@ -188,6 +186,21 @@ impl Loader {
         }
         ctx.finalize().map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
+        // Before the descriptor, whose own duplicate-key refusal would otherwise answer first.
+        for sub in pack.sub() {
+            if descriptor::tree_classes(&ctx, &ctx[*sub]).is_empty() {
+                continue;
+            }
+            let name = ctx[*sub].name();
+            if origins.keys().any(|key| {
+                key.split_once("::")
+                    .is_some_and(|(prefix, _)| prefix == name)
+            }) {
+                bail!(ArachneError::Subpackage(format!(
+                    "`{name}` is named like an imported package"
+                )));
+            }
+        }
         let mut descriptor = descriptor::descriptor_with_roots(&ctx, pack, &own_classes)?;
         for (name, origin) in &origins {
             if let Some(class) = descriptor["classes"].get_mut(name) {
@@ -236,6 +249,13 @@ fn import_class(
             .map_err(ArachneError::from)?);
     }
     let class = &ctx[source];
+    // A subpackage classifier would be flattened under the dependency's name.
+    if class.path.last() != find_user_package(ctx)?.idx {
+        bail!(ArachneError::Subpackage(format!(
+            "`{}` of a dependency lies in one of its subpackages",
+            class.name()
+        )));
+    }
     let name = resource.qualified_name(source)?;
     let origin = resource
         .origins

@@ -349,17 +349,28 @@ pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
 /// The two spellings therefore differ across the paths — `ecore::EAnnotation`
 /// here and `EcoreEAnnotation` there — and the census's `Agreement::Nominal`
 /// is where that is recorded and checked.
+///
+/// A classifier of a subpackage is keyed by its path below the user package (`a::b::Name`).
 pub fn descriptor_class_name(ctx: &Ctx, class: idx::Class) -> String {
-    let name = ctx
+    let class = ctx
         .classes()
         .get(*class)
-        .expect("a slot this module minted indexes the context it was minted from")
-        .name();
-    if ctx.is_ecore_class(class) {
-        format!("{}::{name}", ecore::PACKAGE_NAME)
-    } else {
-        name.to_string()
+        .expect("a slot this module minted indexes the context it was minted from");
+    if ctx.is_ecore_class(class.idx) {
+        return format!("{}::{}", ecore::PACKAGE_NAME, class.name());
     }
+    let user = crate::find_user_package(ctx).ok().map(|pack| pack.idx);
+    let mut key = String::new();
+    for pack in class
+        .path
+        .iter()
+        .skip_while(|pack| Some(*pack) != user)
+        .skip(1)
+    {
+        key.push_str(ctx[pack].name());
+        key.push_str("::");
+    }
+    key + class.name()
 }
 
 /* ---------- what a classifier is ---------- */

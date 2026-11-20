@@ -50,6 +50,11 @@ pub enum ArachneError {
     )]
     DescriptorNotClosed { class: String, missing: String },
 
+    /// A descriptor that writes a subpackage classifier cannot name the subpackage's namespace
+    /// or key its classifiers without clashing; the text says which.
+    #[error("subpackage refused: {0}")]
+    Subpackage(String),
+
     /// A map keyed by an enum would be written with the enum's `Ctx` index, which names
     /// nothing a reader of the descriptor can resolve; refused until it is written by name.
     #[error(
