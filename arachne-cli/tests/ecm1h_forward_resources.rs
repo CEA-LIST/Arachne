@@ -8,6 +8,12 @@
 //! stderr, and with `-o` the descriptor and every `dependencies/` file, byte for byte. The
 //! fixtures keep the imported classes and their closure in their package's root (EC.M1h's notes
 //! put the subpackage reads of the descriptor out of scope).
+//!
+//! EC.M1i (spec: cea-cdrt-knowledge/spec/items/EC.M1i.md): in each case a written class (in the root
+//! or in a dependency describe writes) named a subpackage class, so the twins agreed on descriptors
+//! that were not closed. They now refuse alike, and each twin claim holds on a closed variant
+//! (`fixtures/ecm1i/closed/cN`) whose forward reference sits in class `early/H`, which describe does
+//! not write.
 
 use std::{
     collections::BTreeMap,
@@ -20,6 +26,12 @@ use std::{
 fn fixture(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/ecm1h")
+        .join(rel)
+}
+
+fn closed(rel: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/ecm1i/closed")
         .join(rel)
 }
 
@@ -66,11 +78,11 @@ fn text(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// Describe reads `<case>/forward/root.ecore` exactly as `<case>/reordered/root.ecore`; returns the
-/// forward run's `-o` folder.
+/// Describe reads the closed `<case>/forward/root.ecore` exactly as `<case>/reordered/root.ecore`;
+/// returns the forward run's `-o` folder.
 fn reads_as_reordered(case: &str) -> PathBuf {
-    let fwd = fixture(&format!("{case}/forward/root.ecore"));
-    let reo = fixture(&format!("{case}/reordered/root.ecore"));
+    let fwd = closed(&format!("{case}/forward/root.ecore"));
+    let reo = closed(&format!("{case}/reordered/root.ecore"));
     let want = describe(&reo, None);
     assert!(
         want.status.success(),
@@ -122,7 +134,7 @@ fn c1_forward_root_with_a_plain_dependency() {
 #[test]
 fn c2_plain_root_with_a_forward_dependency_whose_digest_is_its_own_describe() {
     let dir = reads_as_reordered("c2");
-    let alone = describe(&fixture("c2/forward/dep.ecore"), None);
+    let alone = describe(&closed("c2/forward/dep.ecore"), None);
     assert!(alone.status.success(), "c2: the dependency describes alone");
     let id: serde_json::Value = serde_json::from_slice(&alone.stderr).expect("identity line");
     let digest = id["digest"].as_str().unwrap();
@@ -149,6 +161,40 @@ fn c5_transitive_root_mid_with_a_forward_package_leaf() {
 #[test]
 fn c6_cross_file_supertype_beside_a_forward_package() {
     reads_as_reordered("c6");
+}
+
+#[test]
+fn the_open_twins_refuse_alike_as_not_closed() {
+    for case in ["c1", "c2", "c3", "c4", "c5", "c6"] {
+        let fwd = fixture(&format!("{case}/forward/root.ecore"));
+        let reo = fixture(&format!("{case}/reordered/root.ecore"));
+        let (got, want) = (describe(&fwd, None), describe(&reo, None));
+        assert!(
+            !got.status.success() && !want.status.success(),
+            "{case}: both twins refuse"
+        );
+        assert!(
+            got.stdout.is_empty() && want.stdout.is_empty(),
+            "{case}: no descriptor"
+        );
+        // The parser's position lines (`at ..., line N, column M`) name each twin's own lines.
+        let unplaced = |o: &Output| -> Vec<String> {
+            text(&o.stderr)
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("at `"))
+                .map(str::to_owned)
+                .collect()
+        };
+        assert_eq!(unplaced(&got), unplaced(&want), "{case}: stderr");
+        assert!(
+            text(&got.stderr).contains("descriptor not closed"),
+            "{case}: {}",
+            text(&got.stderr)
+        );
+        let dir = scratch(&format!("{case}-open"));
+        assert!(!describe(&fwd, Some(&dir)).status.success());
+        assert!(files(&dir).is_empty(), "{case}: -o wrote a file");
+    }
 }
 
 #[test]
