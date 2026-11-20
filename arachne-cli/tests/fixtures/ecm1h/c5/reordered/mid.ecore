@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="mid" nsURI="urn:mid" nsPrefix="mid">
+  <eSubpackages name="p" nsURI="urn:p" nsPrefix="p">
+    <eClassifiers xsi:type="ecore:EClass" name="Q">
+      <eStructuralFeatures xsi:type="ecore:EAttribute" name="code" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+  </eSubpackages>
+  <eClassifiers xsi:type="ecore:EClass" name="M">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="toL" eType="leaf.ecore#//L"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="N">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="toQ" eType="#//p/Q"/>
+  </eClassifiers>
+</ecore:EPackage>

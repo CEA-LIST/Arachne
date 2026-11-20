@@ -1,6 +1,7 @@
+EC.M1h: the refusal holds whatever fill_forward_packs says, so it is off on describe's first read and on every file its resource loader reads; the hunk is HEAD's line 455 (EC.M1h keeps ctx.rs lines 1 to 461 as they are).
 --- a/arachne-parser/src/ctx.rs
 +++ b/arachne-parser/src/ctx.rs
-@@ -454,7 +454,7 @@
+@@ -455,7 +455,7 @@
              if self.forward_ref_packs.contains(&p_idx) {
                  self.forward_ref_packs.remove(&p_idx);
                  // the package should be empty at this point, since we're currently defining it

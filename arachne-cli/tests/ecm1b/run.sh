@@ -8,7 +8,8 @@
 #   D  describe: every input the pinned a5f3111 build describes gives the identical stdout and identity
 #      line (EC.01's pass conditions; inputs only the candidate describes are counted);
 #   R  refusal: on every input a5f3111 refuses and the candidate refuses too, the first stderr line is
-#      a5f3111's (ecm1a/refusal.py, judged here);
+#      a5f3111's (ecm1a/refusal.py), judged by read_further.py: where a5f3111's line is its
+#      forward-package refusal the row is counted as read further (EC.M1h);
 #   GA generate against EC.01's guide build e2ac279 (Léo's ebc3141 generator and CLI on our parser):
 #      the same status and, when both are ok, the identical project tree, on every input; an input
 #      where either side hit the deadline is counted, not judged;
@@ -65,6 +66,10 @@ python3 -I "$REPO/arachne-cli/tests/ecm1a/refusal.py" "$OURS" "$OUT/arachne-cand
     "$S/runs/ref-a5f3111-describe/files.csv" "$OUT/r" >"$OUT/r.log" 2>&1
 r=$?
 [ "$r" = 2 ] && { cat "$OUT/r.log"; echo "INSTRUMENT: refusal check did not run"; exit 2; }
+# EC.M1h: a row past a5f3111's forward-package refusal is counted as read further, never judged.
+python3 -I "$HERE/read_further.py" "$OUT/r" >>"$OUT/r.log" 2>&1
+r=$?
+[ "$r" = 2 ] && { cat "$OUT/r.log"; echo "INSTRUMENT: refusal judgment did not run"; exit 2; }
 $EC01 compare --kind generate --left "$S/runs/ref-e2ac279-generate" --right "$OUT/cand" --out "$OUT/ga" >/dev/null
 $EC01 compare --kind generate --left "$S/runs/ref-ebc3141-generate" --right "$OUT/cand" --out "$OUT/gb" >/dev/null
 gb=$?
