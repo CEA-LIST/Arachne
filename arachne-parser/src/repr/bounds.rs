@@ -77,7 +77,8 @@ impl Bounds {
         };
         let ubound = match ubound {
             None => Some(if lbound == 0 { 1 } else { lbound }),
-            Some("-1") => None,
+            // `-2` is EMF's UNSPECIFIED_MULTIPLICITY: read as unbounded, like `-1`.
+            Some("-1" | "-2") => None,
             Some(ubound) => {
                 if let Ok(ubound) = ubound.parse::<usize>() {
                     Some(ubound)
