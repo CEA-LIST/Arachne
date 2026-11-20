@@ -146,7 +146,10 @@ fn c2_plain_root_with_a_forward_dependency_whose_digest_is_its_own_describe() {
     let dir = reads_as_reordered("c2");
     let alone = describe(&closed("c2/forward/dep.ecore"), None);
     assert!(alone.status.success(), "c2: the dependency describes alone");
-    let id: serde_json::Value = serde_json::from_slice(&alone.stderr).expect("identity line");
+    // EC.04 round 2: the identity is the last stderr line; warning lines may precede it.
+    let stderr = text(&alone.stderr);
+    let id: serde_json::Value =
+        serde_json::from_str(stderr.lines().last().unwrap_or("")).expect("identity line");
     let digest = id["digest"].as_str().unwrap();
     let written = fs::read(dir.join(format!("dependencies/{digest}.metamodel.json")))
         .expect("c2: the dependency is written under the digest describe gives it alone");
