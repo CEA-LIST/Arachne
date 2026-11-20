@@ -55,7 +55,15 @@ impl Described {
 /// its descriptor and, when it is refused, the parser's own error. Only a file the parser refuses
 /// is resolved against the resources it names; when that fails too, the parser's error stands.
 pub fn describe(path: &Path) -> crate::Result<Described> {
-    match EcoreParser::from_file(path) {
+    // Describe reads a package referenced before its definition; `generate` refuses it.
+    let first = fs::read_to_string(path)
+        .map_err(ArachneError::from)
+        .and_then(|text| {
+            Ok(EcoreParser {
+                ctx: Ctx::parse_filling_forward_packs(text)?,
+            })
+        });
+    match first {
         Ok(parser) => Ok(Described {
             descriptor: descriptor::descriptor_json(&parser.ctx, find_user_package(&parser.ctx)?)?,
             dependencies: BTreeMap::new(),
