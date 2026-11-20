@@ -1,0 +1,7 @@
+warning: dropped eDataType at Date
+warning: dropped eDataType at Documented
+warning: dropped eDataType at Generic
+warning: dropped eDataType at Opaque
+warning: dropped eDataType at Unused
+warning: dropped eDataType at sub::Code
+{"digest":"f0e9cf6d686b620362046ff3adb05b12d9671789b4660b2bde8f5b8c2aabf488","nsURI":"http://example.org/ec06/dt"}

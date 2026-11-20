@@ -394,6 +394,12 @@
       ]
     }
   },
+  "datatypes": {
+    "Address": {
+      "instanceClassName": null,
+      "serializable": true
+    }
+  },
   "enumLiterals": {
     "StudentKind": [
       {

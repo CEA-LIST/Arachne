@@ -117,7 +117,7 @@ fn the_tree_is_one_descriptor_with_root_relative_names() {
         "tree.ecore",
         "tree.metamodel.json",
         "urn:shop",
-        "dfd6ecbf4d21504e6aebb5ebc9061c9880fa98c88e7bf762aecd8de46418b33d",
+        "1fbf3c594f4ecd6b32b8d7bf8281ed03618117a5d70a3958d01fcc9c56775189",
     );
     let d = golden("tree.metamodel.json");
     assert_eq!(d["rootClasses"], json!(["Shop", "catalog::Inventory"]));

@@ -593,6 +593,12 @@
       "superTypes": []
     }
   },
+  "datatypes": {
+    "catalog::Money": {
+      "instanceClassName": "java.lang.Long",
+      "serializable": true
+    }
+  },
   "enumLiterals": {
     "catalog::Color": [
       {

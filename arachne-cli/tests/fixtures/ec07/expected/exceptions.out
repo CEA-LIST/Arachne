@@ -44,6 +44,16 @@
       "superTypes": []
     }
   },
+  "datatypes": {
+    "Failure": {
+      "instanceClassName": "java.lang.Exception",
+      "serializable": true
+    },
+    "Timeout": {
+      "instanceClassName": "java.lang.Exception",
+      "serializable": true
+    }
+  },
   "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,

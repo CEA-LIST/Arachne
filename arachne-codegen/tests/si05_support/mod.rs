@@ -91,7 +91,8 @@ pub fn ec05_strip(descriptor: &mut Value) -> usize {
     let Some(top) = descriptor.as_object_mut() else {
         return 0;
     };
-    take(top, &["nsPrefix", "enumLiterals"]);
+    // EC.06 (`spec/items/EC.06.md`) adds the top level `datatypes`, held by its own oracles.
+    take(top, &["nsPrefix", "enumLiterals", "datatypes"]);
     if let Some(classes) = top.get_mut("classes").and_then(Value::as_object_mut) {
         for body in classes.values_mut().filter_map(Value::as_object_mut) {
             take(body, &["interface", "superTypeOrder"]);

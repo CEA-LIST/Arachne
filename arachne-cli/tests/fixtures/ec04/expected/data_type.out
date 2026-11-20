@@ -78,6 +78,12 @@
       "superTypes": []
     }
   },
+  "datatypes": {
+    "Date": {
+      "instanceClassName": "java.util.Date",
+      "serializable": true
+    }
+  },
   "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,

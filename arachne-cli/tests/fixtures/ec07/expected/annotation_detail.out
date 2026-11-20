@@ -44,6 +44,12 @@
       "superTypes": []
     }
   },
+  "datatypes": {
+    "Date": {
+      "instanceClassName": "java.util.Date",
+      "serializable": true
+    }
+  },
   "enumLiterals": {
     "Color": [
       {

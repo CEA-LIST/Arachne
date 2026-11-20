@@ -365,6 +365,12 @@
       "superTypes": []
     }
   },
+  "datatypes": {
+    "DataType1": {
+      "instanceClassName": null,
+      "serializable": true
+    }
+  },
   "enumLiterals": {
     "EnumDefinition": [
       {

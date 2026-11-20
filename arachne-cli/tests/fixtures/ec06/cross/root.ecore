@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="shop" nsURI="http://example.org/ec06/shop" nsPrefix="shop">
+  <eClassifiers xsi:type="ecore:EClass" name="Shop">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="accounts" upperBound="-1" eType="ecore:EClass dep.ecore#//Account" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="currency" eType="ecore:EDataType dep.ecore#//Code"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="opened" eType="#//Stamp"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EDataType" name="Stamp" instanceClassName="java.util.Date"/>
+</ecore:EPackage>
