@@ -53,6 +53,7 @@ modelset/fabianarol/EPF-vEPF/1.5/plugins/org.eclipse.epf.uma/model/1.0.5/uma.eco
 modelset/fabianarol/EPF-vEPF/1.5/plugins/org.eclipse.epf.uma/model/1.0.6/uma.ecore
 modelset/fellipealeixo/gpfframework/src-br.pucrio.inf.les.genarch/br/pucrio/inf/les/genarch/models/uma.ecore
 modelset/flaviodonze/emf-rest-server-client/rest-common/src/main/java/com/softmodeler/model/softmodeler.ecore
+modelset/fpetitdemang/stage2014/workspace/emf.html/model/DefaultName.ecore
 modelset/fzalila/fsm/org.eclipse.fsm/model/FSM.ecore
 modelset/gelareh1985/MDE-Excercises/org.eclipse.ecore.ocl/examples(1)/TheAttributeIsNotTransientSoItMustHaveADataTypeThatIsSerializable/example.ecore
 modelset/gelareh1985/MDE-Excercises/org.eclipse.ecore.ocl/examples/TheAttributeIsNotTransientSoItMustHaveADataTypeThatIsSerializable/valid_example/example.ecore
@@ -64,6 +65,7 @@ modelset/gemoc/ale-lang-compiler/tests/org.eclipse.emf.ecoretools.ale.compiler.t
 modelset/hallvard/playtrd/org.eclipse.e4.tm.examples/contacts/contacts.ecore
 modelset/hallvard/tdt4250/no.hal.ra.model/model/ra.ecore
 modelset/hannesN/onotoa/de.topicmapslab.tmcledit.diagram/model/TMCLDiagram.ecore
+modelset/huybuidac20593/yakindu/BASE/tags/M_SCT2_07/org.eclipselabs.mscript/plugins/org.eclipselabs.mscript.language/model/Mscript.ecore
 modelset/irish3725/ESOF_use/4hw/PurchaseOrder/model/purchaseOrder.ecore
 modelset/kevoree/kmf-samples/diva/org.kevoree.modeling.sample.diva.kt/metamodel/diva.ecore
 modelset/krissrex/ntnu-tdt4250-study-emf/no.ntnu.tdt4250.oving1.model/model/studies.ecore

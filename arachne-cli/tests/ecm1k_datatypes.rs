@@ -217,7 +217,7 @@ fn input(id: &str) -> PathBuf {
 fn the_registered_corpus_files_move_as_registered() {
     let (no_eclass, no_root) = (ids("no-eclass.txt"), ids("no-root.txt"));
     let read = [ids("changed.txt"), ids("abstract-roots.txt")].concat();
-    assert_eq!((no_eclass.len(), no_root.len(), read.len()), (34, 7, 145));
+    assert_eq!((no_eclass.len(), no_root.len(), read.len()), (34, 7, 147));
     let mut failures = Vec::new();
     for id in &no_eclass {
         let out = describe(&input(id), None);
@@ -256,7 +256,7 @@ fn the_registered_corpus_files_move_as_registered() {
     }
     assert!(
         failures.is_empty(),
-        "{} of 186 registered files: {failures:#?}",
+        "{} of 188 registered files: {failures:#?}",
         failures.len()
     );
 }

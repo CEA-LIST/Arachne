@@ -18,7 +18,12 @@ ecore:EDataType, a zero-literal enum one of xsi:type ecore:EEnum with no eLitera
      the root package's datatypes and zero-literal enums gone from classes and rootClasses, each
      zero-literal enum listed under enums as [], and every attribute of a root-package class typed
      by a datatype (any package of the file) or by Ecore's Object, or by a zero-literal enum,
-     rewritten by rewrite();
+     rewritten by rewrite(); and (round 5, the orchestrator's ruling: a moved dependency moves its
+     importer's dependsOn digest, Mscript.ecore on TypeSystem.ecore) each dependsOn entry whose
+     digest is the base identity digest of a file the .ecore references by a relative href that
+     is itself in changed.txt or abstract-roots.txt takes that file's candidate identity digest,
+     and the input passes only if that file passes its own judgment (K4 or K5); any other
+     dependsOn difference fails;
   K5 abstract-roots.txt: the candidate describes; rootClasses is non-empty and every root is an
      abstract class it writes; no datatype or zero-literal enum of the root package is a class or
      root; every zero-literal enum is listed as []; the descriptor is closed; every rewritten
@@ -232,6 +237,22 @@ def abstract_roots_hold(d, pkg):
     return ok
 
 
+def referenced(path):
+    """The files a .ecore names by a relative href (`../x/Other.ecore#//A`), as normalized paths."""
+    found = set()
+    for e in ET.parse(path).iter():
+        for v in e.attrib.values():
+            for tok in v.split():
+                ref = tok.split("#", 1)[0]
+                if "#" in tok and ref.endswith(".ecore") and ":" not in ref:
+                    found.add(os.path.normpath(os.path.join(os.path.dirname(path), ref)))
+    return found
+
+
+def digest(row):
+    return json.loads(row["describe_id"])["digest"] if row["describe_id"] else None
+
+
 def lines(name):
     return [l for l in open(os.path.join(HERE, name)).read().splitlines() if l]
 
@@ -253,7 +274,7 @@ def main(out, base_csv, base_bin):
     sets = {n: set(lines(n + ".txt")) for n in
             ("no-eclass", "no-eclass-refused", "no-root", "changed", "abstract-roots")}
     sizes = {n: len(s) for n, s in sets.items()}
-    if sizes != {"no-eclass": 34, "no-eclass-refused": 68, "no-root": 7, "changed": 139, "abstract-roots": 6} \
+    if sizes != {"no-eclass": 34, "no-eclass-refused": 68, "no-root": 7, "changed": 141, "abstract-roots": 6} \
             or sum(sizes.values()) != len(set().union(*sets.values())):
         print(f"INSTRUMENT: the registered lists do not have the registered sizes or overlap: {sizes}")
         return 2
@@ -263,7 +284,8 @@ def main(out, base_csv, base_bin):
     if set(base) != set(cand) or not set(of) <= set(base):
         print("INSTRUMENT: the base and candidate censuses do not hold the same inputs, or a registered id is missing")
         return 2
-    rows, fails, rewritten = [], [], []
+    movable = {base[j]["path"]: j for j in sets["changed"] | sets["abstract-roots"]}
+    result, needs, rewritten = {}, {}, []
     for i in sorted(cand):
         b, c, kind = base[i], cand[i], of.get(i)
         if kind in ("no-eclass", "no-root"):
@@ -282,6 +304,12 @@ def main(out, base_csv, base_bin):
             ok = rb == 0 and rc == 0 and pkg is not None
             if ok and kind == "changed":
                 want, done = expected(json.loads(ob), pkg)
+                deps = {digest(base[j]): j for j in map(movable.get, referenced(c["path"])) if j}
+                for dep in want.get("dependsOn", []):
+                    j = deps.get(dep["digest"])
+                    if j is not None:
+                        dep["digest"] = digest(cand[j])
+                        needs.setdefault(i, []).append(j)
                 ok = json.loads(oc) == want
                 rewritten += [(i, *x) for x in done]
             elif ok:
@@ -290,9 +318,12 @@ def main(out, base_csv, base_bin):
         else:
             ok = all(b[k] == c[k] for k in ("describe_status", "describe_sha", "describe_id"))
             cls = "identical" if ok else "differs from c3dfb6b"
-        rows.append((i, cls))
-        if not ok:
-            fails.append(f"{i}\t{cls}\n")
+        result[i] = (ok, cls)
+    for i, js in needs.items():  # K4: a moved dependency must pass its own judgment
+        if result[i][0] and not all(result[j][0] for j in js):
+            result[i] = (False, "registered changed not met: a moved dependency failed")
+    rows = [(i, cls) for i, (_, cls) in sorted(result.items())]
+    fails = [f"{i}\t{cls}\n" for i, (ok, cls) in sorted(result.items()) if not ok]
     d = os.path.join(out, "d")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "census.csv"), "w", newline="") as f:
