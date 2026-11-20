@@ -133,7 +133,8 @@ const FORMAT_VERSION: u64 = 2;
 ///
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
 /// root class — the same condition under which code generation fails — or
-/// [`ArachneError::NoEClass`] when it declares no EClass at all;
+/// [`ArachneError::NoEClass`] when it declares no EClass at all, or
+/// [`ArachneError::NoConcreteEClass`] when it declares none but abstract ones and interfaces;
 /// with [`ArachneError::DescriptorNotClosed`] when a name the descriptor
 /// writes is not one it writes; and with [`ArachneError::EnumKeyedMap`] for
 /// a map keyed by an enum.
@@ -219,16 +220,16 @@ pub(crate) fn descriptor_with_roots(
     );
     if roots.is_empty() {
         let name = pack.name().to_string();
-        return Err(
-            if own_classes
-                .iter()
-                .any(|class| semantics::is_eclass(&ctx[*class]))
-            {
-                ArachneError::RootClassNotFound(name)
-            } else {
-                ArachneError::NoEClass(name)
-            },
-        );
+        let has = |pred: fn(&ecore_rs::repr::Class) -> bool| {
+            own_classes.iter().any(|class| pred(&ctx[*class]))
+        };
+        return Err(if has(crate::codegen::reachability::is_concrete_eclass) {
+            ArachneError::RootClassNotFound(name)
+        } else if has(semantics::is_eclass) {
+            ArachneError::NoConcreteEClass(name)
+        } else {
+            ArachneError::NoEClass(name)
+        });
     }
 
     // `EObject` is *listed* although it is not generated. It has no feature,

@@ -3,7 +3,7 @@
 //! what a classifier is by its `xsi:type` and not by the shared `is_enum` and
 //! `is_instantiable_class`, which take a datatype with no literal for a class.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ecore_rs::{
     ctx::Ctx,
@@ -14,7 +14,7 @@ use log::debug;
 use crate::codegen::semantics::is_eclass;
 
 /// A concrete, non-interface EClass: what a model can hold an instance of.
-fn is_concrete_eclass(class: &Class) -> bool {
+pub(crate) fn is_concrete_eclass(class: &Class) -> bool {
     class.is_concrete() && !class.is_interface() && is_eclass(class)
 }
 
@@ -46,8 +46,10 @@ pub(crate) fn compute_top_level_roots(
     package_classes_and_ecore: &[idx::Class],
     package_class_set: &HashSet<idx::Class>,
 ) -> Vec<idx::Class> {
-    let concrete_containment_incoming =
-        compute_concrete_containment_incoming(ctx, package_classes_and_ecore, package_class_set);
+    let edges =
+        compute_concrete_containment_edges(ctx, package_classes_and_ecore, package_class_set);
+    let concrete_containment_incoming: HashSet<idx::Class> =
+        edges.iter().map(|(_, t)| *t).collect();
 
     let mut top_level_roots: Vec<idx::Class> = package_classes
         .iter()
@@ -80,7 +82,42 @@ pub(crate) fn compute_top_level_roots(
             .collect();
     }
 
+    if top_level_roots.is_empty() {
+        top_level_roots = uncontained_component_roots(ctx, package_classes, &edges);
+    }
+
     top_level_roots
+}
+
+/// The package classes in a strongly connected component of the containment graph that no edge
+/// from outside enters: a class is in one when every class that reaches it is reached by it.
+fn uncontained_component_roots(
+    ctx: &Ctx,
+    package_classes: &[idx::Class],
+    edges: &HashSet<(idx::Class, idx::Class)>,
+) -> Vec<idx::Class> {
+    let mut reach: HashMap<idx::Class, HashSet<idx::Class>> = HashMap::new();
+    for class in edges.iter().flat_map(|(s, t)| [*s, *t]) {
+        let seen = reach.entry(class).or_default();
+        let mut stack = vec![class];
+        while let Some(c) = stack.pop() {
+            for (_, t) in edges.iter().filter(|(s, _)| *s == c) {
+                if seen.insert(*t) {
+                    stack.push(*t);
+                }
+            }
+        }
+    }
+    package_classes
+        .iter()
+        .copied()
+        .filter(|t| {
+            is_concrete_eclass(&ctx.classes()[**t])
+                && reach.iter().all(|(s, down)| {
+                    !down.contains(t) || reach.get(t).is_some_and(|d| d.contains(s))
+                })
+        })
+        .collect()
 }
 
 pub(crate) fn collect_reachable_classes(
@@ -214,12 +251,12 @@ fn concrete_descendants_in_package(
     result
 }
 
-fn compute_concrete_containment_incoming(
+fn compute_concrete_containment_edges(
     ctx: &Ctx,
     package_classes: &[idx::Class],
     package_class_set: &HashSet<idx::Class>,
-) -> HashSet<idx::Class> {
-    let mut incoming = HashSet::new();
+) -> HashSet<(idx::Class, idx::Class)> {
+    let mut edges = HashSet::new();
 
     for &source_class_idx in package_classes {
         let source_concretes =
@@ -243,14 +280,14 @@ fn compute_concrete_containment_incoming(
             let target_concretes =
                 concrete_descendants_in_package(ctx, target_class_idx, package_class_set);
             for target in target_concretes {
-                if source_concretes.iter().any(|source| *source != target) {
-                    incoming.insert(target);
+                for source in source_concretes.iter().filter(|source| **source != target) {
+                    edges.insert((*source, target));
                 }
             }
         }
     }
 
-    incoming
+    edges
 }
 
 fn abstract_family_has_no_external_container(

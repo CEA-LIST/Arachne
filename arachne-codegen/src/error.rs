@@ -31,6 +31,12 @@ pub enum ArachneError {
     )]
     NoEClass(String),
 
+    /// A package whose EClasses are all abstract or interfaces: no model can hold an instance.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the package has no concrete EClass"
+    )]
+    NoConcreteEClass(String),
+
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
 
