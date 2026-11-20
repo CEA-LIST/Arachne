@@ -110,11 +110,8 @@ fn components_no_outside_class_contains_are_the_roots() {
 
 #[test]
 fn a_root_of_the_first_two_passes_keeps_the_third_from_running() {
-    // Pass 1 finds R; the {A, B} cycle beside it is not a root (EC.M1n's question, not this one).
-    assert_eq!(
-        described(&fixture("beside.ecore"))["rootClasses"],
-        json!(["R"])
-    );
+    // beside.ecore (pass 1 finds R beside the {A, B} cycle) moved to EC.M1n's
+    // ecm1n_beside_roots.rs, where the cycle's classes are roots beside R.
     // Pass 2 finds the abstract Node; the {Group, Leaf} component it contains is not a root.
     assert_eq!(
         described(&fixture("composite.ecore"))["rootClasses"],

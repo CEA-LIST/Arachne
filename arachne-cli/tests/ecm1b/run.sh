@@ -16,6 +16,8 @@
 #      EC.M1m: D is judged by ecm1m/census.py against this script's own candidate run at 91555a2
 #      (copied to <scratch>/m-base): the registered cycle roots and no-concrete refusal, every
 #      other input identical, its stderr detail included;
+#      EC.M1n: D is judged by ecm1n/census.py against EC.M1m's assessed run at 643ff52 (copied to
+#      <scratch>/n-base): the registered moved roots and classes, every other input identical;
 #   R  refusal: on every input a5f3111 refuses and the candidate refuses too, the first stderr line is
 #      a5f3111's (ecm1a/refusal.py), judged by read_further.py: where a5f3111's line is its
 #      forward-package refusal the row is counted as read further (EC.M1h);
@@ -41,8 +43,8 @@ W1=/volatile/home/vp242103/.cache/cea-crdt-scratch/EC.M1/bin
 OURS=$S/bin/arachne-a5f3111;  OURS_SHA=fb51b053feea0c0e54e0fff408667bb7b546067160f69b7b3f28a36904bd835d
 GUIDE=$W1/arachne-e2ac279;    GUIDE_SHA=f49cb61328fbffb6cd53600f363761ea285f1acb9cb66806ca68c47b6b395075
 HIS=$W1/arachne-ebc3141;      HIS_SHA=7ac3685826cb148702a31a8c20cf29ee7a9e9a36c05b521e08026c9d3237a6a1
-BASE_CSV=$S/m-base/cand/files.csv;  BASE_CSV_SHA=38d98715c07b4599c3c97a8f4a8a74602c2261bbc9d46556c6c8cf5961dc6b7c
-BASE_BIN=$S/m-base/arachne-candidate; BASE_BIN_SHA=3a9a831b819da59320d5e3b61fa643fb2297d769c51bfdea09eb7128a88fd0c5
+BASE_CSV=$S/n-base/cand/files.csv;  BASE_CSV_SHA=17b27c1c58d4f35375d6ba634431d6979d4b1e52a9d34dcdb0c150b8ab37f686
+BASE_BIN=$S/n-base/arachne-candidate; BASE_BIN_SHA=0dc876ec5fffc86a98ea4a36658158e926dc00f821b24791711f96aba0975290
 [ -e "$OUT" ] && { echo "INSTRUMENT: $OUT exists; give a new out-dir"; exit 2; }
 mkdir -p "$OUT" "$S/runs"
 for pin in "$OURS $OURS_SHA" "$GUIDE $GUIDE_SHA" "$HIS $HIS_SHA" "$BASE_CSV $BASE_CSV_SHA" "$BASE_BIN $BASE_BIN_SHA"; do
@@ -73,7 +75,7 @@ run "$OUT/arachne-candidate" "$OUT/cand" --describe --generate >"$OUT/cand-run.l
 
 $EC01 compare --kind describe --left "$S/runs/ref-a5f3111-describe" --right "$OUT/cand" --out "$OUT/d" >/dev/null
 # EC.M1k: the census judgment replaces the a5f3111 comparison's exit (that comparison is kept, reported).
-python3 -I "$REPO/arachne-cli/tests/ecm1m/census.py" "$OUT" "$BASE_CSV" >"$OUT/d.log" 2>&1
+python3 -I "$REPO/arachne-cli/tests/ecm1n/census.py" "$OUT" "$BASE_CSV" >"$OUT/d.log" 2>&1
 d=$?
 [ "$d" = 2 ] && { cat "$OUT/d.log"; echo "INSTRUMENT: census judgment did not run"; exit 2; }
 python3 -I "$REPO/arachne-cli/tests/ecm1a/refusal.py" "$OURS" "$OUT/arachne-candidate" \
