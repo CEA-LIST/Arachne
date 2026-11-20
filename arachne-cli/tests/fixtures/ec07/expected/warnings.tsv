@@ -1,0 +1,9 @@
+annotation_contents	warning: dropped annotationContents at Root	warning: dropped annotationContents at Root.label
+annotation_detail	warning: dropped annotationDetail at Color.RED	warning: dropped annotationDetail at Date	warning: dropped annotationDetail at Root	warning: dropped annotationDetail at Root.label	warning: dropped annotationDetail at Root.reset	warning: dropped annotationDetail at p
+annotation_references	warning: dropped annotationReferences at Root.next
+combined	warning: dropped annotationContents at Root	warning: dropped annotationDetail at Root	warning: dropped eExceptions at Root.run	warning: dropped eExceptions at sub::Item.ping	warning: dropped eFactoryInstance at p	warning: dropped xmi:id at sub
+cross/root	warning: dropped eExceptions at parts::Engine.start	warning: dropped eFactoryInstance at parts	warning: dropped xmi:id at cars
+exceptions	warning: dropped eExceptions at Root.check
+package_attributes	warning: dropped eFactoryInstance at p	warning: dropped eFactoryInstance at sub	warning: dropped xmi:id at p	warning: dropped xmi:id at sub
+refused_later
+then_refused

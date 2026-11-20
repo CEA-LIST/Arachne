@@ -1,0 +1,6 @@
+warning: dropped changeable at Root.x
+warning: dropped eAnnotation at Root
+warning: dropped eOperation at Root.run
+warning: dropped eOperation at sub::Item.ping
+warning: dropped nsPrefix at p
+{"digest":"8e3a3768df96d40cd605e9afbad331b43c3a81ce954f1e63ec6146a8f5b0ff9d","nsURI":"http://example.org/ec07/combined"}
