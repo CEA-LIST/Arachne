@@ -67,6 +67,11 @@
 //!   not only what code generation reaches: it also lists `EObject` and the
 //!   targets of plain references, so that every name the descriptor writes
 //!   resolves.
+//! - A classifier of a subpackage is keyed by its root-relative `::` path (`catalog::Item`,
+//!   `a::b::Item`) in every place a name is written; classifiers of the root package keep bare
+//!   names. When a subpackage classifier is written, a top-level `"packages"` map lists every
+//!   subpackage at every depth by that path, as `{"nsURI": ..., "nsPrefix": ...}`; otherwise the
+//!   key is absent. `package` and `nsURI` stay the root's.
 //! - A classifier is a class, an enum or a datatype by its `xsi:type`. A
 //!   datatype is never a class or a root: an attribute typed by one is
 //!   described by its instance class, and an enum with no literal is listed
@@ -164,7 +169,7 @@ fn subpackages(
                 "`{path}` would key its classifiers like Ecore's own"
             )));
         }
-        let Some(ns_uri) = sub.ns_uri() else {
+        let Some(ns_uri) = sub.ns_uri().filter(|ns_uri| !ns_uri.is_empty()) else {
             return Err(ArachneError::Subpackage(format!("`{path}` has no nsURI")));
         };
         if seen.iter().any(|seen| seen == ns_uri) {
@@ -515,7 +520,7 @@ fn add_semantics(
         )
     {
         return Err(ArachneError::EnumKeyedMap {
-            class: class.name().to_string(),
+            class: semantics::descriptor_class_name(ctx, class.idx),
             feature: feature.name.clone(),
         });
     }
@@ -576,14 +581,19 @@ fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
 }
 
 /// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it (`a::Class`),
-/// and the feature.
+/// and the feature. A reference into another file keeps its last class segment only: a
+/// dependency is described whole, under its own bare names.
 fn class_and_feature(reference: &str) -> (String, &str) {
-    let path = reference.rsplit('#').next().unwrap_or(reference);
+    let (file, path) = reference.rsplit_once('#').unwrap_or(("", reference));
     let (class, feature) = path
         .trim_start_matches('/')
         .rsplit_once('/')
-        .unwrap_or(("", path));
-    (class.replace('/', "::"), feature)
+        .unwrap_or(("", path.trim_start_matches('/')));
+    if file.is_empty() {
+        (class.replace('/', "::"), feature)
+    } else {
+        (class.rsplit('/').next().unwrap_or("").to_string(), feature)
+    }
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the

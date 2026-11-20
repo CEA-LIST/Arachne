@@ -20,7 +20,11 @@ use ecore_rs::{
 use regex::Regex;
 use serde_json::{Value, json};
 
-use crate::{ArachneError, EcoreParser, codegen::descriptor, find_user_package};
+use crate::{
+    ArachneError, EcoreParser,
+    codegen::{descriptor, semantics},
+    find_user_package,
+};
 
 pub(crate) struct Resources {
     pub parser: EcoreParser,
@@ -187,10 +191,16 @@ impl Loader {
         ctx.finalize().map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
         // Before the descriptor, whose own duplicate-key refusal would otherwise answer first.
-        for sub in pack.sub() {
-            if descriptor::tree_classes(&ctx, &ctx[*sub]).is_empty() {
-                continue;
-            }
+        // Only a descriptor that writes a subpackage classifier is refused, and then every
+        // first-level subpackage named like an imported package, empty or not.
+        let writes_subpackage_classifier = pack.sub().iter().any(|sub| {
+            descriptor::tree_classes(&ctx, &ctx[*sub])
+                .iter()
+                .any(|class| {
+                    semantics::is_eclass(&ctx[*class]) || semantics::is_eenum(&ctx[*class])
+                })
+        });
+        for sub in pack.sub().iter().filter(|_| writes_subpackage_classifier) {
             let name = ctx[*sub].name();
             if origins.keys().any(|key| {
                 key.split_once("::")
