@@ -34,6 +34,14 @@ pub enum ArachneError {
     /// has never seen.
     #[error("two classifiers would be described under the one key `{0}`")]
     DuplicateDescriptorClass(String),
+
+    /// A class the descriptor writes names a class or enum the descriptor does not write, by
+    /// identity: a loader or a reader of the descriptor could not resolve the name, or would
+    /// resolve it to another class of the same name.
+    #[error(
+        "descriptor not closed: class `{class}` names `{missing}`, which the descriptor does not write"
+    )]
+    DescriptorNotClosed { class: String, missing: String },
 }
 
 /// Specialized Result type for Arachne

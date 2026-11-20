@@ -79,7 +79,14 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
                     descriptor: resources.descriptor.clone(),
                     dependencies: resources.dependencies.clone(),
                 })
-                .map_err(|_| refused)
+                .map_err(|cause| match refused {
+                    // The parser's line stays first; the loader's cause follows on one line.
+                    ArachneError::EcoreParse(parse) => ArachneError::EcoreParse(format!(
+                        "{parse}\ncaused by: {}",
+                        format!("{cause:#}").replace('\n', " ")
+                    )),
+                    refused => refused,
+                })
         }
     }
 }

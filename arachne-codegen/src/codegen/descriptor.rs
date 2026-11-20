@@ -107,6 +107,7 @@ use ecore_rs::{
     repr::{Class, Pack, builtin, idx, structural},
 };
 use log::warn;
+use moirai_semantics::{LeafRule, MergeRule};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -187,6 +188,13 @@ pub(crate) fn descriptor_with_roots(
             .filter(|idx| !own_classes.contains(idx))
             .copied(),
     );
+    let package_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
+    crate::codegen::reachability::follow_reference_targets(
+        ctx,
+        &mut reachable,
+        &package_set,
+        &described_set,
+    );
     // An abstract class of Ecore that nothing generated extends is left out.
     reachable.retain(|class| {
         !ctx.is_ecore_class(*class)
@@ -199,6 +207,19 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     root_names.sort_unstable();
 
+    // What the descriptor writes, by identity: its classes, and the enums of the package.
+    let written: HashSet<idx::Class> = reachable
+        .iter()
+        .copied()
+        .filter(|class| !ctx[*class].is_enum())
+        .chain(
+            package_classes
+                .iter()
+                .copied()
+                .filter(|class| ctx[*class].is_enum()),
+        )
+        .collect();
+
     // Sorted maps so the emitted descriptor is deterministic.
     let mut classes = Map::new();
     let mut included: Vec<&Class> = reachable
@@ -210,7 +231,7 @@ pub(crate) fn descriptor_with_roots(
     for class in &included {
         let key = semantics::descriptor_class_name(ctx, class.idx);
         if classes
-            .insert(key.clone(), class_descriptor(ctx, class, &reachable))
+            .insert(key.clone(), class_descriptor(ctx, class, &written)?)
             .is_some()
         {
             // Two classifiers on one key would silently become one class with
@@ -263,14 +284,15 @@ pub fn metamodel_digest(descriptor: &Value) -> String {
 
 /// Describes one class: declared features partitioned into attributes,
 /// containments and plain references, plus its super types.
-fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) -> Value {
-    let mut super_types: Vec<String> = class
-        .sup()
-        .iter()
-        .copied()
-        .filter(|sup| included.contains(sup))
-        .map(|sup| semantics::descriptor_class_name(ctx, sup))
-        .collect();
+///
+/// Refuses with [`ArachneError::DescriptorNotClosed`] when a name it writes is not a class or
+/// enum in `written`.
+fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> Result<Value> {
+    let mut super_types: Vec<String> = Vec::new();
+    for sup in class.sup() {
+        require(ctx, class, *sup, written)?;
+        super_types.push(semantics::descriptor_class_name(ctx, *sup));
+    }
     super_types.sort_unstable();
 
     let mut attributes = Vec::new();
@@ -299,8 +321,14 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                 });
                 if let Some(enum_name) = enum_name {
                     attribute["enum"] = json!(enum_name);
+                    require(
+                        ctx,
+                        class,
+                        feature.typ.expect("an enum-typed attribute"),
+                        written,
+                    )?;
                 }
-                add_semantics(&mut attribute, ctx, class, feature);
+                add_semantics(&mut attribute, ctx, class, feature, written)?;
                 attributes.push(attribute);
             }
             structural::Typ::EReference => {
@@ -313,6 +341,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                     );
                     continue;
                 };
+                require(ctx, class, target, written)?;
                 let target = semantics::descriptor_class_name(ctx, target);
                 if feature.containment {
                     let mut containment = json!({
@@ -322,7 +351,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "required": required,
                         "ordered": feature.ordered.unwrap_or(true),
                     });
-                    add_semantics(&mut containment, ctx, class, feature);
+                    add_semantics(&mut containment, ctx, class, feature, written)?;
                     add_declarations(&mut containment, feature);
                     containments.push(containment);
                 } else {
@@ -332,7 +361,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "many": many,
                         "required": required,
                     });
-                    add_semantics(&mut reference, ctx, class, feature);
+                    add_semantics(&mut reference, ctx, class, feature, written)?;
                     add_declarations(&mut reference, feature);
                     references.push(reference);
                 }
@@ -356,7 +385,23 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
     if let Some(field) = semantics::transparent_field(class) {
         entry["transparent"] = json!(field);
     }
-    entry
+    Ok(entry)
+}
+
+/// `name` must be a class or enum the descriptor writes, `class` being the one that names it.
+fn require(
+    ctx: &Ctx,
+    class: &Class,
+    name: idx::Class,
+    written: &HashSet<idx::Class>,
+) -> Result<()> {
+    if written.contains(&name) {
+        return Ok(());
+    }
+    Err(ArachneError::DescriptorNotClosed {
+        class: semantics::descriptor_class_name(ctx, class.idx),
+        missing: semantics::descriptor_class_name(ctx, name),
+    })
 }
 
 /// Adds the four `formatVersion` 2 keys to one feature entry: the facets as
@@ -372,14 +417,35 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 /// Nothing is removed and nothing existing moves, which is what keeps the
 /// phase 4 `Schema` parser (`deployment/conformance.rs`) and the model editor
 /// reading these descriptors unchanged: both read only the keys they name.
-fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structural::Structural) {
+fn add_semantics(
+    entry: &mut Value,
+    ctx: &Ctx,
+    class: &Class,
+    feature: &structural::Structural,
+    written: &HashSet<idx::Class>,
+) -> Result<()> {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
+    // The merge rule's own class names (`merge.target`, `merge.leaf.class`) are names too.
+    let named = match &merge {
+        MergeRule::Containment { target, .. }
+        | MergeRule::Reference { target, .. }
+        | MergeRule::IdentityReference { target, .. } => Some(*target),
+        MergeRule::Attribute {
+            leaf: LeafRule::Enum { class, .. } | LeafRule::OptionalRegister { class: Some(class) },
+            ..
+        } => Some(*class),
+        _ => None,
+    };
+    if let Some(slot) = named {
+        require(ctx, class, idx::Class::from(slot.index()), written)?;
+    }
     entry["facets"] = semantics::facets_json(feature);
     entry["annotation"] = semantics::feature_datatype(feature, class, ctx)
         .map(|value| json!(value))
         .unwrap_or(Value::Null);
     entry["merge"] = semantics::merge_json(&merge, ctx);
     entry["provenance"] = semantics::provenance_json(&provenance);
+    Ok(())
 }
 
 /// Adds to one reference entry what the `.ecore` declares about which end is

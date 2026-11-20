@@ -117,6 +117,38 @@ pub(crate) fn collect_reachable_classes(
     reachable
 }
 
+/// Adds to `reachable` what its classes' plain references name: a class of `package_classes`
+/// with what `collect_reachable_classes` reaches from it, and `EObject` alone, so that listing it
+/// pulls in none of its subclasses. Repeats until nothing is added.
+pub(crate) fn follow_reference_targets(
+    ctx: &Ctx,
+    reachable: &mut HashSet<idx::Class>,
+    package_classes: &HashSet<idx::Class>,
+    described: &HashSet<idx::Class>,
+) {
+    let eobject = crate::codegen::ecore::eobject(ctx);
+    loop {
+        let targets: Vec<idx::Class> = reachable
+            .iter()
+            .flat_map(|class| ctx[*class].structural())
+            .filter(|feature| feature.kind == structural::Typ::EReference && !feature.containment)
+            .filter_map(|feature| feature.typ)
+            .filter(|target| !reachable.contains(target))
+            .collect();
+        let before = reachable.len();
+        for target in targets {
+            if Some(target) == eobject {
+                reachable.insert(target);
+            } else if package_classes.contains(&target) && !ctx[target].is_enum() {
+                reachable.extend(collect_reachable_classes(ctx, target, described));
+            }
+        }
+        if reachable.len() == before {
+            return;
+        }
+    }
+}
+
 fn has_concrete_descendant(
     ctx: &Ctx,
     class_idx: idx::Class,
