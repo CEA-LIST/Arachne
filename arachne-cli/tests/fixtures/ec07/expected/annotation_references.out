@@ -4,13 +4,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -25,14 +30,19 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Root"
+          "target": "Root",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "superTypeOrder": [],
       "superTypes": []
     }
   },
+  "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,
+  "nsPrefix": null,
   "nsURI": "http://example.org/ec07/annotation_references",
   "package": "p",
   "rootClasses": [

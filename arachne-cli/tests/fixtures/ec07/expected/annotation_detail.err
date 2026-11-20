@@ -4,4 +4,4 @@ warning: dropped eAnnotation at Root.label
 warning: dropped eAnnotation at p
 warning: dropped eDataType at Date
 warning: dropped eOperation at Root.reset
-{"digest":"19390f4d4bd2d017480865c99678dff778cec6de2cc00cdfff5255a0407b5e93","nsURI":"http://example.org/ec07/annotation_detail"}
+{"digest":"fbf8c0987109c6b1e8441c227c8046f9e2f499cce2e6d495a19850fef51d6aee","nsURI":"http://example.org/ec07/annotation_detail"}

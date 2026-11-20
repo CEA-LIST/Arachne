@@ -4,7 +4,11 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ExecutionNode"
+      ],
       "superTypes": [
         "ExecutionNode"
       ]
@@ -14,12 +18,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -37,16 +45,22 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "containment",
@@ -64,14 +78,20 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "TreeNode"
+          "target": "TreeNode",
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "containment",
@@ -89,10 +109,14 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "Blackboard"
+          "target": "Blackboard",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Blackboard": {
@@ -101,10 +125,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -122,10 +150,14 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "BlackboardEntry"
+          "target": "BlackboardEntry",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "BlackboardEntry": {
@@ -133,12 +165,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -156,16 +192,22 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -183,18 +225,26 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "CloseDoor": {
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Action"
+      ],
       "superTypes": [
         "Action"
       ]
@@ -203,7 +253,11 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ExecutionNode"
+      ],
       "superTypes": [
         "ExecutionNode"
       ]
@@ -214,10 +268,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -235,10 +293,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "TreeNode"
+          "target": "TreeNode",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "TreeNode"
+      ],
       "superTypes": [
         "TreeNode"
       ]
@@ -247,13 +311,18 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -268,9 +337,12 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "BlackboardEntry"
+          "target": "BlackboardEntry",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Decorator": {
@@ -279,10 +351,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "containment",
@@ -300,10 +376,16 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "TreeNode"
+          "target": "TreeNode",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "TreeNode"
+      ],
       "superTypes": [
         "TreeNode"
       ]
@@ -312,7 +394,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Action"
+      ],
       "superTypes": [
         "Action"
       ]
@@ -323,10 +409,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -344,14 +434,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "OutFlowPort"
+          "target": "OutFlowPort",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -369,10 +465,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "InFlowPort"
+          "target": "InFlowPort",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "TreeNode"
+      ],
       "superTypes": [
         "TreeNode"
       ]
@@ -381,7 +483,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ControlNode"
+      ],
       "superTypes": [
         "ControlNode"
       ]
@@ -390,7 +496,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "DataFlowPort"
+      ],
       "superTypes": [
         "DataFlowPort"
       ]
@@ -399,7 +509,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Decorator"
+      ],
       "superTypes": [
         "Decorator"
       ]
@@ -408,7 +522,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Condition"
+      ],
       "superTypes": [
         "Condition"
       ]
@@ -417,7 +535,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Action"
+      ],
       "superTypes": [
         "Action"
       ]
@@ -426,7 +548,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "DataFlowPort"
+      ],
       "superTypes": [
         "DataFlowPort"
       ]
@@ -437,10 +563,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -458,14 +588,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "BehaviorTree"
+          "target": "BehaviorTree",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "containment",
@@ -483,17 +619,25 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "BehaviorTree"
+          "target": "BehaviorTree",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Sequence": {
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ControlNode"
+      ],
       "superTypes": [
         "ControlNode"
       ]
@@ -504,10 +648,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "containment",
@@ -525,10 +673,16 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "BehaviorTree"
+          "target": "BehaviorTree",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "TreeNode"
+      ],
       "superTypes": [
         "TreeNode"
       ]
@@ -538,12 +692,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -561,16 +719,22 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -588,13 +752,36 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
+  },
+  "enumLiterals": {
+    "Status": [
+      {
+        "literal": null,
+        "name": "RUNNING",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "SUCCESS",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "FAILURE",
+        "value": 2
+      }
+    ]
   },
   "enums": {
     "Status": [
@@ -604,6 +791,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "behaviortree",
   "nsURI": "http://www.example.org/behaviortree",
   "package": "behaviortree",
   "rootClasses": [

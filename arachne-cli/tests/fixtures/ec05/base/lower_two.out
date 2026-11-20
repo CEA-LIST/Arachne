@@ -1,0 +1,213 @@
+{
+  "classes": {
+    "Named": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Node": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "Status",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Status",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "status",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        },
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "orderedSet"
+            }
+          },
+          "name": "tags",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "ecoreDefault",
+            "presence": "declared",
+            "unique": "ecoreDefault"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "references": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "identityReference",
+            "many": true,
+            "target": "Node"
+          },
+          "name": "children",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Node"
+        }
+      ],
+      "superTypes": [
+        "Named",
+        "Timed"
+      ]
+    },
+    "Root": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Node"
+          },
+          "name": "nodes",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Node"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "Timed": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "timeout",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {
+    "Status": [
+      "RUNNING",
+      "SUCCESS",
+      "FAILURE"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ec05/bt",
+  "package": "bt",
+  "rootClasses": [
+    "Root"
+  ]
+}

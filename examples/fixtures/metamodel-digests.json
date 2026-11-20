@@ -1,18 +1,18 @@
 {
   "bt.metamodel.json": {
     "nsURI": "http://www.example.org/behaviortree",
-    "digest": "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822"
+    "digest": "c05240840a30cd6c034c5b568d9789e67615abe7660920fd6b389aec2a3e994d"
   },
   "uml.metamodel.json": {
     "nsURI": "http:///SimpleUML.ecore",
-    "digest": "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3"
+    "digest": "48384ea3e496c5ce1e9039d0cd0424bb4b297c4121454af0fc648b48b4b696a9"
   },
   "json.metamodel.json": {
     "nsURI": "http://www.example.org/json",
-    "digest": "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30"
+    "digest": "0c46390caab46431feafa07e5ef8429f7cd51b559b3c9de9d74ababe30b1647f"
   },
   "notation.metamodel.json": {
     "nsURI": "http://cea.fr/crdt/notation/0.1",
-    "digest": "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86"
+    "digest": "be47a0ce6ad9fed260a530603e8be2b837bd5512da902e5b8c06aacf3599e591"
   }
 }

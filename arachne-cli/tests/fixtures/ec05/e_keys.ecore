@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="bt" nsURI="http://example.org/ec05/bt" nsPrefix="bt">
+  <eClassifiers xsi:type="ecore:EClass" name="Root">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="nodes" upperBound="-1" eType="#//Node" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Named" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Timed" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="timeout" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Node" eSuperTypes="#//Named #//Timed">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="status" eType="#//Status"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tags" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="children" upperBound="-1" eType="#//Node" eKeys="#//Named/name"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="Status">
+    <eLiterals name="RUNNING"/>
+    <eLiterals name="SUCCESS" value="1"/>
+    <eLiterals name="FAILURE" value="2" literal="failure"/>
+  </eClassifiers>
+</ecore:EPackage>

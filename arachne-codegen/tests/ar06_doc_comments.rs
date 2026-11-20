@@ -39,7 +39,9 @@ const SEMANTICS_CODE_SHA256: &str =
 // `examples/` are regenerated with the identity rule (`si10_shipped_descriptors.rs`, D6); every
 // other file keeps its bytes. `18f1dba2...` before.
 // EC.M1b (`spec/items/EC.M1b.md`): his `pub_crawl.ecore` and `README.md` lines added; `d4e287a6...` before.
-const EXAMPLES_SHA256: &str = "df07256b23260c7e914f4c89d889b298bffedef9b84bfdf71c04958990cb80f8";
+// EC.05 (`spec/items/EC.05.md`): the six shipped descriptors and the digest fixture carry EC.05's
+// keys; `df07256b...` before.
+const EXAMPLES_SHA256: &str = "8dc440e2a90eaebcc9faf6cd0f49de161e3e805fd5470ac4088a64506b0410d3";
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")

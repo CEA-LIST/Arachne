@@ -5,12 +5,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -29,11 +33,15 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "B": {
@@ -41,12 +49,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -65,26 +77,37 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "C": {
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "B",
+        "A"
+      ],
       "superTypes": [
         "A",
         "B"
       ]
     }
   },
+  "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,
+  "nsPrefix": "multiple_inheritance",
   "nsURI": "http://www.example.org/multiple_inheritance",
   "package": "multiple_inheritance",
   "rootClasses": [

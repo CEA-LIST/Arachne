@@ -79,14 +79,10 @@ S3 arachne_codegen :: codegen::cycles::tests::dense_dag_needs_no_boxing ok
 S3 arachne_codegen :: codegen::cycles::tests::every_small_directed_graph_is_broken ok
 S3 arachne_codegen :: codegen::cycles::tests::existing_indirection_only_requires_operation_boxes ok
 S3 arachne_codegen :: codegen::cycles::tests::polymorphic_field_removes_all_its_edges ok
-S3 arachne_codegen :: codegen::descriptor::tests::bt_control_node_containment_is_many_ordered_and_subclass_typed ok
 S3 arachne_codegen :: codegen::descriptor::tests::bt_enum_appears_under_enums_and_not_under_classes ok
 S3 arachne_codegen :: codegen::descriptor::tests::bt_names_root_as_its_only_root_class ok
-S3 arachne_codegen :: codegen::descriptor::tests::bt_tree_node_declares_only_its_own_features ok
-S3 arachne_codegen :: codegen::descriptor::tests::ecore_classes_are_listed_under_a_package_qualified_key ok
 S3 arachne_codegen :: codegen::descriptor::tests::json_publishes_the_keyed_shape_and_the_transparent_field ok
 S3 arachne_codegen :: codegen::descriptor::tests::mp5_the_descriptor_digest_is_stable_under_reformatting_and_changes_under_edits ok
-S3 arachne_codegen :: codegen::descriptor::tests::the_annotation_features_carry_their_rules_and_their_refusals ok
 S3 arachne_codegen :: codegen::descriptor::tests::the_builtins_descriptor_parses_into_a_table ok
 S3 arachne_codegen :: codegen::descriptor::tests::the_descriptor_declares_format_version_two ok
 S3 arachne_codegen :: codegen::ident::tests::avoids_names_generated_by_record_macros ok

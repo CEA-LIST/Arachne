@@ -48,7 +48,7 @@ const EXPECTED: &str = "arachne-codegen/tests/fixtures/ar04/sysml.ar04.metamodel
 const EXPECTED_SHA256: &str = "896ba4d758c6d8adfe9764bb7779f3400212c02afd97959012936d4e113d4e47";
 const EXPECTED_DIGEST: &str = "2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457";
 /// SI.10: `examples/sysml/sysml.metamodel.json` as regenerated, the fixture moved by SI.05's rule.
-const SHIPPED_SHA256: &str = "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83";
+const SHIPPED_SHA256: &str = "e6e406af9b8246c7d4efc4898763b2c39404bd8cbb6754217a42c364fb844178";
 /// SysON's own `.ecore`, unannotated, describes to this today and must after.
 const SYSON_DIGEST: &str = "ebd580696f97d9339c148f5b29db5d0ff7b0928d78fb05efc7c206811405e627";
 
@@ -689,31 +689,31 @@ fn ar04_r4_no_other_metamodel_and_no_default_moves() {
         (
             "examples/bt.metamodel.json",
             // SI.10: regenerated with the identity rule; ff452510... before.
-            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+            "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
         ),
         (
             "examples/json.metamodel.json",
-            "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+            "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
         ),
         (
             "examples/notation.metamodel.json",
             // SI.10: regenerated with the identity rule; 04ebb5c1... before.
-            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+            "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
         ),
         (
             "examples/umlclass.metamodel.json",
             // SI.10: regenerated with the identity rule; a770d938... before.
-            "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
+            "094295de8e91f5f9bb5b818ca620be98a526e6d6d79cd0970ffa48f5ad9fe277",
         ),
         (
             "examples/uml.metamodel.json",
             // SI.10: regenerated with the identity rule; b000aa0d... before.
-            "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
+            "3aa1800ed183804ff3f0e5a066f507a3af8e5b7b1a26874a0ff85d82743c5f83",
         ),
         (
             "examples/fixtures/metamodel-digests.json",
             // SI.10: names the regenerated descriptors; 9d217db4... before.
-            "9e4a4f24bc3f5485a1b54726cd2645a8ddf18c0f0bd55a539b4fb7dd2c277efe",
+            "862a749b89be207b2da20138d692994d8291cca32c58c5e86db37cd64a468055",
         ),
         (
             "arachne-codegen/src/codegen/datatype/to_crdt.rs",

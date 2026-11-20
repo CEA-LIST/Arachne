@@ -1,0 +1,199 @@
+{
+  "classes": {
+    "Car": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "model",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "single"
+            },
+            "target": "parts::Engine"
+          },
+          "name": "engine",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "parts::Engine"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "parts::Engine": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "orderedSet"
+            }
+          },
+          "name": "cylinders",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "ecoreDefault",
+            "presence": "declared",
+            "unique": "ecoreDefault"
+          },
+          "required": true
+        }
+      ],
+      "containments": [],
+      "origin": "http://example.org/ec05/parts",
+      "references": [],
+      "superTypes": [
+        "parts::Part",
+        "parts::Powered"
+      ]
+    },
+    "parts::Part": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "serial",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "origin": "http://example.org/ec05/parts",
+      "references": [],
+      "superTypes": []
+    },
+    "parts::Powered": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "parts::Fuel",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "parts::Fuel",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "fuel",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "origin": "http://example.org/ec05/parts",
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "6b5c3304d91e85df91b5b12c9ddc01cee3ba515546ad4f668b37076566a79bb5",
+      "nsURI": "http://example.org/ec05/parts"
+    }
+  ],
+  "enums": {
+    "parts::Fuel": [
+      "petrol",
+      "diesel"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ec05/cars",
+  "package": "cars",
+  "rootClasses": [
+    "Car"
+  ]
+}

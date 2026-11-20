@@ -5,12 +5,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -28,16 +32,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -55,11 +65,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "PubCrawl": {
@@ -67,12 +81,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -90,16 +108,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -117,10 +141,14 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Stop"
+          "target": "Stop",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Stop": {
@@ -128,12 +156,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -152,16 +184,22 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "int",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -181,17 +219,24 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -206,9 +251,12 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Participant"
+          "target": "Participant",
+          "unsettable": false,
+          "upperBound": 20
         }
       ],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "TapasBar": {
@@ -216,6 +264,9 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "Style",
           "facets": {
             "ordered": null,
@@ -223,6 +274,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -242,11 +294,17 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Stop"
+      ],
       "superTypes": [
         "Stop"
       ]
@@ -256,12 +314,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -279,15 +341,45 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Stop"
+      ],
       "superTypes": [
         "Stop"
       ]
     }
+  },
+  "enumLiterals": {
+    "Style": [
+      {
+        "literal": null,
+        "name": "TRADITIONAL",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "SEAFOOD",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "MODERN",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "VEGETARIAN",
+        "value": 3
+      }
+    ]
   },
   "enums": {
     "Style": [
@@ -298,6 +390,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "pubcrawl",
   "nsURI": "http://www.example.org/pubcrawl",
   "package": "pubcrawl",
   "rootClasses": [

@@ -1,0 +1,53 @@
+{
+  "classes": {
+    "Holder": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "Kind",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Kind",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "kind",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {
+    "Kind": [
+      "A"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ec05/lit",
+  "package": "lit",
+  "rootClasses": [
+    "Holder"
+  ]
+}

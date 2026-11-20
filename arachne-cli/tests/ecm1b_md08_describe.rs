@@ -83,14 +83,17 @@ fn assert_tables(d: &Value) {
     let d2 = fixture("Components.base.json");
     for name in ["Part", "Engine", "Controller", "Device"] {
         let mut expected = d2["classes"][name].clone();
-        expected["superTypes"] = Value::Array(
-            expected["superTypes"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| Value::String(format!("Components::{}", v.as_str().unwrap())))
-                .collect(),
-        );
+        // EC.05 (`spec/items/EC.05.md`): `superTypeOrder` names supertypes too.
+        for key in ["superTypes", "superTypeOrder"] {
+            expected[key] = Value::Array(
+                expected[key]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| Value::String(format!("Components::{}", v.as_str().unwrap())))
+                    .collect(),
+            );
+        }
         for field in ["containments", "references"] {
             for f in expected[field].as_array_mut().unwrap() {
                 if let Some(v) = f.get("target").and_then(Value::as_str).map(str::to_owned) {

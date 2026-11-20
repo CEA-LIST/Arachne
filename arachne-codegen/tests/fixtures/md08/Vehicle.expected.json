@@ -4,13 +4,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -25,8 +30,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Components::Engine"
+          "target": "Components::Engine",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "Components::Part"
       ],
       "superTypes": [
         "Components::Part"
@@ -36,8 +46,12 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "origin": "urn:md08:Components",
       "references": [],
+      "superTypeOrder": [
+        "Components::Device"
+      ],
       "superTypes": [
         "Components::Device"
       ]
@@ -47,12 +61,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -70,12 +88,16 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "origin": "urn:md08:Components",
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Components::Engine": {
@@ -83,12 +105,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "int",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -108,18 +134,25 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "origin": "urn:md08:Components",
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -134,8 +167,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Components::Controller"
+          "target": "Components::Controller",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "Components::Part"
       ],
       "superTypes": [
         "Components::Part"
@@ -146,12 +184,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -169,30 +211,38 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "origin": "urn:md08:Components",
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Independent": {
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
   },
   "dependsOn": [
     {
-      "digest": "dcdda0fc994380030b2fb10852104d530dd077c7c96d1532afd8a1d962880d63",
+      "digest": "257999c1693b3a33e550515da0bc2af4e1bc5ccbb8aef837c155674a4bb41268",
       "nsURI": "urn:md08:Components"
     }
   ],
+  "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,
+  "nsPrefix": "vehicle",
   "nsURI": "urn:md08:Vehicle",
   "package": "Vehicle",
   "rootClasses": [

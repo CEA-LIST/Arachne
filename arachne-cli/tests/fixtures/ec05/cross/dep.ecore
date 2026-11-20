@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="parts" nsURI="http://example.org/ec05/parts" nsPrefix="parts">
+  <eClassifiers xsi:type="ecore:EClass" name="Shelf">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="engines" upperBound="-1" eType="#//Engine" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Powered" abstract="true" interface="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="fuel" eType="#//Fuel" defaultValueLiteral="diesel"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Part" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="serial" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" changeable="false" unsettable="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Engine" eSuperTypes="#//Powered #//Part">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="cylinders" lowerBound="2" upperBound="12" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="Fuel">
+    <eLiterals name="petrol" value="3" literal="PETROL"/>
+    <eLiterals name="diesel" value="4"/>
+  </eClassifiers>
+</ecore:EPackage>

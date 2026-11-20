@@ -978,7 +978,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         (
             "bt.metamodel.json",
             // SI.10: regenerated with the identity rule; ff452510... before.
-            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+            "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
         ),
         (
             "class_diagram.ecore",
@@ -995,7 +995,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         (
             "fixtures/metamodel-digests.json",
             // SI.10: names the regenerated descriptors; 9d217db4... before.
-            "9e4a4f24bc3f5485a1b54726cd2645a8ddf18c0f0bd55a539b4fb7dd2c277efe",
+            "862a749b89be207b2da20138d692994d8291cca32c58c5e86db37cd64a468055",
         ),
         (
             "json.ecore",
@@ -1003,12 +1003,12 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         ),
         (
             "json.metamodel.json",
-            "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+            "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
         ),
         (
             "notation.metamodel.json",
             // SI.10: regenerated with the identity rule; 04ebb5c1... before.
-            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+            "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
         ),
         (
             "pet_metamodels/abstract_inherits_concrete.ecore",
@@ -1037,7 +1037,7 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         (
             "uml.metamodel.json",
             // SI.10: regenerated with the identity rule; b000aa0d... before.
-            "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
+            "3aa1800ed183804ff3f0e5a066f507a3af8e5b7b1a26874a0ff85d82743c5f83",
         ),
     ];
     /// The fixture's descriptors and the digest each must keep.
@@ -1045,21 +1045,21 @@ fn ed10_a4_every_other_file_of_examples_keeps_its_bytes() {
         (
             "bt.metamodel.json",
             // SI.10; b899ec33... before.
-            "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822",
+            "c05240840a30cd6c034c5b568d9789e67615abe7660920fd6b389aec2a3e994d",
         ),
         (
             "uml.metamodel.json",
             // SI.10; 21c50dea... before.
-            "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3",
+            "48384ea3e496c5ce1e9039d0cd0424bb4b297c4121454af0fc648b48b4b696a9",
         ),
         (
             "json.metamodel.json",
-            "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30",
+            "0c46390caab46431feafa07e5ef8429f7cd51b559b3c9de9d74ababe30b1647f",
         ),
         (
             "notation.metamodel.json",
             // SI.10; 12e7d2be... before.
-            "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86",
+            "be47a0ce6ad9fed260a530603e8be2b837bd5512da902e5b8c06aacf3599e591",
         ),
     ];
     const NEW: [&str; 3] = [

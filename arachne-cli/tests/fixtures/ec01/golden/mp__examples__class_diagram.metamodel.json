@@ -5,12 +5,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -28,16 +32,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "lww-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -56,16 +66,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "fair-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -84,16 +100,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "po-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -112,16 +134,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "to-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -140,16 +168,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "dw-flag",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -168,10 +202,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "Visibility",
           "facets": {
             "ordered": null,
@@ -179,6 +218,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -198,16 +238,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "aw-set",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": false,
             "unique": true
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "attribute",
@@ -226,16 +272,22 @@
             "presence": "declared",
             "unique": "declared"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": "rw-set",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": false,
             "unique": true
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "attribute",
@@ -254,11 +306,15 @@
             "presence": "declared",
             "unique": "declared"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Feature": {
@@ -266,12 +322,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -289,10 +349,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "PrimitiveType",
           "facets": {
             "ordered": null,
@@ -300,6 +365,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -319,10 +385,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "to-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "Visibility",
           "facets": {
             "ordered": null,
@@ -330,6 +401,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -349,11 +421,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Relation": {
@@ -361,12 +437,16 @@
       "attributes": [
         {
           "annotation": "mv-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -385,10 +465,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "to-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "RelationType",
           "facets": {
             "ordered": null,
@@ -396,6 +481,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -415,17 +501,24 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -440,14 +533,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Class"
+          "target": "Class",
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -462,11 +561,87 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Class"
+          "target": "Class",
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
+      "superTypeOrder": [],
       "superTypes": []
     }
+  },
+  "enumLiterals": {
+    "PrimitiveType": [
+      {
+        "literal": null,
+        "name": "String",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "Number",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "Boolean",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "Void",
+        "value": 3
+      }
+    ],
+    "RelationType": [
+      {
+        "literal": null,
+        "name": "Associates",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "Aggregates",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "Composes",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "Implements",
+        "value": 3
+      },
+      {
+        "literal": null,
+        "name": "Extends",
+        "value": 4
+      }
+    ],
+    "Visibility": [
+      {
+        "literal": null,
+        "name": "Public",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "Protected",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "Package",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "Private",
+        "value": 3
+      }
+    ]
   },
   "enums": {
     "PrimitiveType": [
@@ -490,6 +665,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "classdiagram",
   "nsURI": "http://www.example.org/classdiagram",
   "package": "classdiagram",
   "rootClasses": [

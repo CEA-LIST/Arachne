@@ -1,0 +1,159 @@
+{
+  "classes": {
+    "Store": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [
+            "#//catalog/Item/sku"
+          ],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "catalog::Item"
+          },
+          "name": "items",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "catalog::Item",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "catalog::Item": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "sku",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": "kg",
+          "eKeys": [],
+          "enum": "catalog::Unit",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "catalog::Unit",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "unit",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": true,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "enumLiterals": {
+    "catalog::Unit": [
+      {
+        "literal": "KG",
+        "name": "kg",
+        "value": 0
+      },
+      {
+        "literal": null,
+        "name": "piece",
+        "value": -1
+      }
+    ]
+  },
+  "enums": {
+    "catalog::Unit": [
+      "kg",
+      "piece"
+    ]
+  },
+  "formatVersion": 2,
+  "nsPrefix": "shop",
+  "nsURI": "http://example.org/ec05/shop",
+  "package": "shop",
+  "packages": {
+    "catalog": {
+      "nsPrefix": "cat",
+      "nsURI": "http://example.org/ec05/shop/catalog"
+    }
+  },
+  "rootClasses": [
+    "Store"
+  ]
+}

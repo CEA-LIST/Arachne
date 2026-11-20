@@ -40,7 +40,7 @@ const SYSML_DESCRIPTOR: &str = "examples/sysml/sysml.metamodel.json";
 /// SI.10 (`cea-cdrt-knowledge/spec/items/SI.10.md`): the descriptor is regenerated with the
 /// identity rule (`si10_shipped_descriptors.rs`); `896ba4d7...` before. The `.ecore` does not move.
 const SYSML_DESCRIPTOR_SHA256: &str =
-    "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83";
+    "e6e406af9b8246c7d4efc4898763b2c39404bd8cbb6754217a42c364fb844178";
 /// `examples/sysml/sysml.ecore` at `347cd8c` with its header comment (from `<!--` through `-->`
 /// and the newline after it) cut out.
 const SYSML_ECORE_BUT_COMMENT_SHA256: &str =

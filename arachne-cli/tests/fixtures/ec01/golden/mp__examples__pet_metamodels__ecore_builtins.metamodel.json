@@ -5,12 +5,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -28,11 +32,17 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ecore::EModelElement"
+      ],
       "superTypes": [
         "ecore::EModelElement"
       ]
@@ -43,10 +53,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -64,10 +78,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Part"
+          "target": "Part",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ecore::EObject"
+      ],
       "superTypes": [
         "ecore::EObject"
       ]
@@ -78,10 +98,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -99,16 +123,23 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Port"
+          "target": "Port",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "unsupported",
@@ -122,8 +153,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EObject"
+          "target": "ecore::EObject",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "Element"
       ],
       "superTypes": [
         "Element"
@@ -133,13 +169,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -154,8 +195,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EModelElement"
+          "target": "ecore::EModelElement",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "ecore::ENamedElement"
       ],
       "superTypes": [
         "ecore::ENamedElement"
@@ -166,12 +212,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -189,16 +239,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "attribute",
@@ -221,14 +277,20 @@
             "unique": "ecoreDefault"
           },
           "required": false,
-          "target": "ecore::EStringToStringMapEntry"
+          "target": "ecore::EStringToStringMapEntry",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "unsupported",
@@ -243,16 +305,23 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EObject"
+          "target": "ecore::EObject",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "unsupported",
@@ -266,14 +335,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EModelElement"
+          "target": "ecore::EModelElement",
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "unsupported",
@@ -287,8 +362,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EObject"
+          "target": "ecore::EObject",
+          "unsettable": false,
+          "upperBound": -1
         }
+      ],
+      "superTypeOrder": [
+        "ecore::EModelElement"
       ],
       "superTypes": [
         "ecore::EModelElement"
@@ -300,10 +380,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -321,10 +405,14 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "ecore::EAnnotation"
+          "target": "ecore::EAnnotation",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "ecore::ENamedElement": {
@@ -332,12 +420,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -355,11 +447,17 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "ecore::EModelElement"
+      ],
       "superTypes": [
         "ecore::EModelElement"
       ]
@@ -368,7 +466,9 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "ecore::EStringToStringMapEntry": {
@@ -376,12 +476,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -399,16 +503,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -426,16 +536,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
   },
+  "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,
+  "nsPrefix": "annotated",
   "nsURI": "http://www.example.org/annotated",
   "package": "annotated",
   "rootClasses": [

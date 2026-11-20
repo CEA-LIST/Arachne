@@ -618,17 +618,17 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
         (
             "examples/bt.metamodel.json",
             // SI.10: regenerated with the identity rule; ff452510... before.
-            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+            "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
         ),
         (
             "examples/json.metamodel.json",
-            "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+            "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
         ),
         (
             "examples/notation.metamodel.json",
             // ED.16a; 8c98687d... before. SI.10: regenerated with the identity rule; 04ebb5c1...
             // before.
-            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+            "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
         ),
     ];
     let repo = repo();

@@ -1,23 +1,23 @@
 annotation	warning: dropped eAnnotation at Color	warning: dropped eAnnotation at Color.RED	warning: dropped eAnnotation at Root	warning: dropped eAnnotation at Root.label	warning: dropped eAnnotation at p
-bounds	warning: dropped bounds at Root.a	warning: dropped bounds at Root.b	warning: dropped bounds at Root.c
-changeable	warning: dropped changeable at Root.code
+bounds
+changeable
 clean
-combined	warning: dropped changeable at Root.x	warning: dropped eAnnotation at Root.x	warning: dropped eOperation at Root.run	warning: dropped eOperation at sub::Item.ping	warning: dropped unsettable at Root.x
+combined	warning: dropped eAnnotation at Root.x	warning: dropped eOperation at Root.run	warning: dropped eOperation at sub::Item.ping
 cross/root	warning: dropped eOperation at Car.drive	warning: dropped eOperation at parts::Engine.start
 data_type	warning: dropped eDataType at Date
-default_value_literal	warning: dropped defaultValueLiteral at Root.priority
+default_value_literal
 derived	warning: dropped derived at Root.total
-e_keys	warning: dropped eKeys at Root.items
+e_keys
 instance_class_name	warning: dropped instanceClassName at Thing
-interface	warning: dropped interface at Named
-literal_value	warning: dropped literalValue at Color.GREEN	warning: dropped literalValue at Color.RED
-ns_prefix	warning: dropped nsPrefix at p
+interface
+literal_value
+ns_prefix
 operation	warning: dropped eOperation at Root.reset
 refused
 resolve_proxies	warning: dropped resolveProxies at Root.next
 same_key/root	warning: dropped eOperation at dep2::X.pong
-super_type_order	warning: dropped superTypeOrder at C
+super_type_order
 transient	warning: dropped transient at Root.scratch
 unlisted/root	warning: dropped eOperation at parts::Part.inspect
-unsettable	warning: dropped unsettable at Root.note
+unsettable
 volatile	warning: dropped volatile at Root.cache

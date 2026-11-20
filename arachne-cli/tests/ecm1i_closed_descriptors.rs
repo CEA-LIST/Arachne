@@ -160,7 +160,9 @@ fn an_eobject_target_lists_ecore_eobject_and_nothing_more() {
     assert_eq!(names, ["Trace", "ecore::EObject"]);
     assert_eq!(
         d["classes"]["ecore::EObject"],
-        json!({"abstract": false, "superTypes": [], "attributes": [], "containments": [], "references": []})
+        // EC.05 (`spec/items/EC.05.md`): `interface` and `superTypeOrder` added.
+        json!({"abstract": false, "superTypes": [], "attributes": [], "containments": [], "references": [],
+               "interface": false, "superTypeOrder": []})
     );
     assert_eq!(
         d["classes"]["Trace"]["references"][0]["target"],

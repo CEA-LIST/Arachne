@@ -5,6 +5,9 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "sub::Shade",
           "facets": {
             "ordered": null,
@@ -12,6 +15,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -31,10 +35,15 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "Alpha",
           "facets": {
             "ordered": null,
@@ -42,6 +51,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -61,11 +71,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Root": {
@@ -74,10 +88,14 @@
       "containments": [
         {
           "annotation": "uw-map",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "attribute",
@@ -102,12 +120,37 @@
             "unique": "annotation"
           },
           "required": false,
-          "target": "Entry"
+          "target": "Entry",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
+  },
+  "enumLiterals": {
+    "Alpha": [
+      {
+        "literal": null,
+        "name": "A",
+        "value": null
+      }
+    ],
+    "sub::Shade": [
+      {
+        "literal": null,
+        "name": "DARK",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "LIGHT",
+        "value": 1
+      }
+    ]
   },
   "enums": {
     "Alpha": [
@@ -119,6 +162,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "subkey",
   "nsURI": "http://example.org/ecm1lb/subkey",
   "package": "subkey",
   "packages": {

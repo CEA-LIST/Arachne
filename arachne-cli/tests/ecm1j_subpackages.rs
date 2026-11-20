@@ -117,7 +117,7 @@ fn the_tree_is_one_descriptor_with_root_relative_names() {
         "tree.ecore",
         "tree.metamodel.json",
         "urn:shop",
-        "aa77c957c35a7b8b647c98bc1a20d86554cda597323d38a9469406912aec7bfa",
+        "dfd6ecbf4d21504e6aebb5ebc9061c9880fa98c88e7bf762aecd8de46418b33d",
     );
     let d = golden("tree.metamodel.json");
     assert_eq!(d["rootClasses"], json!(["Shop", "catalog::Inventory"]));
@@ -137,7 +137,7 @@ fn a_root_package_without_an_eclass_takes_its_roots_from_the_tree() {
         "classless_root.ecore",
         "classless_root.metamodel.json",
         "urn:lib",
-        "3cfabec549980b9b838581f93a1731e3c099610d2e556891cb57b63acc52a0d7",
+        "07e682407f41bd669bcace1dfd9bc2fd2b73e291fc7d33d3d65a30a76fce4035",
     );
     assert_eq!(
         golden("classless_root.metamodel.json")["rootClasses"],
@@ -213,7 +213,7 @@ fn a_dependency_is_described_whole_and_its_subpackages_are_never_imported() {
         "import/deptree.ecore",
         "import/deptree.metamodel.json",
         "urn:deptree",
-        "e5ff14739412a7ca63c660003e855cbd5e31e64216f5ac61bfdc5d2bca666205",
+        "01ca7278bdce109c4122440459d21963a8124b98f992b323a93a9ee16661cafd",
     );
     let (d, _) = described("import/clean.ecore");
     let keys: Vec<&String> = d["classes"].as_object().unwrap().keys().collect();
@@ -224,7 +224,7 @@ fn a_dependency_is_described_whole_and_its_subpackages_are_never_imported() {
     );
     assert_eq!(
         d["dependsOn"],
-        json!([{"nsURI": "urn:deptree", "digest": "e5ff14739412a7ca63c660003e855cbd5e31e64216f5ac61bfdc5d2bca666205"}])
+        json!([{"nsURI": "urn:deptree", "digest": "01ca7278bdce109c4122440459d21963a8124b98f992b323a93a9ee16661cafd"}])
     );
     // A reference into the dependency's subpackage, directly or through an imported class.
     for rel in ["import/into.ecore", "import/reach.ecore"] {

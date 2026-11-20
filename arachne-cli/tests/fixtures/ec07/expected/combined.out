@@ -5,12 +5,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": false,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -28,23 +32,31 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "sub::Item": {
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
   },
+  "enumLiterals": {},
   "enums": {},
   "formatVersion": 2,
+  "nsPrefix": "p",
   "nsURI": "http://example.org/ec07/combined",
   "package": "p",
   "packages": {

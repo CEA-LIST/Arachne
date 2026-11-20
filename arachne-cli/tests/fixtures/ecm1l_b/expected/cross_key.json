@@ -5,6 +5,9 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "tones::Tone",
           "facets": {
             "ordered": null,
@@ -12,6 +15,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -31,16 +35,22 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -58,11 +68,15 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Root": {
@@ -71,10 +85,14 @@
       "containments": [
         {
           "annotation": "uw-map",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "attribute",
@@ -98,19 +116,37 @@
             "unique": "annotation"
           },
           "required": false,
-          "target": "Entry"
+          "target": "Entry",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     }
   },
   "dependsOn": [
     {
-      "digest": "1ee532bd8dc6df8ebde5c86722c23c53044cea5f8bd7e269b761c6431a3ba7e7",
+      "digest": "0206fb3bed134730a149a5f074b426bfb7b9ad59ccad9cfaab71b5dc2e17f623",
       "nsURI": "http://example.org/ecm1lb/tones"
     }
   ],
+  "enumLiterals": {
+    "tones::Tone": [
+      {
+        "literal": null,
+        "name": "LOW",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "HIGH",
+        "value": 1
+      }
+    ]
+  },
   "enums": {
     "tones::Tone": [
       "LOW",
@@ -118,6 +154,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "crosskey",
   "nsURI": "http://example.org/ecm1lb/crosskey",
   "package": "crosskey",
   "rootClasses": [
