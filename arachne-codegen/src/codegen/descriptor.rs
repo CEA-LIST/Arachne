@@ -63,8 +63,14 @@
 //! - A class carrying `urn:arachne:representation` `kind="transparent"` adds
 //!   one key, `"transparent"`, naming the field it is represented by. The key
 //!   is absent on every other class.
-//! - The class set is the one code generation reaches from the root classes,
-//!   so descriptor and generated crate describe the same metamodel slice.
+//! - The class set is what `describe` reaches from the root classes, which is
+//!   not only what code generation reaches: it also lists `EObject` and the
+//!   targets of plain references, so that every name the descriptor writes
+//!   resolves.
+//! - A classifier is a class, an enum or a datatype by its `xsi:type`. A
+//!   datatype is never a class or a root: an attribute typed by one is
+//!   described by its instance class, and an enum with no literal is listed
+//!   under `enums` as `[]`.
 //!
 //! # What version 2 added, and why nothing broke
 //!
@@ -107,7 +113,7 @@ use ecore_rs::{
     repr::{Class, Pack, builtin, idx, structural},
 };
 use log::warn;
-use moirai_semantics::{LeafRule, MergeRule};
+use moirai_semantics::{KeyKind, LeafRule, MergeRule, Shape};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -121,7 +127,11 @@ const FORMAT_VERSION: u64 = 2;
 /// Builds the JSON metamodel descriptor for `pack`.
 ///
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
-/// root class — the same condition under which code generation fails.
+/// root class — the same condition under which code generation fails — or
+/// [`ArachneError::NoEClass`] when it declares no EClass at all;
+/// with [`ArachneError::DescriptorNotClosed`] when a name the descriptor
+/// writes is not one it writes; and with [`ArachneError::EnumKeyedMap`] for
+/// a map keyed by an enum.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
     let own_classes: Vec<_> = pack.classes().iter().copied().collect();
     descriptor_with_roots(ctx, pack, &own_classes)
@@ -158,7 +168,17 @@ pub(crate) fn descriptor_with_roots(
         &generated_set,
     );
     if roots.is_empty() {
-        return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
+        let name = pack.name().to_string();
+        return Err(
+            if own_classes
+                .iter()
+                .any(|class| semantics::is_eclass(&ctx[*class]))
+            {
+                ArachneError::RootClassNotFound(name)
+            } else {
+                ArachneError::NoEClass(name)
+            },
+        );
     }
 
     // `EObject` is *listed* although it is not generated. It has no feature,
@@ -211,12 +231,12 @@ pub(crate) fn descriptor_with_roots(
     let written: HashSet<idx::Class> = reachable
         .iter()
         .copied()
-        .filter(|class| !ctx[*class].is_enum())
+        .filter(|class| semantics::is_eclass(&ctx[*class]))
         .chain(
             package_classes
                 .iter()
                 .copied()
-                .filter(|class| ctx[*class].is_enum()),
+                .filter(|class| semantics::is_eenum(&ctx[*class])),
         )
         .collect();
 
@@ -225,7 +245,7 @@ pub(crate) fn descriptor_with_roots(
     let mut included: Vec<&Class> = reachable
         .iter()
         .map(|idx| &ctx[*idx])
-        .filter(|class| !class.is_enum())
+        .filter(|class| semantics::is_eclass(class))
         .collect();
     // By the key the class is written under, so a refusal names the same class on every run.
     included.sort_by_cached_key(|class| semantics::descriptor_class_name(ctx, class.idx));
@@ -250,7 +270,7 @@ pub(crate) fn descriptor_with_roots(
     let mut package_enums: Vec<&Class> = package_classes
         .iter()
         .map(|idx| &ctx[*idx])
-        .filter(|class| class.is_enum())
+        .filter(|class| semantics::is_eenum(class))
         .collect();
     package_enums.sort_unstable_by_key(|class| class.name());
     for class in package_enums {
@@ -426,6 +446,19 @@ fn add_semantics(
     written: &HashSet<idx::Class>,
 ) -> Result<()> {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
+    // The key's slot is a `Ctx` index, which names nothing a reader of the descriptor can resolve.
+    if let MergeRule::Attribute {
+        shape: Shape::Keyed {
+            key: KeyKind::Enum { .. },
+        },
+        ..
+    } = &merge
+    {
+        return Err(ArachneError::EnumKeyedMap {
+            class: class.name().to_string(),
+            feature: feature.name.clone(),
+        });
+    }
     // The merge rule's own class names (`merge.target`, `merge.leaf.class`) are names too.
     let named = match &merge {
         MergeRule::Containment { target, .. }
@@ -511,21 +544,22 @@ fn attribute_kind(
     };
     let target = &ctx[target];
 
-    if target.is_enum() {
+    if semantics::is_eenum(target) {
         return Some(("enum", Some(target.name().to_string())));
     }
 
-    let kind = match target.name().parse::<builtin::Typ>() {
-        Ok(builtin::Typ::EString) | Ok(builtin::Typ::EChar) => "string",
-        Ok(builtin::Typ::EByte)
-        | Ok(builtin::Typ::EShort)
-        | Ok(builtin::Typ::EInt)
-        | Ok(builtin::Typ::ELong) => "int",
-        Ok(builtin::Typ::EFloat) | Ok(builtin::Typ::EDouble) => "float",
-        Ok(builtin::Typ::EBoolean) => "bool",
-        // `Object` and custom EDataTypes have no structure to offer a typed
-        // editor; a string field is the honest lowest common denominator.
-        Ok(builtin::Typ::Object) | Err(()) => {
+    let kind = match semantics::value_builtin(target) {
+        Some(builtin::Typ::EString) | Some(builtin::Typ::EChar) => "string",
+        Some(builtin::Typ::EByte)
+        | Some(builtin::Typ::EShort)
+        | Some(builtin::Typ::EInt)
+        | Some(builtin::Typ::ELong) => "int",
+        Some(builtin::Typ::EFloat) | Some(builtin::Typ::EDouble) => "float",
+        Some(builtin::Typ::EBoolean) => "bool",
+        // `Object` and a datatype whose instance class maps to nothing here
+        // have no structure to offer a typed editor; a string field is the
+        // honest lowest common denominator.
+        Some(builtin::Typ::Object) | None => {
             warn!(
                 "`{}.{}`: attribute type `{}` has no typed editor mapping; \
                  described as `string`",

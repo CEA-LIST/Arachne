@@ -24,6 +24,13 @@ pub enum ArachneError {
     #[error("Failed to find a root class in `{0}` package")]
     RootClassNotFound(String),
 
+    /// A package with no EClass has no root class either; the second line says why, as the
+    /// first is the line every package without a root class gets.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the package declares no EClass"
+    )]
+    NoEClass(String),
+
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
 
@@ -42,6 +49,13 @@ pub enum ArachneError {
         "descriptor not closed: class `{class}` names `{missing}`, which the descriptor does not write"
     )]
     DescriptorNotClosed { class: String, missing: String },
+
+    /// A map keyed by an enum would be written with the enum's `Ctx` index, which names
+    /// nothing a reader of the descriptor can resolve; refused until it is written by name.
+    #[error(
+        "`{class}.{feature}` is a map with an enum key, which the descriptor cannot write by name"
+    )]
+    EnumKeyedMap { class: String, feature: String },
 }
 
 /// Specialized Result type for Arachne

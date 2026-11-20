@@ -362,6 +362,54 @@ pub fn descriptor_class_name(ctx: &Ctx, class: idx::Class) -> String {
     }
 }
 
+/* ---------- what a classifier is ---------- */
+
+// `describe` decides what a classifier is by the `xsi:type` the parser keeps, never by the
+// shared `Class::is_enum` (has literals) or `is_instantiable_class`, which take a datatype, and
+// an enum with no literal, for a class.
+
+/// An `ecore:EClass`, Ecore's own included.
+pub(crate) fn is_eclass(class: &Class) -> bool {
+    class.typ() == "ecore:EClass"
+}
+
+/// An `ecore:EEnum`, with or without literals.
+pub(crate) fn is_eenum(class: &Class) -> bool {
+    class.typ() == "ecore:EEnum"
+}
+
+/// The built-in Ecore type a value-typed classifier is described as: a built-in itself, or a
+/// user `EDataType` by EMF's instance class, `instanceClassName` else `instanceTypeName` up to its
+/// first `<`. The eight primitives and `java.lang.String` are the built-in of their name, a wrapper
+/// is its primitive (null comes from `lowerBound="0"`, which the feature's bounds already say), and
+/// anything else, an unqualified name like `String` included, is `Object`. `None` for a classifier
+/// that is no value type.
+pub(crate) fn value_builtin(class: &Class) -> Option<BuiltinTyp> {
+    match class.typ().as_str() {
+        "ecore:Builtin" => class.name().parse().ok(),
+        "ecore:EDataType" => Some(
+            match class
+                .instance_class_name()
+                .or(class.inst_name())
+                .and_then(|name| name.split('<').next())
+                .map(str::trim)
+            {
+                Some("boolean" | "java.lang.Boolean") => BuiltinTyp::EBoolean,
+                Some("byte" | "java.lang.Byte") => BuiltinTyp::EByte,
+                Some("short" | "java.lang.Short") => BuiltinTyp::EShort,
+                Some("int" | "java.lang.Integer") => BuiltinTyp::EInt,
+                Some("long" | "java.lang.Long") => BuiltinTyp::ELong,
+                Some("float" | "java.lang.Float") => BuiltinTyp::EFloat,
+                Some("double" | "java.lang.Double") => BuiltinTyp::EDouble,
+                Some("char" | "java.lang.Character") => BuiltinTyp::EChar,
+                Some("java.lang.String") => BuiltinTyp::EString,
+                _ => BuiltinTyp::Object,
+            },
+        ),
+        _ => None,
+    }
+}
+
 /* ---------- derivation ---------- */
 
 /// The rule a `urn:arachne:semantics` `datatype="uw-map"` containment
@@ -438,7 +486,7 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
             }
             let class = value_feature
                 .typ
-                .filter(|typ| ctx.classes().get(**typ).is_some_and(Class::is_enum))
+                .filter(|typ| ctx.classes().get(**typ).is_some_and(is_eenum))
                 .map(slot);
             Some((
                 MergeRule::Attribute {
@@ -488,7 +536,7 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
 fn key_kind(key_feature: &Structural, ctx: &Ctx) -> Option<KeyKind> {
     let typ = key_feature.typ?;
     let declared = ctx.classes().get(*typ)?;
-    if declared.is_enum() {
+    if is_eenum(declared) {
         return Some(KeyKind::Enum { class: slot(typ) });
     }
     Some(match declared.name().parse::<BuiltinTyp>() {
@@ -614,7 +662,7 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
         .expect("a resolved attribute type is a classifier of this context");
 
     // The declared type's own leaf, before any annotation.
-    let (from_type, from_type_source) = if declared.is_enum() {
+    let (from_type, from_type_source) = if is_eenum(declared) {
         (
             LeafRule::Enum {
                 class: slot(typ),
@@ -624,20 +672,23 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
             FacetSource::HouseDefault,
         )
     } else {
-        match declared.name().parse::<BuiltinTyp>() {
-            Ok(BuiltinTyp::EByte) => (counter(NumKind::I8), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EShort) => (counter(NumKind::I16), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EInt) => (counter(NumKind::I32), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::ELong) => (counter(NumKind::I64), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EFloat) => (counter(NumKind::F32), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EDouble) => (counter(NumKind::F64), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EBoolean) => (
+        match value_builtin(declared) {
+            Some(BuiltinTyp::EByte) => (counter(NumKind::I8), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EShort) => (counter(NumKind::I16), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EInt) => (counter(NumKind::I32), FacetSource::HouseDefault),
+            Some(BuiltinTyp::ELong) => (counter(NumKind::I64), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EFloat) => (counter(NumKind::F32), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EDouble) => (counter(NumKind::F64), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EBoolean) => (
                 LeafRule::Flag {
                     wins: FlagWins::Enable,
                 },
                 FacetSource::HouseDefault,
             ),
-            Ok(BuiltinTyp::EChar) => (
+            // `Object` and a datatype whose instance class maps to nothing here hold a value
+            // this crate cannot type, and text would merge two concurrent writes into a value
+            // neither wrote: one of them wins, as for a char.
+            Some(BuiltinTyp::EChar | BuiltinTyp::Object) => (
                 LeafRule::Register {
                     tie: TieBreak::MultiValue,
                 },
@@ -645,12 +696,10 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
             ),
             // The declared type decides the whole leaf and leaves Arachne no
             // choice to make, which is what `Declared` means here.
-            Ok(BuiltinTyp::EString) => (LeafRule::Text, FacetSource::Declared),
-            // `Object` and custom `EDataType`s: `descriptor.rs`'s
-            // `attribute_kind` describes them as `string`, and this follows it
-            // so `arachne describe` keeps working on a metamodel the generator
-            // itself would refuse. Nothing in the file said text.
-            Ok(BuiltinTyp::Object) | Err(()) => (LeafRule::Text, FacetSource::HouseDefault),
+            Some(BuiltinTyp::EString) => (LeafRule::Text, FacetSource::Declared),
+            // Not a value type at all (an attribute typed by a class):
+            // `descriptor.rs`'s `attribute_kind` describes it as `string`.
+            None => (LeafRule::Text, FacetSource::HouseDefault),
         }
     };
 

@@ -1,5 +1,7 @@
 //! The classes a descriptor lists, and its roots: which classes a package reaches from its
-//! top-level roots. Describe's own copy of what code generation computes for itself.
+//! top-level roots. Describe's own copy of what code generation computes for itself, deciding
+//! what a classifier is by its `xsi:type` and not by the shared `is_enum` and
+//! `is_instantiable_class`, which take a datatype with no literal for a class.
 
 use std::collections::HashSet;
 
@@ -9,7 +11,12 @@ use ecore_rs::{
 };
 use log::debug;
 
-use crate::codegen::classifier::is_instantiable_class;
+use crate::codegen::semantics::is_eclass;
+
+/// A concrete, non-interface EClass: what a model can hold an instance of.
+fn is_instantiable_class(class: &Class) -> bool {
+    class.is_concrete() && !class.is_interface() && is_eclass(class)
+}
 
 fn has_instantiable_descendant(ctx: &Ctx, class: &Class) -> bool {
     class.sub().iter().any(|idx| {
@@ -47,10 +54,7 @@ pub(crate) fn compute_top_level_roots(
         .copied()
         .filter(|class_idx| {
             let class = &ctx.classes()[**class_idx];
-            is_instantiable_class(class)
-                && !class.is_enum()
-                && !class.is_interface()
-                && !concrete_containment_incoming.contains(class_idx)
+            is_instantiable_class(class) && !concrete_containment_incoming.contains(class_idx)
         })
         .collect();
 
@@ -63,7 +67,7 @@ pub(crate) fn compute_top_level_roots(
             .copied()
             .filter(|class_idx| {
                 let class = &ctx.classes()[**class_idx];
-                !class.is_enum()
+                is_eclass(class)
                     && (class.is_interface() || !class.is_concrete())
                     && has_concrete_descendant(ctx, *class_idx, package_class_set)
                     && abstract_family_has_no_external_container(
@@ -153,7 +157,7 @@ pub(crate) fn follow_reference_targets(
             .filter(|target| !reachable.contains(target))
             .collect();
         for target in targets {
-            if package_classes.contains(&target) && !ctx[target].is_enum() {
+            if package_classes.contains(&target) && is_eclass(&ctx[target]) {
                 reachable.extend(collect_reachable_classes(ctx, target, &walkable));
             }
         }
