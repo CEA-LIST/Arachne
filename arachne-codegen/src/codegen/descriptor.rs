@@ -131,9 +131,7 @@ pub(crate) fn descriptor_with_roots(
     pack: &Pack,
     own_classes: &[idx::Class],
 ) -> Result<Value> {
-    // The class set is the one code generation reaches, computed the same way
-    // `generate_from_parser` computes it so that the descriptor and the crate
-    // describe one slice: the package's classes, then Ecore's own but
+    // The class set `describe` reaches: the package's classes, then Ecore's own but
     // `EObject`, which the generator never emits.
     let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
     let ecore_classes: Vec<idx::Class> = match ctx.ecore_pack() {
@@ -189,8 +187,7 @@ pub(crate) fn descriptor_with_roots(
             .filter(|idx| !own_classes.contains(idx))
             .copied(),
     );
-    // An abstract class of Ecore that nothing generated extends is left out,
-    // exactly as `generate_from_parser` leaves it out.
+    // An abstract class of Ecore that nothing generated extends is left out.
     reachable.retain(|class| {
         !ctx.is_ecore_class(*class)
             || !crate::codegen::reachability::is_uninhabited_polymorphic_class(ctx, &ctx[*class])

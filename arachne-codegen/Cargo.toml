@@ -22,6 +22,8 @@ arachne-xmi = { version = "*", path = "../arachne-xmi" }
 # `moirai-semantics`'s parser cannot drift on a tag name.
 serde = "1.0"
 serde_json = "1.0"
+# The metamodel digest: SHA-256 over the compact descriptor. Keep `serde_json`
+# without `preserve_order`, or the digest would depend on a file's key order.
 sha2 = "0.10"
 moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
 # `resources.rs` scans Ecore text for relative resource references; the merged parser no longer re-exports it.

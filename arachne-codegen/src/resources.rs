@@ -60,12 +60,19 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
             descriptor: descriptor::descriptor_json(&parser.ctx, find_user_package(&parser.ctx)?)?,
             dependencies: BTreeMap::new(),
         }),
-        Err(refused) => load(path)
-            .map(|resources| Described {
-                descriptor: resources.descriptor.clone(),
-                dependencies: resources.dependencies.clone(),
-            })
-            .map_err(|_| refused),
+        Err(refused) => {
+            // The parser already logged this file's errors; the second read must stay silent.
+            let level = log::max_level();
+            log::set_max_level(log::LevelFilter::Off);
+            let resolved = load(path);
+            log::set_max_level(level);
+            resolved
+                .map(|resources| Described {
+                    descriptor: resources.descriptor.clone(),
+                    dependencies: resources.dependencies.clone(),
+                })
+                .map_err(|_| refused)
+        }
     }
 }
 
