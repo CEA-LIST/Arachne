@@ -488,6 +488,14 @@ impl Ctx {
         Ok(real_p_idx)
     }
 
+    /// A hand-built context that fills a package referenced before its definition, as
+    /// [`Self::parse_filling_forward_packs`] does.
+    pub fn with_capacity_filling_forward_packs(pack_capa: usize, class_capa: usize) -> Self {
+        let mut slf = Self::with_capacity(pack_capa, class_capa);
+        slf.fill_forward_packs = true;
+        slf
+    }
+
     pub(crate) fn raw_add_pack(&mut self, name: impl Into<String>, sup: idx::Pack) -> idx::Pack {
         let name = name.into();
         let p_idx = self.packs.push_idx(|idx| Pack::new(idx, name, Some(sup)));

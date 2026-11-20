@@ -155,7 +155,7 @@ impl Loader {
             Ok(Some(format!("#//{qualified}")))
         })?;
 
-        let mut ctx = Ctx::with_capacity(7, 7);
+        let mut ctx = Ctx::with_capacity_filling_forward_packs(7, 7);
         parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
         let pack_path = pack.path(&ctx);
