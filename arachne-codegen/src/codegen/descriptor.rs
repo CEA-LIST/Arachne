@@ -449,12 +449,24 @@ thread_local! {
     /// `describe` builds a dependency's descriptor before the one that imports it, so the last is
     /// the file's.
     static DROPPED: RefCell<Option<Vec<Build>>> = const { RefCell::new(None) };
+    /// The lines of the constructs `describe` blanked before the parser read them, while recording.
+    static IGNORED: RefCell<Option<BTreeSet<String>>> = const { RefCell::new(None) };
 }
 
 /// Starts recording what the descriptors built on this thread drop, for [`take_dropped`], and
 /// forgets what was recorded before. Without it, building a descriptor records nothing.
 pub fn record_dropped() {
     DROPPED.replace(Some(Vec::new()));
+    IGNORED.replace(Some(BTreeSet::new()));
+}
+
+/// Records the `warning: dropped` lines of constructs blanked in a file that was read.
+pub(crate) fn record_ignored(lines: Vec<String>) {
+    IGNORED.with_borrow_mut(|set| {
+        if let Some(set) = set {
+            set.extend(lines);
+        }
+    });
 }
 
 /// The `warning: dropped <kind> at <location>` lines of the descriptor `describe` just built, byte
@@ -477,6 +489,7 @@ pub fn take_dropped(descriptor: &Value) -> Vec<String> {
         .flat_map(|build| build.dropped)
         .map(|dropped| line(&dropped))
         .collect();
+    lines.extend(IGNORED.take().unwrap_or_default());
     // `import_class` copies everything of a dependency's class but its operations, which only the
     // dependency's own build saw, under the key the importing descriptor writes. The class it
     // wrote has the dependency's nsURI as origin; a class of another package under that key has

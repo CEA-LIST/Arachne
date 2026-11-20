@@ -24,6 +24,7 @@ use crate::{
     ArachneError, EcoreParser,
     codegen::{descriptor, semantics},
     find_user_package,
+    ignored::blank,
 };
 
 pub(crate) struct Resources {
@@ -63,15 +64,25 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
     let first = fs::read_to_string(path)
         .map_err(ArachneError::from)
         .and_then(|text| {
-            Ok(EcoreParser {
-                ctx: Ctx::parse_filling_forward_packs(text)?,
-            })
+            let (text, ignored) = blank(&text, false);
+            Ok((
+                EcoreParser {
+                    ctx: Ctx::parse_filling_forward_packs(text)?,
+                },
+                ignored,
+            ))
         });
     match first {
-        Ok(parser) => Ok(Described {
-            descriptor: descriptor::descriptor_json(&parser.ctx, find_user_package(&parser.ctx)?)?,
-            dependencies: BTreeMap::new(),
-        }),
+        Ok((parser, ignored)) => {
+            descriptor::record_ignored(ignored);
+            Ok(Described {
+                descriptor: descriptor::descriptor_json(
+                    &parser.ctx,
+                    find_user_package(&parser.ctx)?,
+                )?,
+                dependencies: BTreeMap::new(),
+            })
+        }
         Err(refused) => {
             // The parser already logged this file's errors; the second read must stay silent.
             let level = log::max_level();
@@ -128,7 +139,9 @@ impl Loader {
         if !self.active.insert(path.clone()) {
             bail!("Cyclic Ecore resource dependencies at {}", path.display());
         }
-        let content = fs::read_to_string(&path)?;
+        // The root is the first file `active` holds; a later one is a dependency.
+        let (content, ignored) = blank(&fs::read_to_string(&path)?, self.active.len() > 1);
+        descriptor::record_ignored(ignored);
         let mut requested = BTreeMap::new();
         let mut dependencies = BTreeMap::new();
         let rewritten = rewrite_references(&content, |reference| {

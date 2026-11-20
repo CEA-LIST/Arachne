@@ -133,6 +133,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
+ "roxmltree",
  "rustc-hash",
  "serde",
  "serde_json",

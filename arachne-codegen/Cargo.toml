@@ -28,3 +28,5 @@ sha2 = "0.10"
 moirai-semantics = { version = "*", path = "../../moirai-model-plane/moirai-semantics" }
 # `resources.rs` scans Ecore text for relative resource references; the merged parser no longer re-exports it.
 regex = "1.6"
+# `ignored.rs` needs the source range of what `describe` blanks; the version arachne-parser already uses.
+roxmltree = "0.21.1"
