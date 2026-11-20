@@ -132,7 +132,8 @@ const FORMAT_VERSION: u64 = 2;
 /// Builds the JSON metamodel descriptor for `pack`.
 ///
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
-/// root class — the same condition under which code generation fails — or
+/// root class, with [`ArachneError::UnlistedComponent`] when the roots are abstract classes that
+/// leave a containment component's classes out of the descriptor, or
 /// [`ArachneError::NoEClass`] when it declares no EClass at all, or
 /// [`ArachneError::NoConcreteEClass`] when it declares none but abstract ones and interfaces;
 /// with [`ArachneError::DescriptorNotClosed`] when a name the descriptor
@@ -212,7 +213,7 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     let generated_set: HashSet<idx::Class> = generated.iter().copied().collect();
 
-    let roots = crate::codegen::reachability::compute_top_level_roots(
+    let (roots, beside) = crate::codegen::reachability::compute_top_level_roots(
         ctx,
         own_classes,
         &generated,
@@ -271,6 +272,21 @@ pub(crate) fn descriptor_with_roots(
         !ctx.is_ecore_class(*class)
             || !crate::codegen::reachability::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
     });
+
+    if let Some(component) = beside
+        .iter()
+        .find(|component| component.iter().any(|class| !reachable.contains(class)))
+    {
+        let mut names: Vec<String> = component
+            .iter()
+            .map(|class| format!("`{}`", ctx[*class].name()))
+            .collect();
+        names.sort_unstable();
+        return Err(ArachneError::UnlistedComponent(
+            pack.name().to_string(),
+            names.join(", "),
+        ));
+    }
 
     let mut root_names: Vec<String> = roots
         .iter()

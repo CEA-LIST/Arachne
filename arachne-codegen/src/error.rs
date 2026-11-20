@@ -37,6 +37,13 @@ pub enum ArachneError {
     )]
     NoConcreteEClass(String),
 
+    /// The roots are abstract classes, and classes that contain each other and that no class
+    /// outside them contains would be left out of the descriptor.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the classes {1} contain each other, no class outside them contains them, and the root classes do not list them"
+    )]
+    UnlistedComponent(String, String),
+
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
 

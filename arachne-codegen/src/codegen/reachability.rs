@@ -29,95 +29,114 @@ pub(crate) fn is_uninhabited_polymorphic_class(ctx: &Ctx, class: &Class) -> bool
     (class.is_abstract() || class.is_interface()) && !has_instantiable_descendant(ctx, class)
 }
 
-/// Computes the top-level root classes of a package: the instantiable,
-/// non-enum, non-interface classes no other instantiable class contains —
-/// falling back to abstract classes and interfaces with concrete descendants
-/// and no external container when there is no such instantiable class.
+/// Computes the top-level root classes of a package, and the containment components they leave
+/// out.
+///
+/// A component is a strongly connected component of the concrete containment graph that no edge
+/// from outside enters; its own concrete classes are what a model can start from. When the
+/// instantiable, non-enum, non-interface classes no other instantiable class contains exist (the
+/// first pass), the roots are the classes of every such component, which hold those classes.
+/// Otherwise the roots fall back to abstract classes and interfaces with concrete descendants and
+/// no external container (the second pass), and then to the components' classes (the third).
+///
+/// The second element is, for the second pass only, the components its roots do not include, for
+/// the caller to check that the class list holds them: no class is dropped silently.
 ///
 /// `package_classes` are the package's own classes, the only candidates for a
 /// root. `package_classes_and_ecore` adds the built-in Ecore classes the
 /// package reaches, which contain and are contained like the package's own and
 /// so must be searched when asking whether a candidate has a container.
 ///
-/// Empty when the package has no viable root; callers decide whether that is an error.
+/// Empty roots when the package has no viable root; callers decide whether that is an error.
 pub(crate) fn compute_top_level_roots(
     ctx: &Ctx,
     package_classes: &[idx::Class],
     package_classes_and_ecore: &[idx::Class],
     package_class_set: &HashSet<idx::Class>,
-) -> Vec<idx::Class> {
+) -> (Vec<idx::Class>, Vec<Vec<idx::Class>>) {
     let edges =
         compute_concrete_containment_edges(ctx, package_classes_and_ecore, package_class_set);
     let concrete_containment_incoming: HashSet<idx::Class> =
         edges.iter().map(|(_, t)| *t).collect();
+    let components = uncontained_components(ctx, package_classes, &edges);
 
-    let mut top_level_roots: Vec<idx::Class> = package_classes
+    if package_classes.iter().any(|class_idx| {
+        is_concrete_eclass(&ctx.classes()[**class_idx])
+            && !concrete_containment_incoming.contains(class_idx)
+    }) {
+        return (components.concat(), Vec::new());
+    }
+
+    debug!(
+        "No top-level roots found based on concrete classes. Falling back to abstract/interface classes with concrete descendants and no external containers."
+    );
+    let abstract_roots: Vec<idx::Class> = package_classes
         .iter()
         .copied()
         .filter(|class_idx| {
             let class = &ctx.classes()[**class_idx];
-            is_concrete_eclass(class) && !concrete_containment_incoming.contains(class_idx)
+            is_eclass(class)
+                && (class.is_interface() || !class.is_concrete())
+                && has_concrete_descendant(ctx, *class_idx, package_class_set)
+                && abstract_family_has_no_external_container(
+                    ctx,
+                    *class_idx,
+                    package_classes_and_ecore,
+                    package_class_set,
+                )
         })
         .collect();
 
-    if top_level_roots.is_empty() {
-        debug!(
-            "No top-level roots found based on concrete classes. Falling back to abstract/interface classes with concrete descendants and no external containers."
-        );
-        top_level_roots = package_classes
-            .iter()
-            .copied()
-            .filter(|class_idx| {
-                let class = &ctx.classes()[**class_idx];
-                is_eclass(class)
-                    && (class.is_interface() || !class.is_concrete())
-                    && has_concrete_descendant(ctx, *class_idx, package_class_set)
-                    && abstract_family_has_no_external_container(
-                        ctx,
-                        *class_idx,
-                        package_classes_and_ecore,
-                        package_class_set,
-                    )
-            })
-            .collect();
+    if abstract_roots.is_empty() {
+        (components.concat(), Vec::new())
+    } else {
+        (abstract_roots, components)
     }
-
-    if top_level_roots.is_empty() {
-        top_level_roots = uncontained_component_roots(ctx, package_classes, &edges);
-    }
-
-    top_level_roots
 }
 
-/// The package classes in a strongly connected component of the containment graph that no edge
-/// from outside enters: a class is in one when every class that reaches it is reached by it.
-fn uncontained_component_roots(
+/// The own concrete classes of each strongly connected component of the containment graph that no
+/// edge from outside enters: a class is in one when every class that reaches it is reached by it.
+fn uncontained_components(
     ctx: &Ctx,
     package_classes: &[idx::Class],
     edges: &HashSet<(idx::Class, idx::Class)>,
-) -> Vec<idx::Class> {
+) -> Vec<Vec<idx::Class>> {
+    let mut adjacency: HashMap<idx::Class, Vec<idx::Class>> = HashMap::new();
+    for (s, t) in edges {
+        adjacency.entry(*s).or_default().push(*t);
+        adjacency.entry(*t).or_default();
+    }
     let mut reach: HashMap<idx::Class, HashSet<idx::Class>> = HashMap::new();
-    for class in edges.iter().flat_map(|(s, t)| [*s, *t]) {
+    for class in adjacency.keys().copied() {
         let seen = reach.entry(class).or_default();
         let mut stack = vec![class];
         while let Some(c) = stack.pop() {
-            for (_, t) in edges.iter().filter(|(s, _)| *s == c) {
+            for t in &adjacency[&c] {
                 if seen.insert(*t) {
                     stack.push(*t);
                 }
             }
         }
     }
-    package_classes
-        .iter()
-        .copied()
-        .filter(|t| {
-            is_concrete_eclass(&ctx.classes()[**t])
-                && reach.iter().all(|(s, down)| {
-                    !down.contains(t) || reach.get(t).is_some_and(|d| d.contains(s))
-                })
-        })
-        .collect()
+    let mut components: Vec<Vec<idx::Class>> = Vec::new();
+    for t in package_classes.iter().copied().filter(|t| {
+        is_concrete_eclass(&ctx.classes()[**t])
+            && reach
+                .iter()
+                .all(|(s, down)| !down.contains(t) || reach.get(t).is_some_and(|d| d.contains(s)))
+    }) {
+        if !components.iter().any(|component| component.contains(&t)) {
+            let down = reach.get(&t);
+            let members = package_classes.iter().copied().filter(|u| {
+                *u == t
+                    || (is_concrete_eclass(&ctx.classes()[**u])
+                        && down.is_some_and(|d| d.contains(u))
+                        && reach.get(u).is_some_and(|d| d.contains(&t)))
+            });
+            components.push(members.collect());
+        }
+    }
+    components
 }
 
 pub(crate) fn collect_reachable_classes(
