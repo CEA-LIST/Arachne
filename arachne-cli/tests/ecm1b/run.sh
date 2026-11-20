@@ -7,8 +7,9 @@
 # driver over ModelSet and the EC.01 fixtures (30 s per file and command, 4 at a time, cap.sh's caps):
 #   D  describe: every input the pinned a5f3111 build describes gives the identical stdout and identity
 #      line (EC.01's pass conditions; inputs only the candidate describes are counted);
-#      EC.M1i: D is judged by ecm1i/closure.py against the orchestrator's b93a76d run (BASE_CSV,
-#      BASE_BIN): the registered refused and changed sets are counted, every other input identical;
+#      EC.M1k: D is judged by ecm1k/census.py against EC.M1i's assessed c3dfb6b run (BASE_CSV,
+#      BASE_BIN, copied to <scratch>/k-base): the registered refused, changed and abstract-root sets
+#      are judged, every other input identical (EC.M1i's ecm1i/closure.py judged it before);
 #   R  refusal: on every input a5f3111 refuses and the candidate refuses too, the first stderr line is
 #      a5f3111's (ecm1a/refusal.py), judged by read_further.py: where a5f3111's line is its
 #      forward-package refusal the row is counted as read further (EC.M1h);
@@ -34,8 +35,8 @@ W1=/volatile/home/vp242103/.cache/cea-crdt-scratch/EC.M1/bin
 OURS=$S/bin/arachne-a5f3111;  OURS_SHA=fb51b053feea0c0e54e0fff408667bb7b546067160f69b7b3f28a36904bd835d
 GUIDE=$W1/arachne-e2ac279;    GUIDE_SHA=f49cb61328fbffb6cd53600f363761ea285f1acb9cb66806ca68c47b6b395075
 HIS=$W1/arachne-ebc3141;      HIS_SHA=7ac3685826cb148702a31a8c20cf29ee7a9e9a36c05b521e08026c9d3237a6a1
-BASE_CSV=$S/h-orch/cand/files.csv;  BASE_CSV_SHA=0f517f246bbc5cba75c4b76fcc85f51eae68f5162c9cf6d9c25be341ce77115b
-BASE_BIN=$S/h-orch/arachne-candidate; BASE_BIN_SHA=6212f4d5e16cc89d176294531cd35cfe7b204a4213490634a1112ec1e3854b48
+BASE_CSV=$S/k-base/cand/files.csv;  BASE_CSV_SHA=5dc38c1f2330ef15a6807b110c5e7621b276e73a20e649f87dea1a7b2e901d9b
+BASE_BIN=$S/k-base/arachne-candidate; BASE_BIN_SHA=a1f39bb8ff5bd8996264561fc9a2602a1b33c08cd82f2115b16444a43925a083
 [ -e "$OUT" ] && { echo "INSTRUMENT: $OUT exists; give a new out-dir"; exit 2; }
 mkdir -p "$OUT" "$S/runs"
 for pin in "$OURS $OURS_SHA" "$GUIDE $GUIDE_SHA" "$HIS $HIS_SHA" "$BASE_CSV $BASE_CSV_SHA" "$BASE_BIN $BASE_BIN_SHA"; do
@@ -65,10 +66,10 @@ run "$OUT/arachne-candidate" "$OUT/cand" --describe --generate >"$OUT/cand-run.l
     { echo "INSTRUMENT: candidate run failed, see $OUT/cand-run.log"; exit 2; }
 
 $EC01 compare --kind describe --left "$S/runs/ref-a5f3111-describe" --right "$OUT/cand" --out "$OUT/d" >/dev/null
-# EC.M1i: the closure judgment replaces the a5f3111 comparison's exit (that comparison is kept, reported).
-python3 -I "$REPO/arachne-cli/tests/ecm1i/closure.py" "$OUT" "$BASE_CSV" "$BASE_BIN" >"$OUT/d.log" 2>&1
+# EC.M1k: the census judgment replaces the a5f3111 comparison's exit (that comparison is kept, reported).
+python3 -I "$REPO/arachne-cli/tests/ecm1k/census.py" "$OUT" "$BASE_CSV" "$BASE_BIN" >"$OUT/d.log" 2>&1
 d=$?
-[ "$d" = 2 ] && { cat "$OUT/d.log"; echo "INSTRUMENT: closure judgment did not run"; exit 2; }
+[ "$d" = 2 ] && { cat "$OUT/d.log"; echo "INSTRUMENT: census judgment did not run"; exit 2; }
 python3 -I "$REPO/arachne-cli/tests/ecm1a/refusal.py" "$OURS" "$OUT/arachne-candidate" \
     "$S/runs/ref-a5f3111-describe/files.csv" "$OUT/r" >"$OUT/r.log" 2>&1
 r=$?

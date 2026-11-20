@@ -1,12 +1,5 @@
 {
   "classes": {
-    "Address": {
-      "abstract": false,
-      "attributes": [],
-      "containments": [],
-      "references": [],
-      "superTypes": []
-    },
     "Course": {
       "abstract": false,
       "attributes": [],
@@ -249,7 +242,8 @@
           "merge": {
             "kind": "attribute",
             "leaf": {
-              "kind": "text"
+              "kind": "register",
+              "tie": "mv"
             },
             "shape": {
               "kind": "optional"
@@ -329,7 +323,6 @@
   "nsURI": null,
   "package": "laboratory",
   "rootClasses": [
-    "Address",
     "Course",
     "Laboratory",
     "Student"

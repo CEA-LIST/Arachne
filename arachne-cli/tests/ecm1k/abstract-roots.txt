@@ -1,0 +1,6 @@
+modelset/anatlyzer/a2l/examples/example.vmtesting/transformations/FlattenTest/added_metamodels/UML2_3_0_0.ecore
+modelset/anatlyzer/anatlyzer/examples/anatlyzer.example.issre2014/metamodels/UML2_3_0_0.ecore
+modelset/cbiegel/ArchitectureKnowledgeModel/org.emftrace.metamodel/bin/org/emftrace/metamodel/UMLModel/impl/UMLModel.ecore
+modelset/huybuidac20593/yakindu/BASE/tags/M_SCT2_07/org.eclipselabs.mscript/plugins/org.eclipselabs.mscript.typesystem/model/TypeSystem.ecore
+modelset/jesusc/bento/examples/evaluation/bento.componetization.atl.examples/tmp_/UML2_effective.ecore
+modelset/jesusc/bento/examples/library/bento.rev.oo2measure/metamodels/OO.ecore

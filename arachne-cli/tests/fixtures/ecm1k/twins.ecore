@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="twins" nsURI="http://example.org/ecm1k/twins" nsPrefix="twins">
+  <!-- EC.M1k: every attribute of Typed has a twin of the same name in Builtin, typed by the built-in its datatype maps to. -->
+  <eClassifiers xsi:type="ecore:EClass" name="Typed">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbool" eType="#//PBool"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbyte" eType="#//PByte"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pshort" eType="#//PShort"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pint" eType="#//PInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="plong" eType="#//PLong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pfloat" eType="#//PFloat"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pdouble" eType="#//PDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pchar" eType="#//PChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="jstring" eType="#//JString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wbool" eType="#//WBool"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wbyte" eType="#//WByte"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wshort" eType="#//WShort"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wint" eType="#//WInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wlong" eType="#//WLong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wfloat" eType="#//WFloat"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wdouble" eType="#//WDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wchar" eType="#//WChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tint" eType="#//TInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="twint" eType="#//TWInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tstring" eType="#//TString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tlist" eType="#//TList"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="udate" eType="#//UDate"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="uarr" eType="#//UArr"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="unone" eType="#//UNone"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="object" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//Object"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wint1" lowerBound="1" eType="#//WInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbool1" lowerBound="1" eType="#//PBool"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pints" upperBound="-1" eType="#//PInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wdoubles" upperBound="-1" unique="false" eType="#//WDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="dlong" derived="true" volatile="true" transient="true" eType="#//PLong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="ids" iD="true" eType="#//JString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" eType="#//Empty"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Builtin">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbool" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbyte" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EByte"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pshort" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pint" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="plong" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pfloat" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EFloat"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pdouble" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pchar" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="jstring" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wbool" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wbyte" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EByte"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wshort" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EShort"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wint" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wlong" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wfloat" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EFloat"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wdouble" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wchar" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tint" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="twint" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tstring" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="tlist" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="udate" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="uarr" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="unone" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="object" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EChar"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wint1" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pbool1" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="pints" upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="wdoubles" upperBound="-1" unique="false" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="dlong" derived="true" volatile="true" transient="true" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//ELong"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="ids" iD="true" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="state" eType="#//Pair"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EDataType" name="PBool" instanceClassName="boolean"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PByte" instanceClassName="byte"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PShort" instanceClassName="short"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PInt" instanceClassName="int"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PLong" instanceClassName="long"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PFloat" instanceClassName="float"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PDouble" instanceClassName="double"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="PChar" instanceClassName="char"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="JString" instanceClassName="java.lang.String"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WBool" instanceClassName="java.lang.Boolean"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WByte" instanceClassName="java.lang.Byte"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WShort" instanceClassName="java.lang.Short"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WInt" instanceClassName="java.lang.Integer"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WLong" instanceClassName="java.lang.Long"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WFloat" instanceClassName="java.lang.Float"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WDouble" instanceClassName="java.lang.Double"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="WChar" instanceClassName="java.lang.Character"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="TInt" instanceTypeName="int"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="TWInt" instanceTypeName="java.lang.Integer"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="TString" instanceTypeName="String"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="TList" instanceTypeName="java.util.List&lt;java.lang.String&gt;"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="UDate" instanceClassName="java.util.Date"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="UArr" instanceClassName="int[]"/>
+  <eClassifiers xsi:type="ecore:EDataType" name="UNone"/>
+  <eClassifiers xsi:type="ecore:EEnum" name="Empty"/>
+  <eClassifiers xsi:type="ecore:EEnum" name="Pair">
+    <eLiterals name="A"/>
+    <eLiterals name="B" value="1"/>
+  </eClassifiers>
+</ecore:EPackage>

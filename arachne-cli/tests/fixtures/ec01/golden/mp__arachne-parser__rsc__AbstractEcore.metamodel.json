@@ -170,7 +170,8 @@
           "merge": {
             "kind": "attribute",
             "leaf": {
-              "kind": "text"
+              "kind": "register",
+              "tie": "mv"
             },
             "shape": {
               "kind": "optional"
@@ -281,13 +282,6 @@
         "Interface1"
       ]
     },
-    "DataType1": {
-      "abstract": false,
-      "attributes": [],
-      "containments": [],
-      "references": [],
-      "superTypes": []
-    },
     "Interface1": {
       "abstract": true,
       "attributes": [],
@@ -308,7 +302,6 @@
   "rootClasses": [
     "ConcreteClass1",
     "ConcreteClass3",
-    "ConcreteClass4",
-    "DataType1"
+    "ConcreteClass4"
   ]
 }

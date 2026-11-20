@@ -1,6 +1,6 @@
-S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::ecore_class_idx (line 300) ok
-S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::parse_builtin_etype_url (line 327) ok
-S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::try_parse_builtin_etype (line 350) ok
+S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::ecore_class_idx (line 315) ok
+S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::parse_builtin_etype_url (line 342) ok
+S1 doc:ecore_rs :: arachne-parser/src/ctx.rs - ctx::Ctx::try_parse_builtin_etype (line 365) ok
 S1 doc:ecore_rs :: arachne-parser/src/repr/ecore.rs - repr::ecore::classifier_path (line 101) ok
 S1 ec01_ecore_classes :: a_model_naming_ecore_classes_parses ok
 S1 ec01_ecore_classes :: a_model_naming_no_ecore_class_gets_no_ecore_package ok
