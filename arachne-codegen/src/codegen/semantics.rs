@@ -96,7 +96,9 @@
 
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Structural, annot::Val, builtin::Typ as BuiltinTyp, ecore, idx, structural},
+    repr::{
+        Class, Pack, Structural, annot::Val, builtin::Typ as BuiltinTyp, ecore, idx, structural,
+    },
 };
 use moirai_semantics::{
     ClassSlot, FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, Provenance, SetTie,
@@ -104,7 +106,10 @@ use moirai_semantics::{
 };
 use serde_json::{Value, json};
 
-use crate::codegen::ecore::{ecore_feature_datatype, is_eobject, map_spec};
+use crate::{
+    codegen::ecore::{ecore_feature_datatype, is_eobject, map_spec},
+    error::{ArachneError, Result},
+};
 
 /// The annotation source a `datatype` override is written under.
 const SEMANTICS_SOURCE: &str = "urn:arachne:semantics";
@@ -234,33 +239,33 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
 /// The shape and every leaf but an enum's serialize straight out of
 /// `moirai-semantics`, so the emitter and the parser cannot drift on a tag
 /// name; only the two name-typed fields are written by hand.
-pub fn merge_json(rule: &MergeRule, ctx: &Ctx) -> Value {
-    match rule {
+pub fn merge_json(rule: &MergeRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match rule {
         MergeRule::Attribute { shape, leaf } => json!({
             "kind": "attribute",
             "shape": to_value(shape),
-            "leaf": leaf_json(leaf, ctx),
+            "leaf": leaf_json(leaf, ctx, root)?,
         }),
         MergeRule::Containment { shape, target } => json!({
             "kind": "containment",
             "shape": to_value(shape),
-            "target": class_name(*target, ctx),
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::Reference { many, target } => json!({
             "kind": "reference",
             "many": many,
-            "target": class_name(*target, ctx),
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::IdentityReference { many, target } => json!({
             "kind": "identityReference",
             "many": many,
-            "target": class_name(*target, ctx),
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::Unsupported { reason } => json!({
             "kind": "unsupported",
             "reason": reason.as_str(),
         }),
-    }
+    })
 }
 
 /// The provenance as the descriptor spells it: four facets, four sources.
@@ -320,9 +325,8 @@ pub fn transparent_field<'a>(class: &'a Class) -> Option<&'a str> {
 
 /// The classifier a slot produced by this module names, under the key the
 /// descriptor lists it by.
-pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
-    let index = idx::Class::from(slot.index());
-    descriptor_class_name(ctx, index)
+pub fn class_name(slot: ClassSlot, ctx: &Ctx, root: &Pack) -> Result<String> {
+    descriptor_class_name(ctx, root, idx::Class::from(slot.index()))
 }
 
 /// The key the descriptor lists a classifier under.
@@ -350,27 +354,29 @@ pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
 /// here and `EcoreEAnnotation` there — and the census's `Agreement::Nominal`
 /// is where that is recorded and checked.
 ///
-/// A classifier of a subpackage is keyed by its path below the user package (`a::b::Name`).
-pub fn descriptor_class_name(ctx: &Ctx, class: idx::Class) -> String {
+/// A classifier of a subpackage is keyed by its path below `root`, the package being described
+/// (`a::b::Name`). A class outside `root` that is not Ecore's has no name to write: refused.
+pub fn descriptor_class_name(ctx: &Ctx, root: &Pack, class: idx::Class) -> Result<String> {
     let class = ctx
         .classes()
         .get(*class)
         .expect("a slot this module minted indexes the context it was minted from");
     if ctx.is_ecore_class(class.idx) {
-        return format!("{}::{}", ecore::PACKAGE_NAME, class.name());
+        return Ok(format!("{}::{}", ecore::PACKAGE_NAME, class.name()));
     }
-    let user = crate::find_user_package(ctx).ok().map(|pack| pack.idx);
+    let Some(at) = class.path.iter().position(|pack| pack == root.idx) else {
+        return Err(ArachneError::InvalidModel(format!(
+            "`{}` is outside the described package `{}` and is not Ecore's, so it has no name to write",
+            class.name(),
+            root.name()
+        )));
+    };
     let mut key = String::new();
-    for pack in class
-        .path
-        .iter()
-        .skip_while(|pack| Some(*pack) != user)
-        .skip(1)
-    {
+    for pack in class.path.iter().skip(at + 1) {
         key.push_str(ctx[pack].name());
         key.push_str("::");
     }
-    key + class.name()
+    Ok(key + class.name())
 }
 
 /* ---------- what a classifier is ---------- */
@@ -837,11 +843,11 @@ fn set_tie(datatype: Option<&Val>) -> SetTie {
 /* ---------- rendering ---------- */
 
 /// A leaf, with an enum's class by name.
-fn leaf_json(leaf: &LeafRule, ctx: &Ctx) -> Value {
-    match leaf {
+fn leaf_json(leaf: &LeafRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match leaf {
         LeafRule::Enum { class, tie } => json!({
             "kind": "enum",
-            "class": class_name(*class, ctx),
+            "class": class_name(*class, ctx, root)?,
             "tie": to_value(tie),
         }),
         // Written by hand for the same reason the enum leaf is: the slot this
@@ -851,12 +857,12 @@ fn leaf_json(leaf: &LeafRule, ctx: &Ctx) -> Value {
         LeafRule::OptionalRegister { class } => match class {
             Some(class) => json!({
                 "kind": "optionalRegister",
-                "class": class_name(*class, ctx),
+                "class": class_name(*class, ctx, root)?,
             }),
             None => json!({ "kind": "optionalRegister" }),
         },
         other => to_value(other),
-    }
+    })
 }
 
 /// `serde_json::to_value` on a type of the shared vocabulary, which cannot

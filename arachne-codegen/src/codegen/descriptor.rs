@@ -273,8 +273,8 @@ pub(crate) fn descriptor_with_roots(
 
     let mut root_names: Vec<String> = roots
         .iter()
-        .map(|idx| semantics::descriptor_class_name(ctx, *idx))
-        .collect();
+        .map(|idx| semantics::descriptor_class_name(ctx, pack, *idx))
+        .collect::<Result<_>>()?;
     root_names.sort_unstable();
 
     // What the descriptor writes, by identity: its classes, and the enums of the package.
@@ -292,17 +292,35 @@ pub(crate) fn descriptor_with_roots(
 
     // Sorted maps so the emitted descriptor is deterministic.
     let mut classes = Map::new();
-    let mut included: Vec<&Class> = reachable
+    // Only a descriptor that writes a subpackage classifier says where the subpackages are. Its
+    // refusals answer before the class loop's, so the cause line says `subpackage`.
+    let packages = if written
+        .iter()
+        .any(|class| ctx[*class].path.last() != pack.idx && !ctx.is_ecore_class(*class))
+    {
+        let mut packages = Map::new();
+        let mut seen: Vec<String> = pack.ns_uri().map(str::to_string).into_iter().collect();
+        subpackages(ctx, pack, "", &mut seen, &mut packages)?;
+        Some(packages)
+    } else {
+        None
+    };
+    let mut included: Vec<(String, &Class)> = reachable
         .iter()
         .map(|idx| &ctx[*idx])
         .filter(|class| semantics::is_eclass(class))
-        .collect();
+        .map(|class| {
+            Ok((
+                semantics::descriptor_class_name(ctx, pack, class.idx)?,
+                class,
+            ))
+        })
+        .collect::<Result<_>>()?;
     // By the key the class is written under, so a refusal names the same class on every run.
-    included.sort_by_cached_key(|class| semantics::descriptor_class_name(ctx, class.idx));
-    for class in &included {
-        let key = semantics::descriptor_class_name(ctx, class.idx);
+    included.sort_by(|a, b| a.0.cmp(&b.0));
+    for (key, class) in included {
         if classes
-            .insert(key.clone(), class_descriptor(ctx, class, &written)?)
+            .insert(key.clone(), class_descriptor(ctx, pack, class, &written)?)
             .is_some()
         {
             // Two classifiers on one key would silently become one class with
@@ -326,7 +344,7 @@ pub(crate) fn descriptor_with_roots(
     for class in package_enums {
         let literals: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
         enums.insert(
-            semantics::descriptor_class_name(ctx, class.idx),
+            semantics::descriptor_class_name(ctx, pack, class.idx)?,
             json!(literals),
         );
     }
@@ -339,14 +357,7 @@ pub(crate) fn descriptor_with_roots(
         "classes": classes,
         "enums": enums,
     });
-    // Only a descriptor that writes a subpackage classifier says where the subpackages are.
-    if written
-        .iter()
-        .any(|class| ctx[*class].path.last() != pack.idx && !ctx.is_ecore_class(*class))
-    {
-        let mut packages = Map::new();
-        let mut seen: Vec<String> = pack.ns_uri().map(str::to_string).into_iter().collect();
-        subpackages(ctx, pack, "", &mut seen, &mut packages)?;
+    if let Some(packages) = packages {
         descriptor["packages"] = Value::Object(packages);
     }
     Ok(descriptor)
@@ -372,11 +383,16 @@ pub fn metamodel_digest(descriptor: &Value) -> String {
 ///
 /// Refuses with [`ArachneError::DescriptorNotClosed`] when a name it writes is not a class or
 /// enum in `written`.
-fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> Result<Value> {
+fn class_descriptor(
+    ctx: &Ctx,
+    pack: &Pack,
+    class: &Class,
+    written: &HashSet<idx::Class>,
+) -> Result<Value> {
     let mut super_types: Vec<String> = Vec::new();
     for sup in class.sup() {
-        require(ctx, class, *sup, written)?;
-        super_types.push(semantics::descriptor_class_name(ctx, *sup));
+        require(ctx, pack, class, *sup, written)?;
+        super_types.push(semantics::descriptor_class_name(ctx, pack, *sup)?);
     }
     super_types.sort_unstable();
 
@@ -394,7 +410,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
 
         match feature.kind {
             structural::Typ::EAttribute => {
-                let Some((kind, enum_name)) = attribute_kind(ctx, class, feature) else {
+                let Some((kind, enum_class)) = attribute_kind(ctx, class, feature) else {
                     continue;
                 };
                 let mut attribute = json!({
@@ -404,16 +420,12 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
                     "required": required,
                     "isId": feature.is_id,
                 });
-                if let Some(enum_name) = enum_name {
-                    attribute["enum"] = json!(enum_name);
-                    require(
-                        ctx,
-                        class,
-                        feature.typ.expect("an enum-typed attribute"),
-                        written,
-                    )?;
+                if let Some(enum_class) = enum_class {
+                    require(ctx, pack, class, enum_class, written)?;
+                    attribute["enum"] =
+                        json!(semantics::descriptor_class_name(ctx, pack, enum_class)?);
                 }
-                add_semantics(&mut attribute, ctx, class, feature, written)?;
+                add_semantics(&mut attribute, ctx, pack, class, feature, written)?;
                 attributes.push(attribute);
             }
             structural::Typ::EReference => {
@@ -426,8 +438,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
                     );
                     continue;
                 };
-                require(ctx, class, target, written)?;
-                let target = semantics::descriptor_class_name(ctx, target);
+                require(ctx, pack, class, target, written)?;
+                let target = semantics::descriptor_class_name(ctx, pack, target)?;
                 if feature.containment {
                     let mut containment = json!({
                         "name": feature.name,
@@ -436,8 +448,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
                         "required": required,
                         "ordered": feature.ordered.unwrap_or(true),
                     });
-                    add_semantics(&mut containment, ctx, class, feature, written)?;
-                    add_declarations(&mut containment, feature);
+                    add_semantics(&mut containment, ctx, pack, class, feature, written)?;
+                    add_declarations(&mut containment, ctx, pack, feature);
                     containments.push(containment);
                 } else {
                     let mut reference = json!({
@@ -446,8 +458,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
                         "many": many,
                         "required": required,
                     });
-                    add_semantics(&mut reference, ctx, class, feature, written)?;
-                    add_declarations(&mut reference, feature);
+                    add_semantics(&mut reference, ctx, pack, class, feature, written)?;
+                    add_declarations(&mut reference, ctx, pack, feature);
                     references.push(reference);
                 }
             }
@@ -476,6 +488,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, written: &HashSet<idx::Class>) -> 
 /// `name` must be a class or enum the descriptor writes, `class` being the one that names it.
 fn require(
     ctx: &Ctx,
+    pack: &Pack,
     class: &Class,
     name: idx::Class,
     written: &HashSet<idx::Class>,
@@ -484,8 +497,10 @@ fn require(
         return Ok(());
     }
     Err(ArachneError::DescriptorNotClosed {
-        class: semantics::descriptor_class_name(ctx, class.idx),
-        missing: semantics::descriptor_class_name(ctx, name),
+        class: semantics::descriptor_class_name(ctx, pack, class.idx)?,
+        // Not written, so possibly outside `pack`: named bare then, as the cause is the closure.
+        missing: semantics::descriptor_class_name(ctx, pack, name)
+            .unwrap_or_else(|_| ctx[name].name().to_string()),
     })
 }
 
@@ -505,6 +520,7 @@ fn require(
 fn add_semantics(
     entry: &mut Value,
     ctx: &Ctx,
+    pack: &Pack,
     class: &Class,
     feature: &structural::Structural,
     written: &HashSet<idx::Class>,
@@ -520,7 +536,7 @@ fn add_semantics(
         )
     {
         return Err(ArachneError::EnumKeyedMap {
-            class: semantics::descriptor_class_name(ctx, class.idx),
+            class: semantics::descriptor_class_name(ctx, pack, class.idx)?,
             feature: feature.name.clone(),
         });
     }
@@ -536,13 +552,13 @@ fn add_semantics(
         _ => None,
     };
     if let Some(slot) = named {
-        require(ctx, class, idx::Class::from(slot.index()), written)?;
+        require(ctx, pack, class, idx::Class::from(slot.index()), written)?;
     }
     entry["facets"] = semantics::facets_json(feature);
     entry["annotation"] = semantics::feature_datatype(feature, class, ctx)
         .map(|value| json!(value))
         .unwrap_or(Value::Null);
-    entry["merge"] = semantics::merge_json(&merge, ctx);
+    entry["merge"] = semantics::merge_json(&merge, ctx, pack)?;
     entry["provenance"] = semantics::provenance_json(&provenance);
     Ok(())
 }
@@ -558,7 +574,7 @@ fn add_semantics(
 /// byte for byte, and keeps its digest. They are data for a reader of the
 /// descriptor: no merge rule reads them, and nothing keeps two opposite ends
 /// in step.
-fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
+fn add_declarations(entry: &mut Value, ctx: &Ctx, pack: &Pack, feature: &structural::Structural) {
     if let Some(opposite) = feature.opposite() {
         let name = opposite.rsplit('/').next().unwrap_or(opposite);
         entry["eOpposite"] = json!(name);
@@ -570,7 +586,7 @@ fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
             .filter(|annot| annot.source() == source)
             .flat_map(|annot| annot.references())
             .map(|reference| {
-                let (class, name) = class_and_feature(reference);
+                let (class, name) = class_and_feature(ctx, pack, reference);
                 json!({"class": class, "feature": name})
             })
             .collect();
@@ -581,15 +597,28 @@ fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
 }
 
 /// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it (`a::Class`),
-/// and the feature. A reference into another file keeps its last class segment only: a
-/// dependency is described whole, under its own bare names.
-fn class_and_feature(reference: &str) -> (String, &str) {
+/// and the feature. The leading segments make a `::` path only when they name a chain of
+/// subpackages below `pack`; otherwise, and for a reference into another file (a dependency is
+/// described whole, under its own bare names), the class is its last segment.
+fn class_and_feature<'a>(ctx: &Ctx, pack: &Pack, reference: &'a str) -> (String, &'a str) {
     let (file, path) = reference.rsplit_once('#').unwrap_or(("", reference));
     let (class, feature) = path
         .trim_start_matches('/')
         .rsplit_once('/')
         .unwrap_or(("", path.trim_start_matches('/')));
-    if file.is_empty() {
+    let mut dir = pack;
+    let in_tree = class.rsplit_once('/').is_none_or(|(subs, _)| {
+        subs.split('/').all(|name| {
+            let sub = dir
+                .sub()
+                .iter()
+                .map(|sub| &ctx[*sub])
+                .find(|sub| sub.name() == name);
+            dir = sub.unwrap_or(dir);
+            sub.is_some()
+        })
+    });
+    if file.is_empty() && in_tree {
         (class.replace('/', "::"), feature)
     } else {
         (class.rsplit('/').next().unwrap_or("").to_string(), feature)
@@ -603,7 +632,7 @@ fn attribute_kind(
     ctx: &Ctx,
     class: &Class,
     feature: &structural::Structural,
-) -> Option<(&'static str, Option<String>)> {
+) -> Option<(&'static str, Option<idx::Class>)> {
     let Some(target) = feature.typ else {
         warn!(
             "`{}.{}`: externally-typed attribute has no resolved type; \
@@ -616,10 +645,7 @@ fn attribute_kind(
     let target = &ctx[target];
 
     if semantics::is_eenum(target) {
-        return Some((
-            "enum",
-            Some(semantics::descriptor_class_name(ctx, feature.typ?)),
-        ));
+        return Some(("enum", feature.typ));
     }
 
     let kind = match semantics::value_builtin(target) {
