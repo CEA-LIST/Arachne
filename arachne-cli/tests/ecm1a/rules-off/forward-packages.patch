@@ -1,0 +1,11 @@
+--- a/arachne-parser/src/ctx.rs
++++ b/arachne-parser/src/ctx.rs
+@@ -454,7 +454,7 @@
+             if self.forward_ref_packs.contains(&p_idx) {
+                 self.forward_ref_packs.remove(&p_idx);
+                 // the package should be empty at this point, since we're currently defining it
+-                if !self.fill_forward_packs && !self[p_idx].is_empty() {
++                if (true || !self.fill_forward_packs) && !self[p_idx].is_empty() {
+                     bail!("failed to define previously forward-referenced package: not empty")
+                 }
+                 return Ok(p_idx);
