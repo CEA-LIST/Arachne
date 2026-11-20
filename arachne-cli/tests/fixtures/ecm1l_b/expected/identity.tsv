@@ -1,0 +1,5 @@
+ecm1k/enum_key.ecore	Color	7240481e776c7e6f65f3c484246088c6468f6b4dc31b6df0614c87c9deaf08dc	http://example.org/ecm1k/palette
+ecm1k/empty_enum_key.ecore	Color	f59ceab5f5707907fb19d9b341c260e1d171171264393438894c3856f9ba3383	http://example.org/ecm1k/palette
+ecm1l_b/containment_value.ecore	Color	ba6f8752dad8442a5790dcbf613a1f4012338443e93b544d8f25d7a573ba7fba	http://example.org/ecm1lb/cvalue
+ecm1l_b/sub_key.ecore	sub::Shade	3d0c4552e1fd30f42728b4d8276628345d730103c37a535d539c4849f824f169	http://example.org/ecm1lb/subkey
+ecm1l_b/import/cross_key.ecore	tones::Tone	28a62077ba152097cbac05932184ea323e6f876a6224f3898a8d753cbfbfe4e7	http://example.org/ecm1lb/crosskey

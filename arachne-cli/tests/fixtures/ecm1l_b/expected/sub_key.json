@@ -1,0 +1,133 @@
+{
+  "classes": {
+    "Entry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "enum": "sub::Shade",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "sub::Shade",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true
+        },
+        {
+          "annotation": null,
+          "enum": "Alpha",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Alpha",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "value",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "references": [],
+      "superTypes": []
+    },
+    "Root": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Alpha",
+              "kind": "optionalRegister"
+            },
+            "shape": {
+              "key": {
+                "class": "sub::Shade",
+                "kind": "enum"
+              },
+              "kind": "keyed"
+            }
+          },
+          "name": "entries",
+          "ordered": true,
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "Entry"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "enums": {
+    "Alpha": [
+      "A"
+    ],
+    "sub::Shade": [
+      "DARK",
+      "LIGHT"
+    ]
+  },
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ecm1lb/subkey",
+  "package": "subkey",
+  "packages": {
+    "sub": {
+      "nsPrefix": "sub",
+      "nsURI": "http://example.org/ecm1lb/subkey/sub"
+    }
+  },
+  "rootClasses": [
+    "Root"
+  ]
+}

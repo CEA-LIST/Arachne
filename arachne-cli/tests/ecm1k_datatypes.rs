@@ -6,8 +6,8 @@
 //! Ecore type of that class, a wrapper (`java.lang.Integer`, ...) as its primitive, anything else as
 //! `string` on a single-value register, as Ecore's `Object` now is too. A zero-literal enum is an
 //! enum with no literal. A package that declares no EClass refuses, its first stderr line the
-//! root-class line and a later one saying it declares no EClass; a map keyed by an enum refuses
-//! with a line naming the feature.
+//! root-class line and a later one saying it declares no EClass. (EC.M1l-b: a map keyed by an enum
+//! is described now, its key enum by name; `ecm1l_b_enum_key_by_name.rs` holds its two fixtures.)
 
 use std::{
     fs,
@@ -177,19 +177,6 @@ fn a_package_with_no_eclass_refuses_with_that_cause() {
             lines[1..].iter().filter(|l| l.contains(NO_ECLASS)).count(),
             1,
             "{file}: one later line says `{NO_ECLASS}`: {lines:?}"
-        );
-    }
-}
-
-#[test]
-fn an_enum_keyed_map_refuses_with_its_cause() {
-    for file in ["enum_key.ecore", "empty_enum_key.ecore"] {
-        let lines = refused(&fixture(file));
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("Root.entries") && l.contains("enum") && l.contains("key")),
-            "{file}: no line naming `Root.entries` and its enum key: {lines:?}"
         );
     }
 }
