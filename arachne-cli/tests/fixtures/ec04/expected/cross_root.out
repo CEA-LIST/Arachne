@@ -1,0 +1,116 @@
+{
+  "classes": {
+    "Car": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "model",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "optional"
+            },
+            "target": "parts::Engine"
+          },
+          "name": "engine",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "parts::Engine"
+        }
+      ],
+      "references": [],
+      "superTypes": []
+    },
+    "parts::Engine": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "power",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false
+        }
+      ],
+      "containments": [],
+      "origin": "http://example.org/ec04/cross/dep",
+      "references": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "532cb9cf5af13318a0c5fc9e21ba47ff0bf07b935a19068a29c3652418a713e3",
+      "nsURI": "http://example.org/ec04/cross/dep"
+    }
+  ],
+  "enums": {},
+  "formatVersion": 2,
+  "nsURI": "http://example.org/ec04/cross/root",
+  "package": "cars",
+  "rootClasses": [
+    "Car"
+  ]
+}
