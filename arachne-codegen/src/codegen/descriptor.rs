@@ -449,7 +449,7 @@ fn class_descriptor(
                         "ordered": feature.ordered.unwrap_or(true),
                     });
                     add_semantics(&mut containment, ctx, pack, class, feature, written)?;
-                    add_declarations(&mut containment, ctx, pack, feature);
+                    add_declarations(&mut containment, ctx, pack, feature)?;
                     containments.push(containment);
                 } else {
                     let mut reference = json!({
@@ -459,7 +459,7 @@ fn class_descriptor(
                         "required": required,
                     });
                     add_semantics(&mut reference, ctx, pack, class, feature, written)?;
-                    add_declarations(&mut reference, ctx, pack, feature);
+                    add_declarations(&mut reference, ctx, pack, feature)?;
                     references.push(reference);
                 }
             }
@@ -498,9 +498,17 @@ fn require(
     }
     Err(ArachneError::DescriptorNotClosed {
         class: semantics::descriptor_class_name(ctx, pack, class.idx)?,
-        // Not written, so possibly outside `pack`: named bare then, as the cause is the closure.
-        missing: semantics::descriptor_class_name(ctx, pack, name)
-            .unwrap_or_else(|_| ctx[name].name().to_string()),
+        // Not written, so possibly outside `pack`: named from the document root then.
+        missing: semantics::descriptor_class_name(ctx, pack, name).unwrap_or_else(|_| {
+            let missing = &ctx[name];
+            missing
+                .path
+                .iter()
+                .map(|up| ctx[up].name())
+                .chain([missing.name()])
+                .collect::<Vec<_>>()
+                .join("::")
+        }),
     })
 }
 
@@ -574,7 +582,12 @@ fn add_semantics(
 /// byte for byte, and keeps its digest. They are data for a reader of the
 /// descriptor: no merge rule reads them, and nothing keeps two opposite ends
 /// in step.
-fn add_declarations(entry: &mut Value, ctx: &Ctx, pack: &Pack, feature: &structural::Structural) {
+fn add_declarations(
+    entry: &mut Value,
+    ctx: &Ctx,
+    pack: &Pack,
+    feature: &structural::Structural,
+) -> Result<()> {
     if let Some(opposite) = feature.opposite() {
         let name = opposite.rsplit('/').next().unwrap_or(opposite);
         entry["eOpposite"] = json!(name);
@@ -586,43 +599,67 @@ fn add_declarations(entry: &mut Value, ctx: &Ctx, pack: &Pack, feature: &structu
             .filter(|annot| annot.source() == source)
             .flat_map(|annot| annot.references())
             .map(|reference| {
-                let (class, name) = class_and_feature(ctx, pack, reference);
-                json!({"class": class, "feature": name})
+                let (class, name) = class_and_feature(ctx, pack, reference)?;
+                Ok(json!({"class": class, "feature": name}))
             })
-            .collect();
+            .collect::<Result<_>>()?;
         if !declared.is_empty() {
             entry[source] = Value::Array(declared);
         }
     }
+    Ok(())
 }
 
-/// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it (`a::Class`),
-/// and the feature. The leading segments make a `::` path only when they name a chain of
-/// subpackages below `pack`; otherwise, and for a reference into another file (a dependency is
-/// described whole, under its own bare names), the class is its last segment.
-fn class_and_feature<'a>(ctx: &Ctx, pack: &Pack, reference: &'a str) -> (String, &'a str) {
+/// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it, and the
+/// feature. An in-document fragment is relative to the document's root package: its leading
+/// segments make a `::` path, below `pack`, only when they name a chain of subpackages from that
+/// root, and the chain must pass through `pack`, else the class is outside what is described and
+/// the fragment is refused. Any other leading segments, and a reference into another file (a
+/// dependency is described whole, under its own bare names), leave the class as its last segment.
+fn class_and_feature<'a>(ctx: &Ctx, pack: &Pack, reference: &'a str) -> Result<(String, &'a str)> {
     let (file, path) = reference.rsplit_once('#').unwrap_or(("", reference));
     let (class, feature) = path
         .trim_start_matches('/')
         .rsplit_once('/')
         .unwrap_or(("", path.trim_start_matches('/')));
+    let bare = || class.rsplit('/').next().unwrap_or("").to_string();
+    let Some((subs, name)) = class
+        .rsplit_once('/')
+        .or(Some(("", class)))
+        .filter(|_| file.is_empty())
+    else {
+        return Ok((bare(), feature));
+    };
     let mut dir = pack;
-    let in_tree = class.rsplit_once('/').is_none_or(|(subs, _)| {
-        subs.split('/').all(|name| {
-            let sub = dir
-                .sub()
-                .iter()
-                .map(|sub| &ctx[*sub])
-                .find(|sub| sub.name() == name);
-            dir = sub.unwrap_or(dir);
-            sub.is_some()
-        })
-    });
-    if file.is_empty() && in_tree {
-        (class.replace('/', "::"), feature)
-    } else {
-        (class.rsplit('/').next().unwrap_or("").to_string(), feature)
+    // The context's own `[root]` package, above every document, is not the document's root.
+    while let Some(up) = dir.sup().filter(|up| ctx[*up].sup().is_some()) {
+        dir = &ctx[up];
     }
+    let mut seen_pack = dir.idx == pack.idx;
+    let mut written = Vec::new();
+    for seg in subs.split('/').filter(|seg| !seg.is_empty()) {
+        let Some(sub) = dir
+            .sub()
+            .iter()
+            .map(|sub| &ctx[*sub])
+            .find(|sub| sub.name() == seg)
+        else {
+            return Ok((bare(), feature));
+        };
+        dir = sub;
+        if seen_pack {
+            written.push(seg);
+        }
+        seen_pack |= dir.idx == pack.idx;
+    }
+    if !seen_pack {
+        return Err(ArachneError::InvalidModel(format!(
+            "the fragment `{reference}` names a class outside the described package `{}`, which has no name to write",
+            pack.name()
+        )));
+    }
+    written.push(name);
+    Ok((written.join("::"), feature))
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the
