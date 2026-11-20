@@ -25,7 +25,7 @@ use crate::{
     codegen::{descriptor, semantics},
     find_user_package,
     ignored::blank,
-    literals::{Literals, enum_literals},
+    literals::{Literals, enum_literals, plain_datatypes},
 };
 
 pub(crate) struct Resources {
@@ -69,16 +69,18 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
         .and_then(|text| {
             let (text, ignored) = blank(&text, false);
             let literals = enum_literals(&text);
+            let plain = plain_datatypes(&text);
             Ok((
                 EcoreParser {
                     ctx: Ctx::parse_filling_forward_packs(text)?,
                 },
                 ignored,
                 literals,
+                plain,
             ))
         });
     match first {
-        Ok((parser, ignored, literals)) => {
+        Ok((parser, ignored, literals, plain)) => {
             descriptor::record_ignored(ignored);
             let pack = find_user_package(&parser.ctx)?;
             Ok(Described {
@@ -87,6 +89,7 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
                     pack,
                     &descriptor::tree_classes(&parser.ctx, pack),
                     &literals,
+                    &plain,
                 )?,
                 dependencies: BTreeMap::new(),
             })
@@ -151,6 +154,7 @@ impl Loader {
         let (content, ignored) = blank(&fs::read_to_string(&path)?, self.active.len() > 1);
         descriptor::record_ignored(ignored);
         let mut literals = enum_literals(&content);
+        let plain = plain_datatypes(&content);
         let mut requested = BTreeMap::new();
         let mut dependencies = BTreeMap::new();
         let rewritten = rewrite_references(&content, |reference| {
@@ -235,7 +239,7 @@ impl Loader {
             }
         }
         let mut descriptor =
-            descriptor::descriptor_with_roots(&ctx, pack, &own_classes, &literals)?;
+            descriptor::descriptor_with_roots(&ctx, pack, &own_classes, &literals, &plain)?;
         for (name, origin) in &origins {
             if let Some(class) = descriptor["classes"].get_mut(name) {
                 class["origin"] = json!(origin);

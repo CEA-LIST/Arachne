@@ -76,6 +76,11 @@
 //!   datatype is never a class or a root: an attribute typed by one is
 //!   described by its instance class, and an enum with no literal is listed
 //!   under `enums` as `[]`.
+//! - A top-level `"datatypes"` map, present only when there is one, lists every datatype of the
+//!   package at every depth, keyed as classes are, and each one a dependency's class brings in
+//!   under `<declaring package>::<name>`, as `{"instanceClassName": ..., "serializable": true}`.
+//!   `instanceClassName` is the attribute as written or `null`; the parser refuses `serializable`,
+//!   so it is always the default.
 //!
 //! # What version 2 added, and why nothing broke
 //!
@@ -144,7 +149,7 @@ const FORMAT_VERSION: u64 = 2;
 /// writes is not one it writes.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
     let own_classes = tree_classes(ctx, pack);
-    descriptor_with_roots(ctx, pack, &own_classes, &Literals::new())
+    descriptor_with_roots(ctx, pack, &own_classes, &Literals::new(), &BTreeSet::new())
 }
 
 /// The classes of `pack` and of its subpackages at every depth.
@@ -197,6 +202,7 @@ pub(crate) fn descriptor_with_roots(
     pack: &Pack,
     own_classes: &[idx::Class],
     literals: &Literals,
+    plain: &BTreeSet<String>,
 ) -> Result<Value> {
     // The class set `describe` reaches: the package's classes, then Ecore's own but
     // `EObject`, which the generator never emits.
@@ -384,6 +390,19 @@ pub(crate) fn descriptor_with_roots(
         enums.insert(key, json!(names));
     }
 
+    // Every datatype of the package, an imported one under its declaring package's name.
+    let mut datatypes = Map::new();
+    for class in package_classes.iter().map(|idx| &ctx[*idx]) {
+        if class.typ() == "ecore:EDataType" {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+            // The parser refuses a `serializable` attribute, so it is always the default.
+            datatypes.insert(
+                key,
+                json!({"instanceClassName": class.instance_class_name(), "serializable": true}),
+            );
+        }
+    }
+
     let mut descriptor = json!({
         "formatVersion": FORMAT_VERSION,
         "package": pack.name(),
@@ -397,13 +416,18 @@ pub(crate) fn descriptor_with_roots(
     if let Some(packages) = packages {
         descriptor["packages"] = Value::Object(packages);
     }
+    if !datatypes.is_empty() {
+        descriptor["datatypes"] = Value::Object(datatypes);
+    }
     if has_foreign_annotation(pack.annotations()) {
         dropped.push(("eAnnotation", pack.name().to_owned(), String::new()));
     }
     for class in own_classes.iter().map(|class| &ctx[*class]) {
         if class.typ() == "ecore:EDataType" {
             let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
-            dropped.push(("eDataType", key, String::new()));
+            if !plain.contains(&key) {
+                dropped.push(("eDataType", key, String::new()));
+            }
         }
     }
     // The operations of classes this descriptor does not list: a descriptor that imports the
