@@ -25,6 +25,7 @@ use crate::{
     codegen::{descriptor, semantics},
     find_user_package,
     ignored::blank,
+    literals::{Literals, enum_literals},
 };
 
 pub(crate) struct Resources {
@@ -32,6 +33,8 @@ pub(crate) struct Resources {
     pub descriptor: Value,
     dependencies: BTreeMap<String, Value>,
     origins: BTreeMap<String, String>,
+    /// The enum literals the descriptor writes, imported enums included, by key.
+    literals: Literals,
 }
 
 /// What `arachne describe` writes: the descriptor, and the descriptor of each model it depends on, by digest.
@@ -65,20 +68,25 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
         .map_err(ArachneError::from)
         .and_then(|text| {
             let (text, ignored) = blank(&text, false);
+            let literals = enum_literals(&text);
             Ok((
                 EcoreParser {
                     ctx: Ctx::parse_filling_forward_packs(text)?,
                 },
                 ignored,
+                literals,
             ))
         });
     match first {
-        Ok((parser, ignored)) => {
+        Ok((parser, ignored, literals)) => {
             descriptor::record_ignored(ignored);
+            let pack = find_user_package(&parser.ctx)?;
             Ok(Described {
-                descriptor: descriptor::descriptor_json(
+                descriptor: descriptor::descriptor_with_roots(
                     &parser.ctx,
-                    find_user_package(&parser.ctx)?,
+                    pack,
+                    &descriptor::tree_classes(&parser.ctx, pack),
+                    &literals,
                 )?,
                 dependencies: BTreeMap::new(),
             })
@@ -142,6 +150,7 @@ impl Loader {
         // The root is the first file `active` holds; a later one is a dependency.
         let (content, ignored) = blank(&fs::read_to_string(&path)?, self.active.len() > 1);
         descriptor::record_ignored(ignored);
+        let mut literals = enum_literals(&content);
         let mut requested = BTreeMap::new();
         let mut dependencies = BTreeMap::new();
         let rewritten = rewrite_references(&content, |reference| {
@@ -199,6 +208,7 @@ impl Loader {
                 &pack_path,
                 &mut imported,
                 &mut origins,
+                &mut literals,
             )?;
         }
         ctx.finalize().map_err(ArachneError::from)?;
@@ -224,7 +234,8 @@ impl Loader {
                 )));
             }
         }
-        let mut descriptor = descriptor::descriptor_with_roots(&ctx, pack, &own_classes)?;
+        let mut descriptor =
+            descriptor::descriptor_with_roots(&ctx, pack, &own_classes, &literals)?;
         for (name, origin) in &origins {
             if let Some(class) = descriptor["classes"].get_mut(name) {
                 class["origin"] = json!(origin);
@@ -243,6 +254,7 @@ impl Loader {
             descriptor,
             dependencies,
             origins,
+            literals,
         });
         self.active.remove(&path);
         self.loaded.insert(path, Rc::clone(&resource));
@@ -259,6 +271,7 @@ fn import_class(
     path: &repr::Path,
     imported: &mut BTreeMap<String, idx::Class>,
     origins: &mut BTreeMap<String, String>,
+    literals: &mut Literals,
 ) -> anyhow::Result<idx::Class> {
     let ctx = &resource.parser.ctx;
     if let Some((typ, _)) = ctx.builtins().iter().find(|(_, idx)| **idx == source) {
@@ -303,6 +316,10 @@ fn import_class(
         )
         .map_err(ArachneError::from)?;
     imported.insert(name.clone(), index);
+    // The dependency's own key for the class is its name, which its descriptor wrote.
+    if let Some(carried) = resource.literals.get(class.name()) {
+        literals.insert(name.clone(), carried.clone());
+    }
     origins.insert(name, origin);
     if let Some(name) = class.instance_class_name() {
         destination[index].set_instance_class_name(name);
@@ -314,14 +331,32 @@ fn import_class(
         destination[index].add_literal(literal.clone());
     }
     for parent in class.sup() {
-        let parent = import_class(resource, *parent, destination, path, imported, origins)?;
+        let parent = import_class(
+            resource,
+            *parent,
+            destination,
+            path,
+            imported,
+            origins,
+            literals,
+        )?;
         destination.add_sup_class(parent, index);
     }
     for feature in class.structural() {
         let mut feature = feature.clone();
         feature.typ = feature
             .typ
-            .map(|target| import_class(resource, target, destination, path, imported, origins))
+            .map(|target| {
+                import_class(
+                    resource,
+                    target,
+                    destination,
+                    path,
+                    imported,
+                    origins,
+                    literals,
+                )
+            })
             .transpose()?;
         destination[index].add_structural(feature);
     }

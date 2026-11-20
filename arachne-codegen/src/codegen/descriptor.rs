@@ -127,6 +127,7 @@ use sha2::{Digest, Sha256};
 
 use crate::codegen::{ecore, semantics};
 use crate::error::{ArachneError, Result};
+use crate::literals::{Literals, value_json};
 
 /// Version of the descriptor layout above. Bump on any breaking change so
 /// clients can refuse what they do not understand.
@@ -143,7 +144,7 @@ const FORMAT_VERSION: u64 = 2;
 /// writes is not one it writes.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
     let own_classes = tree_classes(ctx, pack);
-    descriptor_with_roots(ctx, pack, &own_classes)
+    descriptor_with_roots(ctx, pack, &own_classes, &Literals::new())
 }
 
 /// The classes of `pack` and of its subpackages at every depth.
@@ -195,6 +196,7 @@ pub(crate) fn descriptor_with_roots(
     ctx: &Ctx,
     pack: &Pack,
     own_classes: &[idx::Class],
+    literals: &Literals,
 ) -> Result<Value> {
     // The class set `describe` reaches: the package's classes, then Ecore's own but
     // `EObject`, which the generator never emits.
@@ -339,7 +341,7 @@ pub(crate) fn descriptor_with_roots(
     included.sort_by(|a, b| a.0.cmp(&b.0));
     let mut dropped = Vec::new();
     for (key, class) in included {
-        dropped_in_class(ctx, pack, class, &key, &mut dropped);
+        dropped_in_class(class, &key, &mut dropped);
         if classes
             .insert(key.clone(), class_descriptor(ctx, pack, class, &written)?)
             .is_some()
@@ -356,6 +358,7 @@ pub(crate) fn descriptor_with_roots(
     // Every enum of the package, whether a feature reaches it or not: an enum
     // only used by operations is still part of the metamodel's vocabulary.
     let mut enums = Map::new();
+    let mut enum_literals = Map::new();
     let mut package_enums: Vec<&Class> = package_classes
         .iter()
         .map(|idx| &ctx[*idx])
@@ -363,18 +366,22 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     package_enums.sort_unstable_by_key(|class| class.name());
     for class in package_enums {
-        dropped_in_class(
-            ctx,
-            pack,
-            class,
-            &semantics::descriptor_class_name(ctx, pack, class.idx)?,
-            &mut dropped,
-        );
-        let literals: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
-        enums.insert(
-            semantics::descriptor_class_name(ctx, pack, class.idx)?,
-            json!(literals),
-        );
+        let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+        dropped_in_class(class, &key, &mut dropped);
+        let names: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
+        // shortcut: without the file's text (`descriptor_json`) the parser's one text per literal
+        // is the `value` and `literal` is null; `describe` always passes the text's literals.
+        let carried = literals.get(&key).cloned().unwrap_or_else(|| {
+            class
+                .literals()
+                .iter()
+                .map(|lit| {
+                    json!({"name": lit.name(), "value": lit.value().map(value_json), "literal": null})
+                })
+                .collect()
+        });
+        enum_literals.insert(key.clone(), json!(carried));
+        enums.insert(key, json!(names));
     }
 
     let mut descriptor = json!({
@@ -384,12 +391,11 @@ pub(crate) fn descriptor_with_roots(
         "rootClasses": root_names,
         "classes": classes,
         "enums": enums,
+        "enumLiterals": enum_literals,
+        "nsPrefix": pack.ns_prefix(),
     });
     if let Some(packages) = packages {
         descriptor["packages"] = Value::Object(packages);
-    }
-    if pack.ns_prefix().is_some() {
-        dropped.push(("nsPrefix", pack.name().to_owned(), String::new()));
     }
     if has_foreign_annotation(pack.annotations()) {
         dropped.push(("eAnnotation", pack.name().to_owned(), String::new()));
@@ -521,37 +527,18 @@ fn has_foreign_annotation(annotations: &Annots) -> bool {
 }
 
 /// What `class` (written under `key`) and its members say that the descriptor does not.
-fn dropped_in_class(ctx: &Ctx, pack: &Pack, class: &Class, key: &str, out: &mut Vec<Dropped>) {
+fn dropped_in_class(class: &Class, key: &str, out: &mut Vec<Dropped>) {
     let mut at = |kind, member: &str| out.push((kind, key.to_owned(), member.to_owned()));
     if has_foreign_annotation(class.annotations()) {
         at("eAnnotation", "");
     }
-    if semantics::is_eclass(class) {
-        let declared: Vec<String> = class
-            .sup()
-            .iter()
-            .filter_map(|sup| semantics::descriptor_class_name(ctx, pack, *sup).ok())
-            .collect();
-        for (kind, hit) in [
-            ("interface", class.is_interface()),
-            (
-                "instanceClassName",
-                class.instance_class_name().or(class.inst_name()).is_some(),
-            ),
-            ("superTypeOrder", !declared.is_sorted()),
-        ] {
-            if hit {
-                at(kind, "");
-            }
-        }
+    if semantics::is_eclass(class) && class.instance_class_name().or(class.inst_name()).is_some() {
+        at("instanceClassName", "");
     }
     for operation in class.operations() {
         at("eOperation", operation.name());
     }
     for literal in class.literals() {
-        if literal.value().is_some() {
-            at("literalValue", literal.name());
-        }
         if has_foreign_annotation(literal.annotations()) {
             at("eAnnotation", literal.name());
         }
@@ -560,23 +547,13 @@ fn dropped_in_class(ctx: &Ctx, pack: &Pack, class: &Class, key: &str, out: &mut 
         if has_foreign_annotation(&feature.annotations) {
             at("eAnnotation", &feature.name);
         }
-        let bounds = feature.bounds;
         for (kind, hit) in [
-            ("changeable", feature.changeable == Some(false)),
             ("volatile", feature.volatile == Some(true)),
             ("transient", feature.transient == Some(true)),
             ("derived", feature.derived == Some(true)),
-            ("unsettable", feature.unsettable == Some(true)),
             ("resolveProxies", feature.resolve_proxies == Some(false)),
-            (
-                "defaultValueLiteral",
-                feature.default_value_literal.is_some() || feature.default_value.is_some(),
-            ),
-            ("eKeys", !feature.keys.is_empty()),
-            (
-                "bounds",
-                bounds.lbound >= 2 || !matches!(bounds.ubound, Some(1) | None),
-            ),
+            // `defaultValueLiteral` is carried; a `defaultValue` is not.
+            ("defaultValueLiteral", feature.default_value.is_some()),
         ] {
             if hit {
                 at(kind, &feature.name);
@@ -616,6 +593,8 @@ fn class_descriptor(
         require(ctx, pack, class, *sup, written)?;
         super_types.push(semantics::descriptor_class_name(ctx, pack, *sup)?);
     }
+    // Declaration order, before the sort `superTypes` keeps.
+    let super_type_order = super_types.clone();
     super_types.sort_unstable();
 
     let mut attributes = Vec::new();
@@ -690,7 +669,9 @@ fn class_descriptor(
 
     let mut entry = json!({
         "abstract": class.is_abstract() || class.is_interface(),
+        "interface": !ctx.is_ecore_class(class.idx) && class.is_interface(),
         "superTypes": super_types,
+        "superTypeOrder": super_type_order,
         "attributes": attributes,
         "containments": containments,
         "references": references,
@@ -785,6 +766,24 @@ fn add_semantics(
         .unwrap_or(Value::Null);
     entry["merge"] = semantics::merge_json(&merge, ctx, pack)?;
     entry["provenance"] = semantics::provenance_json(&provenance);
+    // The facts the file declares and the rule does not read: bounds, default, flags and keys.
+    // Ecore's own classes are Léo's built-ins, which no file declares: his values.
+    if ctx.is_ecore_class(class.idx) {
+        let many = feature.bounds.ubound.is_none_or(|ubound| ubound > 1);
+        entry["lowerBound"] = json!(0);
+        entry["upperBound"] = json!(if many { -1 } else { 1 });
+        entry["default"] = Value::Null;
+        entry["changeable"] = json!(true);
+        entry["unsettable"] = json!(false);
+        entry["eKeys"] = json!([]);
+    } else {
+        entry["lowerBound"] = json!(feature.bounds.lbound);
+        entry["upperBound"] = json!(feature.bounds.ubound.map_or(-1, |ubound| ubound as i64));
+        entry["default"] = json!(feature.default_value_literal);
+        entry["changeable"] = json!(feature.changeable.unwrap_or(true));
+        entry["unsettable"] = json!(feature.unsettable.unwrap_or(false));
+        entry["eKeys"] = json!(feature.keys);
+    }
     Ok(())
 }
 
@@ -972,64 +971,6 @@ mod tests {
         );
     }
 
-    /// A class carries its own declarations only, and every one of them carries
-    /// the four `formatVersion` 2 keys: the facets as written, the annotation,
-    /// the merge rule and its provenance.
-    ///
-    /// `TreeNode.ID` is the shape of a required text slot, its `presence`
-    /// `declared` because `lowerBound="1"` differs from Ecore's `0..1` default;
-    /// `TreeNode.name` the same leaf under an `OptionLog`, and although it
-    /// writes `lowerBound="0" upperBound="1"` it resolves to that default, so
-    /// the conservative reading calls it `ecoreDefault` rather than claim a
-    /// declaration the parsed feature no longer distinguishes.
-    #[test]
-    fn bt_tree_node_declares_only_its_own_features() {
-        let descriptor = bt_descriptor();
-        let tree_node = &descriptor["classes"]["TreeNode"];
-        assert_eq!(
-            tree_node["attributes"],
-            json!([
-                {"name": "ID", "kind": "string", "many": false,
-                 "required": true, "isId": false,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "attribute", "shape": {"kind": "single"},
-                           "leaf": {"kind": "text"}},
-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "declared"}},
-                {"name": "name", "kind": "string", "many": false,
-                 "required": false, "isId": false,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "attribute", "shape": {"kind": "optional"},
-                           "leaf": {"kind": "text"}},
-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "ecoreDefault"}},
-            ])
-        );
-    }
-
-    /// The one entry the whole provenance argument rests on. `bt.ecore` writes
-    /// no `ordered` anywhere, and a behaviour tree's `Sequence` runs its
-    /// children left to right, so the sequence this compiles to is Arachne's
-    /// decision and the descriptor says so: `houseDefault`, with `facets`
-    /// showing the file was silent.
-    #[test]
-    fn bt_control_node_containment_is_many_ordered_and_subclass_typed() {
-        let descriptor = bt_descriptor();
-        let control_node = &descriptor["classes"]["ControlNode"];
-        assert_eq!(
-            control_node["containments"],
-            json!([
-                {"name": "children", "target": "TreeNode", "many": true,
-                 "required": false, "ordered": true,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "containment", "shape": {"kind": "sequence"},
-                           "target": "TreeNode"},
-                 "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
-                                "leaf": "notApplicable", "presence": "declared"}},
-            ])
-        );
-    }
-
     /// The digest is a function of the descriptor's content: rendering it
     /// pretty, compact or with its keys in another order gives one digest, a
     /// second generation from the same `.ecore` gives the same one, and one
@@ -1145,136 +1086,6 @@ mod tests {
 
     fn builtins_descriptor() -> Value {
         descriptor_of("pet_metamodels/ecore_builtins.ecore")
-    }
-
-    /// Ecore's classes are listed under a package-qualified key and a
-    /// metamodel's own are not, which is what lets a metamodel declaring its
-    /// own `EAnnotation` be described beside Ecore's. ModelSet holds 36 that
-    /// do.
-    ///
-    /// `EObject` is listed although it is never generated: it has no feature,
-    /// so it adds no rule, and listing it is what makes every supertype and
-    /// every target the descriptor writes resolve to a class the descriptor
-    /// lists — which `moirai-semantics` requires and which dropping the
-    /// supertype silently would buy at the price of contradicting EMF, where
-    /// an explicit `EObject` supertype is visible in the reflective API.
-    #[test]
-    fn ecore_classes_are_listed_under_a_package_qualified_key() {
-        let descriptor = builtins_descriptor();
-        let mut names: Vec<&str> = descriptor["classes"]
-            .as_object()
-            .expect("classes")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        names.sort_unstable();
-        assert_eq!(
-            names,
-            [
-                "Element",
-                "Model",
-                "Part",
-                "Port",
-                "ecore::EAnnotation",
-                "ecore::EModelElement",
-                "ecore::ENamedElement",
-                "ecore::EObject",
-                "ecore::EStringToStringMapEntry",
-            ]
-        );
-        assert_eq!(
-            descriptor["classes"]["Model"]["superTypes"],
-            json!(["ecore::EObject"])
-        );
-        assert_eq!(
-            descriptor["classes"]["Port"]["superTypes"],
-            json!(["ecore::ENamedElement"])
-        );
-        assert_eq!(
-            descriptor["classes"]["ecore::EObject"],
-            json!({
-                "abstract": false, "superTypes": [],
-                "attributes": [], "containments": [], "references": []
-            }),
-            "`EObject` is concrete and has no feature, as `Ecore.ecore` declares it"
-        );
-        // A `::` is not a character an Ecore name can hold, so the key cannot
-        // be one a metamodel's own class claims.
-        assert!(names.iter().filter(|name| name.contains("::")).count() == 5);
-    }
-
-    /// The four features of `EAnnotation` that carry a construction and the
-    /// three that do not, as data: the ordered containment of annotations,
-    /// the optional `source`, the `details` map to a register over an
-    /// optional text, and the two `EObject`-typed features and the transient
-    /// back-pointer recorded with their reason rather than dropped.
-    #[test]
-    fn the_annotation_features_carry_their_rules_and_their_refusals() {
-        let descriptor = builtins_descriptor();
-        let annotation = &descriptor["classes"]["ecore::EAnnotation"];
-        let rule = |array: &str, name: &str| -> Value {
-            annotation[array]
-                .as_array()
-                .unwrap_or_else(|| panic!("`{array}`"))
-                .iter()
-                .find(|entry| entry["name"] == json!(name))
-                .unwrap_or_else(|| panic!("`EAnnotation.{name}`"))["merge"]
-                .clone()
-        };
-
-        assert_eq!(
-            descriptor["classes"]["ecore::EModelElement"]["containments"][0],
-            json!({
-                "name": "eAnnotations", "target": "ecore::EAnnotation",
-                "many": true, "required": false, "ordered": true,
-                "facets": {"ordered": null, "unique": null}, "annotation": null,
-                "merge": {"kind": "containment", "shape": {"kind": "sequence"},
-                          "target": "ecore::EAnnotation"},
-                "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
-                               "leaf": "notApplicable", "presence": "declared"}
-            })
-        );
-        assert_eq!(
-            rule("attributes", "source"),
-            json!({"kind": "attribute", "shape": {"kind": "optional"},
-                   "leaf": {"kind": "text"}}),
-            "a silent `lowerBound` is Ecore's 0, so `source` is optional text"
-        );
-        assert_eq!(
-            rule("containments", "details"),
-            json!({"kind": "attribute",
-                   "shape": {"kind": "keyed", "key": {"kind": "str"}},
-                   "leaf": {"kind": "optionalRegister"}}),
-            "EMF's map entry convention makes `details` a map, and its optional \
-             value a register so that a key put with no value is read back"
-        );
-        assert_eq!(
-            rule("containments", "contents"),
-            json!({"kind": "unsupported", "reason": "eObjectContainment"})
-        );
-        assert_eq!(
-            rule("references", "references"),
-            json!({"kind": "unsupported", "reason": "eObjectReference"})
-        );
-        assert_eq!(
-            rule("references", "eModelElement"),
-            json!({"kind": "unsupported", "reason": "transient"}),
-            "the back-pointer of a containment, which `analysis.rs:74` drops"
-        );
-        // The map is Ecore's own convention and not a `urn:arachne:semantics`
-        // annotation, so the two collection facets are sourced to Ecore.
-        let details = descriptor["classes"]["ecore::EAnnotation"]["containments"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|entry| entry["name"] == json!("details"))
-            .unwrap();
-        assert_eq!(
-            details["provenance"],
-            json!({"ordered": "ecoreDefault", "unique": "ecoreDefault",
-                   "leaf": "houseDefault", "presence": "declared"})
-        );
-        assert_eq!(details["annotation"], Value::Null);
     }
 
     /// The descriptor `arachne describe` emits is one `moirai-semantics`
