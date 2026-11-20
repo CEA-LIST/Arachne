@@ -14,14 +14,14 @@ use log::debug;
 use crate::codegen::semantics::is_eclass;
 
 /// A concrete, non-interface EClass: what a model can hold an instance of.
-fn is_instantiable_class(class: &Class) -> bool {
+fn is_concrete_eclass(class: &Class) -> bool {
     class.is_concrete() && !class.is_interface() && is_eclass(class)
 }
 
 fn has_instantiable_descendant(ctx: &Ctx, class: &Class) -> bool {
     class.sub().iter().any(|idx| {
         let subclass = &ctx.classes()[**idx];
-        is_instantiable_class(subclass) || has_instantiable_descendant(ctx, subclass)
+        is_concrete_eclass(subclass) || has_instantiable_descendant(ctx, subclass)
     })
 }
 
@@ -54,7 +54,7 @@ pub(crate) fn compute_top_level_roots(
         .copied()
         .filter(|class_idx| {
             let class = &ctx.classes()[**class_idx];
-            is_instantiable_class(class) && !concrete_containment_incoming.contains(class_idx)
+            is_concrete_eclass(class) && !concrete_containment_incoming.contains(class_idx)
         })
         .collect();
 
@@ -180,7 +180,7 @@ fn has_concrete_descendant(
         }
 
         let class = &ctx.classes()[*candidate];
-        if is_instantiable_class(class) {
+        if is_concrete_eclass(class) {
             return true;
         }
 
@@ -204,7 +204,7 @@ fn concrete_descendants_in_package(
         }
 
         let class = &ctx.classes()[*candidate];
-        if is_instantiable_class(class) {
+        if is_concrete_eclass(class) {
             result.insert(candidate);
         }
 

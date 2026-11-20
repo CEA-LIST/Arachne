@@ -447,12 +447,13 @@ fn add_semantics(
 ) -> Result<()> {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
     // The key's slot is a `Ctx` index, which names nothing a reader of the descriptor can resolve.
-    if let MergeRule::Attribute {
-        shape: Shape::Keyed {
-            key: KeyKind::Enum { .. },
-        },
-        ..
-    } = &merge
+    if let MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } = &merge
+        && matches!(
+            shape,
+            Shape::Keyed {
+                key: KeyKind::Enum { .. }
+            }
+        )
     {
         return Err(ArachneError::EnumKeyedMap {
             class: class.name().to_string(),
