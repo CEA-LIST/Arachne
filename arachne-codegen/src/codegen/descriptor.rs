@@ -227,7 +227,8 @@ pub(crate) fn descriptor_with_roots(
         .map(|idx| &ctx[*idx])
         .filter(|class| !class.is_enum())
         .collect();
-    included.sort_unstable_by_key(|class| class.name());
+    // By the key the class is written under, so a refusal names the same class on every run.
+    included.sort_by_cached_key(|class| semantics::descriptor_class_name(ctx, class.idx));
     for class in &included {
         let key = semantics::descriptor_class_name(ctx, class.idx);
         if classes

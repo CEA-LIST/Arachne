@@ -117,9 +117,10 @@ pub(crate) fn collect_reachable_classes(
     reachable
 }
 
-/// Adds to `reachable` what its classes' plain references name: a class of `package_classes`
-/// with what `collect_reachable_classes` reaches from it, and `EObject` alone, so that listing it
-/// pulls in none of its subclasses. Repeats until nothing is added.
+/// Adds to `reachable` what its classes name: `EObject` alone, when a listed class has it as a
+/// supertype or a reference target, so that listing it pulls in none of its subclasses; and, for
+/// a plain reference target in `package_classes`, that class with what `collect_reachable_classes`
+/// reaches from it, never through `EObject`. Repeats until nothing is added.
 pub(crate) fn follow_reference_targets(
     ctx: &Ctx,
     reachable: &mut HashSet<idx::Class>,
@@ -127,7 +128,23 @@ pub(crate) fn follow_reference_targets(
     described: &HashSet<idx::Class>,
 ) {
     let eobject = crate::codegen::ecore::eobject(ctx);
+    let walkable: HashSet<idx::Class> = described
+        .iter()
+        .copied()
+        .filter(|class| Some(*class) != eobject)
+        .collect();
     loop {
+        let before = reachable.len();
+        if let Some(eobject) = eobject
+            && reachable.iter().any(|class| {
+                ctx[*class].sup().contains(&eobject)
+                    || ctx[*class].structural().iter().any(|feature| {
+                        feature.kind == structural::Typ::EReference && feature.typ == Some(eobject)
+                    })
+            })
+        {
+            reachable.insert(eobject);
+        }
         let targets: Vec<idx::Class> = reachable
             .iter()
             .flat_map(|class| ctx[*class].structural())
@@ -135,12 +152,9 @@ pub(crate) fn follow_reference_targets(
             .filter_map(|feature| feature.typ)
             .filter(|target| !reachable.contains(target))
             .collect();
-        let before = reachable.len();
         for target in targets {
-            if Some(target) == eobject {
-                reachable.insert(target);
-            } else if package_classes.contains(&target) && !ctx[target].is_enum() {
-                reachable.extend(collect_reachable_classes(ctx, target, described));
+            if package_classes.contains(&target) && !ctx[target].is_enum() {
+                reachable.extend(collect_reachable_classes(ctx, target, &walkable));
             }
         }
         if reachable.len() == before {

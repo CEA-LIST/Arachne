@@ -85,6 +85,8 @@ pub fn describe(path: &Path) -> crate::Result<Described> {
                         "{parse}\ncaused by: {}",
                         format!("{cause:#}").replace('\n', " ")
                     )),
+                    // A file that cannot be read keeps its read error alone: the loader fails on
+                    // the same read, so a cause line would only repeat it.
                     refused => refused,
                 })
         }
