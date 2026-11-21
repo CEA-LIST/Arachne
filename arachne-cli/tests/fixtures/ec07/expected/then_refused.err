@@ -1,0 +1,4 @@
+[ERROR arachne] Error: Failed to parse Ecore metamodel: Unsupported namespaced attribute `id` in `eClassifiers`
+    at `eClassifiers` named `Root`, line 6, column 3
+    at `EPackage` named `p`, line 2, column 1
+    caused by: Failed to parse Ecore metamodel: Unsupported namespaced attribute `id` in `eClassifiers` at `eClassifiers` named `Root`, line 6, column 3 at `EPackage` named `p`, line 2, column 1

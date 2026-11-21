@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="lib2" nsURI="urn:lib2" nsPrefix="lib2">
+  <eClassifiers xsi:type="ecore:EClass" name="E">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="title" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="G">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="toF" eType="#//inner/Missing"/>
+  </eClassifiers>
+  <eSubpackages name="inner" nsURI="urn:inner" nsPrefix="inner">
+    <eClassifiers xsi:type="ecore:EClass" name="F">
+      <eStructuralFeatures xsi:type="ecore:EAttribute" name="code" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+  </eSubpackages>
+</ecore:EPackage>

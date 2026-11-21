@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="pubcrawl" nsURI="http://www.example.org/pubcrawl" nsPrefix="pubcrawl">
+  <eClassifiers xsi:type="ecore:EClass" name="PubCrawl">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="stops" upperBound="-1"
+        eType="#//Stop" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Participant">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="firstname" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="lastname" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Stop" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="visited" lowerBound="1"
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="score" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="participants" upperBound="20"
+        eType="#//Participant"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Viewpoint" eSuperTypes="#//Stop">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="description" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="TapasBar" eSuperTypes="#//Stop">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="style" lowerBound="1" eType="#//Style"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="Style">
+    <eLiterals name="TRADITIONAL"/>
+    <eLiterals name="SEAFOOD" value="1"/>
+    <eLiterals name="MODERN" value="2"/>
+    <eLiterals name="VEGETARIAN" value="3"/>
+  </eClassifiers>
+</ecore:EPackage>

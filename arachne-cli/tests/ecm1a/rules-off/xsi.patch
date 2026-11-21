@@ -1,0 +1,11 @@
+--- a/arachne-parser/src/parser.rs
++++ b/arachne-parser/src/parser.rs
+@@ -88,7 +88,7 @@
+ /// Find the root name, checking namespace attributes on every element. Quoted values,
+ /// comments, processing instructions, CDATA and DTD contents are not declarations.
+ fn missing_xsi_declaration(input: &str) -> Option<usize> {
+-    if !input.contains("xsi:") {
++    if true || !input.contains("xsi:") {
+         return None;
+     }
+     let mut cursor = 0;

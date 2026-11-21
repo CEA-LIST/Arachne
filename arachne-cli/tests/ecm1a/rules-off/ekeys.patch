@@ -1,0 +1,10 @@
+--- a/arachne-parser/src/parser.rs
++++ b/arachne-parser/src/parser.rs
+@@ -274,7 +274,6 @@
+                     "lowerBound",
+                     "upperBound",
+                     "eOpposite",
+-                    "eKeys",
+                     "containment",
+                     "iD",
+                     "ordered",

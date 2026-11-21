@@ -1,200 +1,163 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::fs;
 
-use log::{info, warn};
 use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
-    config::{Config, Formatting, MoiraiPathStyle},
-    deployment::{BuildContextLayout, DeploymentCtx, write_deployment_artifacts},
+    config::{Config, Formatting},
     error::{ArachneError, Result},
 };
 
-/// Writes a complete Rust project for the generated code.
+const ARACHNE_XMI_RUNTIME: &str = arachne_xmi::RUNTIME_SOURCE;
+
+/// Writes a complete Rust library (Cargo.toml, folders, etc.) and flush the generated code in the different files.
 pub fn write_project(
     config: &Config,
     project_name: &str,
-    package_name: &str,
     classifiers_code: TokenStream,
     references_code: TokenStream,
     package_code: TokenStream,
-    metamodel_descriptor: &serde_json::Value,
+    read_as_ecore_code: TokenStream,
+    requires_sink: bool,
 ) -> Result<()> {
     let project_name = sanitize_package_name(project_name);
     let root = &config.output_dir;
     let src_dir = root.join("src");
+    let xmi_runtime_dir = root.join("runtime/arachne-xmi");
+    let xmi_runtime_src_dir = xmi_runtime_dir.join("src");
 
     fs::create_dir_all(&src_dir)?;
+    fs::create_dir_all(&xmi_runtime_src_dir)?;
 
     let lib_rs = render_lib_rs();
 
-    let (formatted_classifiers, formatted_references, formatted_package, formatted_lib) =
-        match config.format_code {
-            Formatting::None => {
-                // Do not format the code
-                (
-                    classifiers_code.to_string(),
-                    references_code.to_string(),
-                    package_code.to_string(),
-                    lib_rs.to_string(),
-                )
-            }
-            Formatting::Rustfmt => (
-                format_with_rustfmt(classifiers_code)?,
-                format_with_rustfmt(references_code)?,
-                format_with_rustfmt(package_code)?,
-                format_with_rustfmt(lib_rs)?,
-            ),
-            Formatting::Prettyplease => (
-                format_with_prettyplease(classifiers_code)?,
-                format_with_prettyplease(references_code)?,
-                format_with_prettyplease(package_code)?,
-                format_with_prettyplease(lib_rs)?,
-            ),
-        };
+    let (
+        formatted_classifiers,
+        formatted_references,
+        formatted_package,
+        formatted_read_as_ecore,
+        formatted_lib,
+    ) = match config.format_code {
+        Formatting::None => {
+            // Do not format the code
+            (
+                classifiers_code.to_string(),
+                references_code.to_string(),
+                package_code.to_string(),
+                read_as_ecore_code.to_string(),
+                lib_rs.to_string(),
+            )
+        }
+        Formatting::Rustfmt => (
+            format_with_rustfmt(classifiers_code)?,
+            format_with_rustfmt(references_code)?,
+            format_with_rustfmt(package_code)?,
+            format_with_rustfmt(read_as_ecore_code)?,
+            format_with_rustfmt(lib_rs)?,
+        ),
+        Formatting::Prettyplease => (
+            format_with_prettyplease(classifiers_code)?,
+            format_with_prettyplease(references_code)?,
+            format_with_prettyplease(package_code)?,
+            format_with_prettyplease(read_as_ecore_code)?,
+            format_with_prettyplease(lib_rs)?,
+        ),
+    };
 
-    let moirai = resolve_moirai_paths(&config.moirai_root, root, config.moirai_path_style)?;
-    info!(
-        "Moirai path dependencies rooted at `{}`",
-        to_path_string(&moirai.base)
-    );
-    let cargo_toml = render_cargo_toml(&project_name, &moirai.base);
+    let cargo_toml = render_cargo_toml(&project_name, config, requires_sink)?;
 
     fs::write(root.join("Cargo.toml"), cargo_toml)?;
-    // The descriptor `network_node` serves on `GET /api/metamodel` (its
-    // `METAMODEL_PATH` defaults to this file, next to the manifest).
     fs::write(
-        root.join("metamodel.json"),
-        format!("{:#}\n", metamodel_descriptor),
+        xmi_runtime_dir.join("Cargo.toml"),
+        render_arachne_xmi_cargo_toml(),
     )?;
+    fs::write(xmi_runtime_src_dir.join("lib.rs"), ARACHNE_XMI_RUNTIME)?;
     fs::write(src_dir.join("lib.rs"), formatted_lib)?;
     fs::write(src_dir.join("classifiers.rs"), formatted_classifiers)?;
     fs::write(src_dir.join("references.rs"), formatted_references)?;
     fs::write(src_dir.join("package.rs"), formatted_package)?;
-
-    // Generate deployment artifacts (network_node example + Dockerfile)
-    let ctx = DeploymentCtx::new(&project_name, package_name, moirai.build_context);
-    write_deployment_artifacts(root, &ctx)?;
+    fs::write(src_dir.join("read_as_ecore.rs"), formatted_read_as_ecore)?;
 
     Ok(())
 }
 
-/// How the generated project addresses the Moirai workspace.
-struct MoiraiPaths {
-    /// Prefix the `path` dependencies of the generated manifest are built on.
-    base: PathBuf,
-    /// Layout the generated `Dockerfile` must find in its build context, or
-    /// `None` when `base` is absolute and therefore unusable in an image.
-    build_context: Option<BuildContextLayout>,
-}
-
-/// Resolves how the generated manifest addresses the Moirai workspace.
-///
-/// With [`MoiraiPathStyle::Relative`] (the default) the prefix is expressed
-/// relative to `output_dir`, so the emitted manifest contains no machine
-/// specific path and stays valid wherever the pair
-/// *(generated project, Moirai workspace)* is checked out — as long as their
-/// relative arrangement is preserved. With [`MoiraiPathStyle::Absolute`] the
-/// canonical absolute path is emitted instead, which survives moving the
-/// generated project alone but pins it to the generating machine.
-///
-/// Both inputs are canonicalised first, so `..` segments and symlinks in
-/// either path cannot leak into the result.
-fn resolve_moirai_paths(
-    moirai_root: &Path,
-    output_dir: &Path,
-    style: MoiraiPathStyle,
-) -> Result<MoiraiPaths> {
-    let moirai_root = fs::canonicalize(moirai_root)
-        .map_err(|e| ArachneError::Config(format!("Failed to resolve moirai root: {e}")))?;
-
-    if style == MoiraiPathStyle::Absolute {
-        return Ok(MoiraiPaths {
-            base: moirai_root,
-            build_context: None,
-        });
-    }
-
-    let output_dir = fs::canonicalize(output_dir)
-        .map_err(|e| ArachneError::Config(format!("Failed to resolve output directory: {e}")))?;
-
-    // `diff_paths` only fails when the two paths have incomparable roots
-    // (different Windows prefixes); an absolute path is then the only option.
-    let Some(base) = pathdiff::diff_paths(&moirai_root, &output_dir) else {
-        warn!(
-            "Cannot express {} relative to {}; falling back to an absolute path dependency",
-            moirai_root.display(),
-            output_dir.display()
-        );
-        return Ok(MoiraiPaths {
-            base: moirai_root,
-            build_context: None,
-        });
+/// Renders the Cargo.toml file for the generated project, including dependencies on Moirai crates and other necessary libraries.
+fn render_cargo_toml(project_name: &str, config: &Config, requires_sink: bool) -> Result<String> {
+    let moirai = |name: &str| -> Result<String> {
+        // Apply identical feature settings to local and pinned dependencies so
+        // minimal builds do not accidentally inherit Moirai's default features.
+        let options = match name {
+            "moirai-crdt" => ", default-features = false",
+            // Reference membership depends on sinks even in a minimal build.
+            "moirai-protocol" if requires_sink => ", features = [\"sink\"]",
+            _ => "",
+        };
+        if let Some(path) = &config.moirai_path {
+            // Absolute paths also work when the generated project is outside Arachne.
+            let path = path.canonicalize()?.join(name);
+            let path = path.to_str().ok_or_else(|| {
+                ArachneError::Config("Moirai path must be valid UTF-8".to_string())
+            })?;
+            Ok(format!("{{ path = {}{options} }}", toml_string(path)))
+        } else {
+            Ok(format!(
+                "{{ git = \"https://github.com/CEA-LIST/Moirai.git\", tag = \"v0.8.2\"{options} }}"
+            ))
+        }
     };
-
-    let build_context =
-        split_at_common_ancestor(&output_dir, &moirai_root).map(|(project_dir, moirai_dir)| {
-            BuildContextLayout {
-                project_dir: to_path_string(&project_dir),
-                moirai_dir: to_path_string(&moirai_dir),
-            }
-        });
-
-    Ok(MoiraiPaths {
-        base,
-        build_context,
-    })
+    let protocol = moirai("moirai-protocol")?;
+    let crdt = moirai("moirai-crdt")?;
+    let macros = moirai("moirai-macros")?;
+    // Generate runtime dependencies only. Applications can add fuzz generators,
+    // randomness, graph comparison and footprint tooling to their own manifest.
+    Ok(format!(
+        "[package]\n\
+        name = \"{project_name}\"\n\
+        version = \"0.1.0\"\n\
+        edition = \"2024\"\n\n\
+        [workspace]\n\
+        resolver = \"3\"\n\n\
+        [dependencies]\n\
+        moirai-protocol = {protocol}\n\
+        moirai-crdt = {crdt}\n\
+        moirai-macros = {macros}\n\
+        petgraph = \"0.8.3\"\n\
+        rustc-hash = \"2.1.3\"\n\
+        arachne-xmi = {{ path = \"runtime/arachne-xmi\" }}\n\n\
+        [features]\n\
+        default = [\"sink\"]\n\
+        sink = [\"moirai-protocol/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n\n\
+        # Moirai macros expose test-only hooks; applications may opt in manually.\n\
+        [lints.rust]\n\
+        unexpected_cfgs = {{ level = \"warn\", check-cfg = ['cfg(feature, values(\"test_utils\"))'] }}\n",
+    ))
 }
 
-/// Re-expresses two absolute paths relative to their deepest common ancestor —
-/// the directory a Docker build context has to be rooted at for both to be
-/// visible.
-///
-/// Returns `None` when one path contains the other, since there is then no
-/// context in which both appear as siblings of a shared root.
-fn split_at_common_ancestor(left: &Path, right: &Path) -> Option<(PathBuf, PathBuf)> {
-    let left: Vec<_> = left.components().collect();
-    let right: Vec<_> = right.components().collect();
-
-    let shared = left
-        .iter()
-        .zip(right.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-
-    let left_rest: PathBuf = left[shared..].iter().collect();
-    let right_rest: PathBuf = right[shared..].iter().collect();
-
-    if left_rest.as_os_str().is_empty() || right_rest.as_os_str().is_empty() {
-        return None;
+fn toml_string(value: &str) -> String {
+    let mut escaped = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            ch if ch.is_control() => escaped.push_str(&format!("\\u{:04X}", ch as u32)),
+            ch => escaped.push(ch),
+        }
     }
-
-    Some((left_rest, right_rest))
+    escaped.push('"');
+    escaped
 }
 
-/// The generated manifest.
-///
-/// `xml-builder` is there because `codegen/read_as_ecore.rs` writes a `read_as_ecore` query into
-/// `package.rs` that builds an XMI document with it; upstream added both together, and the
-/// dependency has to follow the emitter or nothing this generator writes compiles.
-fn render_cargo_toml(project_name: &str, moirai_root: &Path) -> String {
-    let moirai_crdt = moirai_root.join("moirai-crdt");
-    let moirai_protocol = moirai_root.join("moirai-protocol");
-    let moirai_macros = moirai_root.join("moirai-macros");
-    let moirai_fuzz = moirai_root.join("moirai-fuzz");
-    let moirai_network = moirai_root.join("moirai-network");
-
-    format!(
-        "[package]\nname = \"{project_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmoirai-crdt = {{ path = \"{}\" }}\nmoirai-protocol = {{ path = \"{}\", features = [\"serde\"] }}\nmoirai-macros = {{ path = \"{}\" }}\nmoirai-fuzz = {{ path = \"{}\" }}\nmoirai-network = {{ path = \"{}\" }}\nserde = {{ version = \"1.0\", features = [\"derive\"] }}\nserde_json = \"1.0\"\nsha2 = \"0.10\"\npetgraph = \"0.8.3\"\nrand = \"0.10.0\"\nxml-builder = \"0.6.0\"\n\n[features]\ndefault = [\"fuzz\", \"sink\", \"serde\"]\nfuzz = []\nserde = [\"moirai-protocol/serde\", \"moirai-macros/serde\", \"moirai-crdt/serde\"]\nsink = [\"moirai-protocol/sink\",\"moirai-fuzz/sink\",\"moirai-macros/sink\",\"moirai-crdt/sink\"]\n",
-        to_path_string(&moirai_crdt),
-        to_path_string(&moirai_protocol),
-        to_path_string(&moirai_macros),
-        to_path_string(&moirai_fuzz),
-        to_path_string(&moirai_network)
-    )
+fn render_arachne_xmi_cargo_toml() -> &'static str {
+    "[package]\n\
+    name = \"arachne-xmi\"\n\
+    version = \"0.1.0\"\n\
+    edition = \"2024\"\n\
+    license = \"Apache-2.0\"\n\n\
+    [dependencies]\n\
+    quick-xml = \"0.42.0\"\n"
 }
 
 fn render_lib_rs() -> TokenStream {
@@ -202,6 +165,7 @@ fn render_lib_rs() -> TokenStream {
         pub mod package;
         pub mod classifiers;
         pub mod references;
+        pub mod read_as_ecore;
     }
 }
 
@@ -228,10 +192,6 @@ fn sanitize_package_name(name: &str) -> String {
     } else {
         trimmed
     }
-}
-
-fn to_path_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
 }
 
 fn format_with_prettyplease(tokens: TokenStream) -> Result<String> {
@@ -268,108 +228,13 @@ fn format_with_rustfmt(tokens: TokenStream) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
-    use super::{MoiraiPathStyle, render_cargo_toml, resolve_moirai_paths};
-
-    /// Builds the sibling-repository layout the toolchain assumes:
-    /// `<tmp>/moirai` next to `<tmp>/arachne/generated/<name>`.
-    struct Layout {
-        base: PathBuf,
-    }
-
-    impl Layout {
-        fn new(tag: &str) -> Self {
-            let base = std::env::temp_dir()
-                .join(format!("arachne-project-test-{}-{tag}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&base);
-            std::fs::create_dir_all(base.join("moirai")).expect("moirai root");
-            std::fs::create_dir_all(base.join("arachne/generated/demo")).expect("output dir");
-            Self { base }
-        }
-
-        fn moirai(&self) -> PathBuf {
-            self.base.join("moirai")
-        }
-
-        fn output(&self) -> PathBuf {
-            self.base.join("arachne/generated/demo")
-        }
-    }
-
-    impl Drop for Layout {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.base);
-        }
-    }
+    use super::toml_string;
 
     #[test]
-    fn relative_style_walks_up_from_the_output_directory() {
-        let layout = Layout::new("relative");
-
-        let moirai = resolve_moirai_paths(
-            &layout.moirai(),
-            &layout.output(),
-            MoiraiPathStyle::Relative,
-        )
-        .expect("resolution should succeed");
-
-        assert_eq!(moirai.base, Path::new("../../../moirai"));
-    }
-
-    #[test]
-    fn relative_style_describes_the_docker_build_context() {
-        let layout = Layout::new("context");
-
-        let moirai = resolve_moirai_paths(
-            &layout.moirai(),
-            &layout.output(),
-            MoiraiPathStyle::Relative,
-        )
-        .expect("resolution should succeed");
-
-        let context = moirai
-            .build_context
-            .expect("a relative manifest is buildable in an image");
-        assert_eq!(context.project_dir, "arachne/generated/demo");
-        assert_eq!(context.moirai_dir, "moirai");
-    }
-
-    #[test]
-    fn absolute_style_keeps_the_canonical_path_and_has_no_build_context() {
-        let layout = Layout::new("absolute");
-
-        let moirai = resolve_moirai_paths(
-            &layout.moirai(),
-            &layout.output(),
-            MoiraiPathStyle::Absolute,
-        )
-        .expect("resolution should succeed");
-
-        assert!(moirai.base.is_absolute());
-        assert!(moirai.base.ends_with("moirai"));
-        assert!(moirai.build_context.is_none());
-    }
-
-    #[test]
-    fn rendered_manifest_contains_no_absolute_path_under_the_relative_style() {
-        let layout = Layout::new("manifest");
-
-        let moirai = resolve_moirai_paths(
-            &layout.moirai(),
-            &layout.output(),
-            MoiraiPathStyle::Relative,
-        )
-        .expect("resolution should succeed");
-        let manifest = render_cargo_toml("demo-crdt", &moirai.base);
-
-        assert!(manifest.contains(r#"moirai-crdt = { path = "../../../moirai/moirai-crdt" }"#));
-        assert!(
-            manifest.contains(r#"moirai-network = { path = "../../../moirai/moirai-network" }"#)
-        );
-        assert!(
-            !manifest.contains("path = \"/"),
-            "manifest must not embed absolute paths:\n{manifest}"
+    fn manifest_paths_escape_toml_special_characters() {
+        assert_eq!(
+            toml_string("C:\\Moirai\"é\n\u{7}"),
+            "\"C:\\\\Moirai\\\"é\\n\\u0007\""
         );
     }
 }

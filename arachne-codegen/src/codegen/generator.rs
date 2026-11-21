@@ -53,12 +53,6 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// The messages of the warnings collected so far.
-    #[cfg(test)]
-    pub(crate) fn warning_messages(&self) -> Vec<String> {
-        self.warnings.iter().map(Warning::message).collect()
-    }
-
     /// Emit all warnings to stderr
     pub fn emit_warnings(&self) {
         for warning in &self.warnings {
@@ -66,9 +60,18 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Diagnostics retained even when the corresponding fragment contains no code.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tokens.iter().all(TokenStream::is_empty)
+    }
+
     pub fn build(self) -> TokenStream {
         let path: syn::Path =
-            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, &self.path_mod)).unwrap();
+            syn::parse_str(&format!("{}{}", PRIVATE_MOD_PREFIX, self.path_mod)).unwrap();
         let imports = &self.imports;
         let tokens = &self.tokens;
 

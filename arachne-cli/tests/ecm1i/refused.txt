@@ -1,0 +1,42 @@
+modelset/BackupTheBerlios/diva-unix-svn/trunk/divastudio/plugins/org.kermeta.art.model/model/aom/metamodel@runtime_relaxed.ecore
+modelset/BackupTheBerlios/diva-unix-svn/trunk/divastudio/plugins/org.kermeta.art.model/model/metamodel@runtime.ecore
+modelset/SpagoBILabs/SpagoBI-Meta/it.eng.spagobi.meta.model/model/SpagoBIMetaModel.ecore
+modelset/SvenPeldszus/rgse.ttc17.emoflon.tgg/rgse.ttc17.metamodels.src/originalModels/61850.ecore
+modelset/Trust40-Project/Palladio-Supporting-Prolog/bundles/org.palladiosimulator.supporting.prolog.model/model/prolog.ecore
+modelset/TypeFox/xtext-splitted-repo/org.eclipse.xtext.tests/src/org/eclipse/xtext/generator/ecore/GenModelAccessTest.ecore
+modelset/UNIT-Research-Development/ModelTransformation/com.unitbilisim.research.transformation/model/My.ecore
+modelset/abdellAtmani/Modif/testModif/metamodel/My.ecore
+modelset/adam-sse/RoboModel/model/robo.ecore
+modelset/adbetin/ClassLayout2Frontend/_archivo/Ciclo 3/co.classLayout2Frontend/model/classLayout2Frontend.ecore
+modelset/arcadien/emf4cpp/emf4cpp/emf4cpp/emf4cpp.tests/xpand/xpand3.ecore
+modelset/crick77/MDE-ConflictResolution/MDE.Project.ATL/TEST/UFamilies.ecore
+modelset/crick77/MDE-ConflictResolution/it.univaq.disim.uncertainty.ufamilies/metamodel/UFamily.ecore
+modelset/crick77/MDE-ConflictResolution/it.univaq.disim.uncertainty.uuniversity/metamodel/UUniversity.ecore
+modelset/eliericha/atlanalyser/fr.tpt.atlanalyser.examples/examples/CMG/OutputMM/codemodel.ecore
+modelset/fraunhofer-iem/mechatronicuml/SimulinkAdapter/org.muml.simulink/model/Simulink.ecore
+modelset/fraunhofer-iem/mechatronicuml/Uppaal/org.muml.uppaal/model/uppaal.ecore
+modelset/ftsrg/gamma/plugins/de.uni_paderborn.uppaal/model/uppaal.ecore
+modelset/githubbrunob/DSLTransGIT/SOSBuilder/development/metamodel/SOS.ecore
+modelset/grbeni/Y2U/de.uni_paderborn.uppaal/model/uppaal.ecore
+modelset/kit-sdq/Metamodel-Reference-Architecture-Validation/evaluationtooling/metamodelassessor.manualtests/models/systematic/test_containmentwalker_dependency.ecore
+modelset/kthoms/org.eclipse.xpand/tests/org.eclipse.xtend.tests/src/org/eclipse/xtend/typesystem/emf/check/model/test.ecore
+modelset/kuhbaar/modeleng/ModelEng_lab1/model/forms.ecore
+modelset/levilucio/DSLTransLifting/tests/t7/RunHALL.ecore
+modelset/matfurrier/SpagoBI/knowagemeta/modeldefinition/SpagoBIMetaModel.ecore
+modelset/mlanoe/x-vhdl/plugins/net.mlanoe.language.vhdl/model/vhdl.ecore
+modelset/nagaraj1993/Mutation-testing/Old System Test Cases Project/org.eclipse.ocl.examples.xtext.tests/models/genmodel/SysML_ValueTypes_QUDV.ecore
+modelset/securityandtrust/serval-lms/lu.snt.serval.lms.model.base/metamodel/metamodel@runtime.ecore
+modelset/skanur/preesm/plugins/org.ietr.preesm.experiment.model/model/PiMM.ecore
+modelset/stefanocortellessa/Advanced-Modeling-Techniques/Use Cases/compare2uFamily/metamodels/UFamily.ecore
+modelset/stefanocortellessa/Advanced-Modeling-Techniques/Use Cases/compare2uUniversity/metamodels/UUniversity.ecore
+modelset/stefanodifrancesco/uncertainty/it.univaq.disim.uncertainty.ufamilies/metamodel/UFamily.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/FURCAS-dev/FURCAS/DSLEngineering/com.sap.furcas.test/featureFixtures/NestedPackageLookUp.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/MDEGroup/MDEForge/mdeforge/githubmetamodels/RunHALL.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/MDEGroup/MDEForge/mdeforge/githubmetamodels/SOS.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/MDEGroup/MDEForge/mdeforge/githubmetamodels/metamodel@runtime.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/damenac/puzzle/plugins/fr.inria.diverse.puzzle.metrics/temp/RunHALL.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/damenac/puzzle/plugins/fr.inria.diverse.puzzle.metrics/temp/SOS.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/eclipse/ocl/tests/org.eclipse.ocl.examples.xtext.tests/src/org/eclipse/ocl/examples/test/xtext/models/Bug362620.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/eliericha/atlanalyser/fr.tpt.atlanalyser.examples/examples/NonInjectiveInPatterns/OutputMM/codemodel.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/eliericha/atlanalyser/fr.tpt.atlanalyser.examples/examples/TestNGC/OutputMM/codemodel.ecore
+modelset/utwente-fmt/STARS/STARS/sense/meta/uppaal.ecore

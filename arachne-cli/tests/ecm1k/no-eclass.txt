@@ -1,0 +1,34 @@
+modelset/BlackBeltTechnology/judo-generator/hu.blackbelt.judo.generator.transformer.runtime/model/types.ecore
+modelset/FURCAS-dev/FURCAS/EMFEnhancements/org.eclipse.ocl.examples.impactanalyzer.testmodel.company/model/primitivetypes.ecore
+modelset/HiTAsm/Timed-AsmetaL/emf/model/AsmM1.ecore
+modelset/Jiaxin-li/PegasusMDD/types.ecore
+modelset/Liciax/PatouneSmallUML/UML/model/types.ecore
+modelset/RobotML/RobotML-SDK/dsl-papyrus/robotml-extension/org.eclipse.papyrus.robotml.extension/model/types.ecore
+modelset/SINTEF-9012/bvr/no.sintef.bvr.engine.test/src/test/resources/realistic/modelSafetyModule0/model/Types.ecore
+modelset/amirms/gelato/org.servicifi.gelato.language.cobol/metamodel/cobol.ecore
+modelset/amirms/gelato/org.servicifi.gelato.language.jcl/metamodel/jcl.ecore
+modelset/axelreichwein/SysML2OSLCResourceShapes/SysMLProfileToOSLCResourceShapes/Original XMI/types.ecore
+modelset/burhanxz/UML-Synchronously-store-to-DB/model/Types.ecore
+modelset/classicwuhao/asmig/test/umlPrimitiveTypes.ecore
+modelset/destinyfucker/IFMLPluginAdaptation/projects/IFMLEditor/model/Types.ecore
+modelset/diverse-project/k3/k3-sample/lego/lego/metamodel/robot.ecore
+modelset/diverse-project/k3/k3-samples-deployed/logo/k3.sample.maven.logo.model/model/ASMLogo.ecore
+modelset/diverse-project/k3/k3-tools/fr.inria.diverse.k3.tools.aspectGenerator/ASMLogo.ecore
+modelset/eMoflon/emoflon-ibex-tests/MoDiscoIbexTGG/metamodels/Types.ecore
+modelset/gemoc/ale-lang/examples/logo.model/model/ASMLogo.ecore
+modelset/grogers99/cricket-model/types.ecore
+modelset/ifu-lobuntu/jbpm-designer-extensions/jbpm-designer-extensions-emf/models/PrimitiveTypes.ecore
+modelset/lotstrom/Hotel-Management-System/Mac Version/IMPL/types.ecore
+modelset/markusberget/tda593-hotel/types.ecore
+modelset/nikteg/TDA593/types.ecore
+modelset/patins1/ifc4emf/plugins/org.ifc4emf.metamodel.express/model/express.ecore
+modelset/quasarresearchgroup/gesto/ecore_uml_model/JavaLibrary.ecore
+modelset/ra139233/LAB05/types.ecore
+modelset/rpc1/org.eclipse.papyrus/extraplugins/soaml/org.eclipse.papyrus.soaml.profile/model/types.ecore
+modelset/swmuir/knarts/fhir/plugins/org.eclipse.mdht.uml.fhir.core/src/org/eclipse/mdht/hl7/fhir/valueSets/impl/valueSets.ecore
+modelset/tue-mdse/ocl-dataset/dataset-mtl/repos/GRA-UML/tool/plugins/org.ijis.gra.annotation/src/main/resources/model/types.ecore
+modelset/tue-mdse/ocl-dataset/dataset-mtl/repos/RobotML/RobotML-SDK-Juno/plugins/robotml/org.eclipse.papyrus.robotml/model/types.ecore
+modelset/tue-mdse/ocl-dataset/dataset-mtl/repos/metaMOB/metaMOBsynthGenerator/Model/uid_language/model/Types.ecore
+modelset/tue-mdse/ocl-dataset/dataset-mtl/repos/uisleandro/org.eclipse.papyrus/extraplugins/robotml/org.eclipse.papyrus.robotml/model/types.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/MDEGroup/MDEForge/mdeforge/githubmetamodels/ASMLogo.ecore
+modelset/vallejoco/ModifRoundtrip-project/workspaceMR/DemoCoffeeMaker/metamodel/Types.ecore

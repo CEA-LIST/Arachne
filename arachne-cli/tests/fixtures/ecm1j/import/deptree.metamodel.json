@@ -1,0 +1,113 @@
+{
+  "classes": {
+    "T": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "optional"
+            },
+            "target": "inner::S"
+          },
+          "name": "s",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "inner::S",
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "U": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "label",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "inner::S": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "enumLiterals": {},
+  "enums": {},
+  "formatVersion": 2,
+  "nsPrefix": "deptree",
+  "nsURI": "urn:deptree",
+  "package": "deptree",
+  "packages": {
+    "inner": {
+      "nsPrefix": "inner",
+      "nsURI": "urn:deptree/inner"
+    }
+  },
+  "rootClasses": [
+    "T",
+    "U"
+  ]
+}

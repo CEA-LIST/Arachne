@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="shop" nsURI="urn:shop" nsPrefix="shop">
+  <eClassifiers xsi:type="ecore:EClass" name="Shop">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="items" upperBound="-1" eType="#//catalog/Item" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="featured" eType="#//catalog/detail/Tag"/>
+  </eClassifiers>
+  <eSubpackages name="catalog" nsURI="urn:shop/catalog" nsPrefix="catalog">
+    <eClassifiers xsi:type="ecore:EClass" name="Item">
+      <eStructuralFeatures xsi:type="ecore:EReference" name="shop" eType="#//Shop"/>
+    </eClassifiers>
+    <eSubpackages name="detail" nsURI="urn:shop/catalog/detail" nsPrefix="detail">
+      <eClassifiers xsi:type="ecore:EClass" name="Tag"/>
+      <eClassifiers xsi:type="ecore:EClass" name="Note"/>
+    </eSubpackages>
+  </eSubpackages>
+  <eSubpackages name="catalog" nsURI="urn:shop/catalog" nsPrefix="catalog">
+    <eClassifiers xsi:type="ecore:EClass" name="Item">
+      <eStructuralFeatures xsi:type="ecore:EReference" name="shop" eType="#//Shop"/>
+    </eClassifiers>
+    <eSubpackages name="detail" nsURI="urn:shop/catalog/detail" nsPrefix="detail">
+      <eClassifiers xsi:type="ecore:EClass" name="Tag"/>
+      <eClassifiers xsi:type="ecore:EClass" name="Note"/>
+    </eSubpackages>
+  </eSubpackages>
+</ecore:EPackage>

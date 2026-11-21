@@ -1,0 +1,4 @@
+warning: dropped eAnnotation at Root
+warning: dropped eOperation at Root.run
+warning: dropped eOperation at sub::Item.ping
+{"digest":"3f9a39fb887e3ad03dc31a3d8b06251ef57f4a35e804c7fa1b00fc094d5d15ad","nsURI":"http://example.org/ec07/combined"}

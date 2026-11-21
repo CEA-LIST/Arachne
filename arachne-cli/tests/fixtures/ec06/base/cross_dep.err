@@ -1,0 +1,5 @@
+warning: dropped eDataType at Code
+warning: dropped eDataType at Money
+warning: dropped eDataType at Rate
+warning: dropped eDataType at Spare
+{"digest":"019e78b3d1bb46d505cf0e9b9d9a6276bb1d67c10f3a6822d05375e6ce52ddf8","nsURI":"http://example.org/ec06/parts"}

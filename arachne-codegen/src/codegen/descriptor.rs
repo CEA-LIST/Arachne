@@ -63,8 +63,24 @@
 //! - A class carrying `urn:arachne:representation` `kind="transparent"` adds
 //!   one key, `"transparent"`, naming the field it is represented by. The key
 //!   is absent on every other class.
-//! - The class set is the one code generation reaches from the root classes,
-//!   so descriptor and generated crate describe the same metamodel slice.
+//! - The class set is what `describe` reaches from the root classes, which is
+//!   not only what code generation reaches: it also lists `EObject` and the
+//!   targets of plain references, so that every name the descriptor writes
+//!   resolves.
+//! - A classifier of a subpackage is keyed by its root-relative `::` path (`catalog::Item`,
+//!   `a::b::Item`) in every place a name is written; classifiers of the root package keep bare
+//!   names. When a subpackage classifier is written, a top-level `"packages"` map lists every
+//!   subpackage at every depth by that path, as `{"nsURI": ..., "nsPrefix": ...}`; otherwise the
+//!   key is absent. `package` and `nsURI` stay the root's.
+//! - A classifier is a class, an enum or a datatype by its `xsi:type`. A
+//!   datatype is never a class or a root: an attribute typed by one is
+//!   described by its instance class, and an enum with no literal is listed
+//!   under `enums` as `[]`.
+//! - A top-level `"datatypes"` map, present only when there is one, lists every datatype of the
+//!   package at every depth, keyed as classes are, and each one a dependency's class brings in
+//!   under `<declaring package>::<name>`, as `{"instanceClassName": ..., "serializable": true}`.
+//!   `instanceClassName` is the attribute as written or `null`; the parser refuses `serializable`,
+//!   so it is always the default.
 //!
 //! # What version 2 added, and why nothing broke
 //!
@@ -100,18 +116,23 @@
 //! nothing else, so a reformatted file keeps its models and an edited one
 //! does not.
 
-use std::collections::HashSet;
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashSet},
+};
 
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Pack, builtin, idx, structural},
+    repr::{Annots, Class, Pack, builtin, idx, structural},
 };
 use log::warn;
+use moirai_semantics::{KeyKind, LeafRule, MergeRule, Shape};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::codegen::{ecore, semantics};
 use crate::error::{ArachneError, Result};
+use crate::literals::{Literals, value_json};
 
 /// Version of the descriptor layout above. Bump on any breaking change so
 /// clients can refuse what they do not understand.
@@ -120,22 +141,72 @@ const FORMAT_VERSION: u64 = 2;
 /// Builds the JSON metamodel descriptor for `pack`.
 ///
 /// Fails with [`ArachneError::RootClassNotFound`] when the package has no
-/// root class — the same condition under which code generation fails.
+/// root class, with [`ArachneError::UnlistedComponent`] when the roots are abstract classes that
+/// leave a containment component's classes out of the descriptor, or
+/// [`ArachneError::NoEClass`] when it declares no EClass at all, or
+/// [`ArachneError::NoConcreteEClass`] when it declares none but abstract ones and interfaces;
+/// with [`ArachneError::DescriptorNotClosed`] when a name the descriptor
+/// writes is not one it writes.
 pub fn descriptor_json(ctx: &Ctx, pack: &Pack) -> Result<Value> {
-    let own_classes: Vec<_> = pack.classes().iter().copied().collect();
-    descriptor_with_roots(ctx, pack, &own_classes)
+    let own_classes = tree_classes(ctx, pack);
+    descriptor_with_roots(ctx, pack, &own_classes, &Literals::new(), &BTreeSet::new())
+}
+
+/// The classes of `pack` and of its subpackages at every depth.
+pub(crate) fn tree_classes(ctx: &Ctx, pack: &Pack) -> Vec<idx::Class> {
+    let mut classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    for sub in pack.sub() {
+        classes.extend(tree_classes(ctx, &ctx[*sub]));
+    }
+    classes
+}
+
+/// The `packages` map: every subpackage of `pack` at every depth by its root-relative path. A
+/// subpackage that has no nsURI of its own, shares one, or is named `ecore` (which would key its
+/// classifiers like Ecore's own) is refused, as a subpackage nsURI is what names its namespace.
+fn subpackages(
+    ctx: &Ctx,
+    pack: &Pack,
+    prefix: &str,
+    seen: &mut Vec<String>,
+    map: &mut Map<String, Value>,
+) -> Result<()> {
+    for sub in pack.sub() {
+        let sub = &ctx[*sub];
+        let path = format!("{prefix}{}", sub.name());
+        if path == ecore_rs::repr::ecore::PACKAGE_NAME {
+            return Err(ArachneError::Subpackage(format!(
+                "`{path}` would key its classifiers like Ecore's own"
+            )));
+        }
+        let Some(ns_uri) = sub.ns_uri().filter(|ns_uri| !ns_uri.is_empty()) else {
+            return Err(ArachneError::Subpackage(format!("`{path}` has no nsURI")));
+        };
+        if seen.iter().any(|seen| seen == ns_uri) {
+            return Err(ArachneError::Subpackage(format!(
+                "`{path}` shares the nsURI `{ns_uri}`"
+            )));
+        }
+        seen.push(ns_uri.to_string());
+        map.insert(
+            path.clone(),
+            json!({"nsURI": ns_uri, "nsPrefix": sub.ns_prefix()}),
+        );
+        subpackages(ctx, sub, &format!("{path}::"), seen, map)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn descriptor_with_roots(
     ctx: &Ctx,
     pack: &Pack,
     own_classes: &[idx::Class],
+    literals: &Literals,
+    plain: &BTreeSet<String>,
 ) -> Result<Value> {
-    // The class set is the one code generation reaches, computed the same way
-    // `generate_from_parser` computes it so that the descriptor and the crate
-    // describe one slice: the package's classes, then Ecore's own but
+    // The class set `describe` reaches: the package's classes, then Ecore's own but
     // `EObject`, which the generator never emits.
-    let package_classes: Vec<idx::Class> = pack.classes().iter().copied().collect();
+    let package_classes = tree_classes(ctx, pack);
     let ecore_classes: Vec<idx::Class> = match ctx.ecore_pack() {
         Some(ecore_pack) => ctx[ecore_pack]
             .classes()
@@ -152,9 +223,24 @@ pub(crate) fn descriptor_with_roots(
         .collect();
     let generated_set: HashSet<idx::Class> = generated.iter().copied().collect();
 
-    let roots = crate::compute_top_level_roots(ctx, own_classes, &generated, &generated_set);
+    let (roots, beside) = crate::codegen::reachability::compute_top_level_roots(
+        ctx,
+        own_classes,
+        &generated,
+        &generated_set,
+    );
     if roots.is_empty() {
-        return Err(ArachneError::RootClassNotFound(pack.name().to_string()));
+        let name = pack.name().to_string();
+        let has = |pred: fn(&ecore_rs::repr::Class) -> bool| {
+            own_classes.iter().any(|class| pred(&ctx[*class]))
+        };
+        return Err(if has(crate::codegen::reachability::is_concrete_eclass) {
+            ArachneError::RootClassNotFound(name)
+        } else if has(semantics::is_eclass) {
+            ArachneError::NoConcreteEClass(name)
+        } else {
+            ArachneError::NoEClass(name)
+        });
     }
 
     // `EObject` is *listed* although it is not generated. It has no feature,
@@ -172,7 +258,11 @@ pub(crate) fn descriptor_with_roots(
 
     let mut reachable: HashSet<idx::Class> = HashSet::new();
     for root in &roots {
-        reachable.extend(crate::collect_reachable_classes(ctx, *root, &described_set));
+        reachable.extend(crate::codegen::reachability::collect_reachable_classes(
+            ctx,
+            *root,
+            &described_set,
+        ));
     }
     reachable.extend(
         package_classes
@@ -180,31 +270,86 @@ pub(crate) fn descriptor_with_roots(
             .filter(|idx| !own_classes.contains(idx))
             .copied(),
     );
-    // An abstract class of Ecore that nothing generated extends is left out,
-    // exactly as `generate_from_parser` leaves it out.
+    let package_set: HashSet<idx::Class> = package_classes.iter().copied().collect();
+    crate::codegen::reachability::follow_reference_targets(
+        ctx,
+        &mut reachable,
+        &package_set,
+        &described_set,
+    );
+    // An abstract class of Ecore that nothing generated extends is left out.
     reachable.retain(|class| {
         !ctx.is_ecore_class(*class)
-            || !crate::codegen::classifier::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
+            || !crate::codegen::reachability::is_uninhabited_polymorphic_class(ctx, &ctx[*class])
     });
+
+    if let Some(component) = beside
+        .iter()
+        .find(|component| component.iter().any(|class| !reachable.contains(class)))
+    {
+        let mut names: Vec<String> = component
+            .iter()
+            .map(|class| format!("`{}`", ctx[*class].name()))
+            .collect();
+        names.sort_unstable();
+        return Err(ArachneError::UnlistedComponent(
+            pack.name().to_string(),
+            names.join(", "),
+        ));
+    }
 
     let mut root_names: Vec<String> = roots
         .iter()
-        .map(|idx| semantics::descriptor_class_name(ctx, *idx))
-        .collect();
+        .map(|idx| semantics::descriptor_class_name(ctx, pack, *idx))
+        .collect::<Result<_>>()?;
     root_names.sort_unstable();
+
+    // What the descriptor writes, by identity: its classes, and the enums of the package.
+    let written: HashSet<idx::Class> = reachable
+        .iter()
+        .copied()
+        .filter(|class| semantics::is_eclass(&ctx[*class]))
+        .chain(
+            package_classes
+                .iter()
+                .copied()
+                .filter(|class| semantics::is_eenum(&ctx[*class])),
+        )
+        .collect();
 
     // Sorted maps so the emitted descriptor is deterministic.
     let mut classes = Map::new();
-    let mut included: Vec<&Class> = reachable
+    // Only a descriptor that writes a subpackage classifier says where the subpackages are. Its
+    // refusals answer before the class loop's, so the cause line says `subpackage`.
+    let packages = if written
+        .iter()
+        .any(|class| ctx[*class].path.last() != pack.idx && !ctx.is_ecore_class(*class))
+    {
+        let mut packages = Map::new();
+        let mut seen: Vec<String> = pack.ns_uri().map(str::to_string).into_iter().collect();
+        subpackages(ctx, pack, "", &mut seen, &mut packages)?;
+        Some(packages)
+    } else {
+        None
+    };
+    let mut included: Vec<(String, &Class)> = reachable
         .iter()
         .map(|idx| &ctx[*idx])
-        .filter(|class| !class.is_enum())
-        .collect();
-    included.sort_unstable_by_key(|class| class.name());
-    for class in &included {
-        let key = semantics::descriptor_class_name(ctx, class.idx);
+        .filter(|class| semantics::is_eclass(class))
+        .map(|class| {
+            Ok((
+                semantics::descriptor_class_name(ctx, pack, class.idx)?,
+                class,
+            ))
+        })
+        .collect::<Result<_>>()?;
+    // By the key the class is written under, so a refusal names the same class on every run.
+    included.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut dropped = Vec::new();
+    for (key, class) in included {
+        dropped_in_class(class, &key, &mut dropped);
         if classes
-            .insert(key.clone(), class_descriptor(ctx, class, &reachable))
+            .insert(key.clone(), class_descriptor(ctx, pack, class, &written)?)
             .is_some()
         {
             // Two classifiers on one key would silently become one class with
@@ -219,25 +364,226 @@ pub(crate) fn descriptor_with_roots(
     // Every enum of the package, whether a feature reaches it or not: an enum
     // only used by operations is still part of the metamodel's vocabulary.
     let mut enums = Map::new();
+    let mut enum_literals = Map::new();
     let mut package_enums: Vec<&Class> = package_classes
         .iter()
         .map(|idx| &ctx[*idx])
-        .filter(|class| class.is_enum())
+        .filter(|class| semantics::is_eenum(class))
         .collect();
     package_enums.sort_unstable_by_key(|class| class.name());
     for class in package_enums {
-        let literals: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
-        enums.insert(class.name().to_string(), json!(literals));
+        let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+        dropped_in_class(class, &key, &mut dropped);
+        let names: Vec<&str> = class.literals().iter().map(|lit| lit.name()).collect();
+        // shortcut: without the file's text (`descriptor_json`) the parser's one text per literal
+        // is the `value` and `literal` is null; `describe` always passes the text's literals.
+        let carried = literals.get(&key).cloned().unwrap_or_else(|| {
+            class
+                .literals()
+                .iter()
+                .map(|lit| {
+                    json!({"name": lit.name(), "value": lit.value().map(value_json), "literal": null})
+                })
+                .collect()
+        });
+        enum_literals.insert(key.clone(), json!(carried));
+        enums.insert(key, json!(names));
     }
 
-    Ok(json!({
+    // Every datatype of the package, an imported one under its declaring package's name.
+    let mut datatypes = Map::new();
+    for class in package_classes.iter().map(|idx| &ctx[*idx]) {
+        if class.typ() == "ecore:EDataType" {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+            // The parser refuses a `serializable` attribute, so it is always the default.
+            datatypes.insert(
+                key,
+                json!({"instanceClassName": class.instance_class_name(), "serializable": true}),
+            );
+        }
+    }
+
+    let mut descriptor = json!({
         "formatVersion": FORMAT_VERSION,
         "package": pack.name(),
         "nsURI": pack.ns_uri(),
         "rootClasses": root_names,
         "classes": classes,
         "enums": enums,
-    }))
+        "enumLiterals": enum_literals,
+        "nsPrefix": pack.ns_prefix(),
+    });
+    if let Some(packages) = packages {
+        descriptor["packages"] = Value::Object(packages);
+    }
+    if !datatypes.is_empty() {
+        descriptor["datatypes"] = Value::Object(datatypes);
+    }
+    if has_foreign_annotation(pack.annotations()) {
+        dropped.push(("eAnnotation", pack.name().to_owned(), String::new()));
+    }
+    for class in own_classes.iter().map(|class| &ctx[*class]) {
+        if class.typ() == "ecore:EDataType" {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx)?;
+            if !plain.contains(&key) {
+                dropped.push(("eDataType", key, String::new()));
+            }
+        }
+    }
+    // The operations of classes this descriptor does not list: a descriptor that imports the
+    // package may list them, and `import_class` leaves operations behind.
+    let unlisted = package_classes
+        .iter()
+        .map(|idx| &ctx[*idx])
+        .filter(|class| semantics::is_eclass(class) && !written.contains(&class.idx))
+        .filter_map(|class| {
+            let key = semantics::descriptor_class_name(ctx, pack, class.idx).ok()?;
+            Some(
+                class
+                    .operations()
+                    .iter()
+                    .map(move |operation| ("eOperation", key.clone(), operation.name().to_owned())),
+            )
+        })
+        .flatten()
+        .collect();
+    DROPPED.with_borrow_mut(|builds| {
+        if let Some(builds) = builds {
+            builds.push(Build {
+                pack: pack.name().to_owned(),
+                ns_uri: pack.ns_uri().map(str::to_owned),
+                dropped,
+                unlisted,
+            });
+        }
+    });
+    Ok(descriptor)
+}
+
+/// A construct a descriptor build read and did not write: its kind, the classifier (the package
+/// for a package's own) and the feature, operation or literal, empty when the construct is the
+/// classifier's.
+type Dropped = (&'static str, String, String);
+
+/// What one descriptor build dropped, and the package it described.
+struct Build {
+    pack: String,
+    ns_uri: Option<String>,
+    dropped: Vec<Dropped>,
+    /// Operations of the classes the descriptor does not list, for a descriptor that imports them.
+    unlisted: Vec<Dropped>,
+}
+
+thread_local! {
+    /// The builds since [`record_dropped`] on this thread, `None` while nothing asked for them:
+    /// `describe` builds a dependency's descriptor before the one that imports it, so the last is
+    /// the file's.
+    static DROPPED: RefCell<Option<Vec<Build>>> = const { RefCell::new(None) };
+    /// The lines of the constructs `describe` blanked before the parser read them, while recording.
+    static IGNORED: RefCell<Option<BTreeSet<String>>> = const { RefCell::new(None) };
+}
+
+/// Starts recording what the descriptors built on this thread drop, for [`take_dropped`], and
+/// forgets what was recorded before. Without it, building a descriptor records nothing.
+pub fn record_dropped() {
+    DROPPED.replace(Some(Vec::new()));
+    IGNORED.replace(Some(BTreeSet::new()));
+}
+
+/// Records the `warning: dropped` lines of constructs blanked in a file that was read.
+pub(crate) fn record_ignored(lines: Vec<String>) {
+    IGNORED.with_borrow_mut(|set| {
+        if let Some(set) = set {
+            set.extend(lines);
+        }
+    });
+}
+
+/// The `warning: dropped <kind> at <location>` lines of the descriptor `describe` just built, byte
+/// sorted and unique, for the classifiers `descriptor` lists, the package and its datatypes.
+/// Stops the recording of this thread, which holds the builds since [`record_dropped`]: call it
+/// after the one `describe` that follows.
+pub fn take_dropped(descriptor: &Value) -> Vec<String> {
+    let line = |(kind, class, member): &Dropped| {
+        let at = if member.is_empty() {
+            class.clone()
+        } else {
+            format!("{class}.{member}")
+        };
+        format!("warning: dropped {kind} at {at}")
+    };
+    let mut builds = DROPPED.take().unwrap_or_default();
+    let mut lines: BTreeSet<String> = builds
+        .pop()
+        .into_iter()
+        .flat_map(|build| build.dropped)
+        .map(|dropped| line(&dropped))
+        .collect();
+    lines.extend(IGNORED.take().unwrap_or_default());
+    // `import_class` copies everything of a dependency's class but its operations, which only the
+    // dependency's own build saw, under the key the importing descriptor writes. The class it
+    // wrote has the dependency's nsURI as origin; a class of another package under that key has
+    // not.
+    for build in builds {
+        for (kind, class, member) in build.dropped.into_iter().chain(build.unlisted) {
+            let key = format!("{}::{class}", build.pack);
+            let from_build = build.ns_uri.as_deref().is_some_and(|ns_uri| {
+                descriptor["classes"]
+                    .get(&key)
+                    .is_some_and(|written| written["origin"] == ns_uri)
+            });
+            if kind == "eOperation" && from_build {
+                lines.insert(line(&(kind, key, member)));
+            }
+        }
+    }
+    lines.into_iter().collect()
+}
+
+/// An annotation of a source the descriptor does not read.
+fn has_foreign_annotation(annotations: &Annots) -> bool {
+    annotations.iter().any(|annotation| {
+        !matches!(
+            annotation.source(),
+            "urn:arachne:semantics" | "urn:arachne:representation" | "subsets" | "redefines"
+        )
+    })
+}
+
+/// What `class` (written under `key`) and its members say that the descriptor does not.
+fn dropped_in_class(class: &Class, key: &str, out: &mut Vec<Dropped>) {
+    let mut at = |kind, member: &str| out.push((kind, key.to_owned(), member.to_owned()));
+    if has_foreign_annotation(class.annotations()) {
+        at("eAnnotation", "");
+    }
+    if semantics::is_eclass(class) && class.instance_class_name().or(class.inst_name()).is_some() {
+        at("instanceClassName", "");
+    }
+    for operation in class.operations() {
+        at("eOperation", operation.name());
+    }
+    for literal in class.literals() {
+        if has_foreign_annotation(literal.annotations()) {
+            at("eAnnotation", literal.name());
+        }
+    }
+    for feature in class.structural() {
+        if has_foreign_annotation(&feature.annotations) {
+            at("eAnnotation", &feature.name);
+        }
+        for (kind, hit) in [
+            ("volatile", feature.volatile == Some(true)),
+            ("transient", feature.transient == Some(true)),
+            ("derived", feature.derived == Some(true)),
+            ("resolveProxies", feature.resolve_proxies == Some(false)),
+            // `defaultValueLiteral` is carried; a `defaultValue` is not.
+            ("defaultValueLiteral", feature.default_value.is_some()),
+        ] {
+            if hit {
+                at(kind, &feature.name);
+            }
+        }
+    }
 }
 
 /// The digest half of a metamodel's identity: SHA-256, lowercase hex, over
@@ -257,14 +603,22 @@ pub fn metamodel_digest(descriptor: &Value) -> String {
 
 /// Describes one class: declared features partitioned into attributes,
 /// containments and plain references, plus its super types.
-fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) -> Value {
-    let mut super_types: Vec<String> = class
-        .sup()
-        .iter()
-        .copied()
-        .filter(|sup| included.contains(sup))
-        .map(|sup| semantics::descriptor_class_name(ctx, sup))
-        .collect();
+///
+/// Refuses with [`ArachneError::DescriptorNotClosed`] when a name it writes is not a class or
+/// enum in `written`.
+fn class_descriptor(
+    ctx: &Ctx,
+    pack: &Pack,
+    class: &Class,
+    written: &HashSet<idx::Class>,
+) -> Result<Value> {
+    let mut super_types: Vec<String> = Vec::new();
+    for sup in class.sup() {
+        require(ctx, pack, class, *sup, written)?;
+        super_types.push(semantics::descriptor_class_name(ctx, pack, *sup)?);
+    }
+    // Declaration order, before the sort `superTypes` keeps.
+    let super_type_order = super_types.clone();
     super_types.sort_unstable();
 
     let mut attributes = Vec::new();
@@ -281,7 +635,7 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 
         match feature.kind {
             structural::Typ::EAttribute => {
-                let Some((kind, enum_name)) = attribute_kind(ctx, class, feature) else {
+                let Some((kind, enum_class)) = attribute_kind(ctx, class, feature) else {
                     continue;
                 };
                 let mut attribute = json!({
@@ -291,10 +645,12 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                     "required": required,
                     "isId": feature.is_id,
                 });
-                if let Some(enum_name) = enum_name {
-                    attribute["enum"] = json!(enum_name);
+                if let Some(enum_class) = enum_class {
+                    require(ctx, pack, class, enum_class, written)?;
+                    attribute["enum"] =
+                        json!(semantics::descriptor_class_name(ctx, pack, enum_class)?);
                 }
-                add_semantics(&mut attribute, ctx, class, feature);
+                add_semantics(&mut attribute, ctx, pack, class, feature, written)?;
                 attributes.push(attribute);
             }
             structural::Typ::EReference => {
@@ -307,7 +663,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                     );
                     continue;
                 };
-                let target = semantics::descriptor_class_name(ctx, target);
+                require(ctx, pack, class, target, written)?;
+                let target = semantics::descriptor_class_name(ctx, pack, target)?;
                 if feature.containment {
                     let mut containment = json!({
                         "name": feature.name,
@@ -316,8 +673,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "required": required,
                         "ordered": feature.ordered.unwrap_or(true),
                     });
-                    add_semantics(&mut containment, ctx, class, feature);
-                    add_declarations(&mut containment, feature);
+                    add_semantics(&mut containment, ctx, pack, class, feature, written)?;
+                    add_declarations(&mut containment, ctx, pack, feature)?;
                     containments.push(containment);
                 } else {
                     let mut reference = json!({
@@ -326,8 +683,8 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
                         "many": many,
                         "required": required,
                     });
-                    add_semantics(&mut reference, ctx, class, feature);
-                    add_declarations(&mut reference, feature);
+                    add_semantics(&mut reference, ctx, pack, class, feature, written)?;
+                    add_declarations(&mut reference, ctx, pack, feature)?;
                     references.push(reference);
                 }
             }
@@ -336,7 +693,9 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 
     let mut entry = json!({
         "abstract": class.is_abstract() || class.is_interface(),
+        "interface": !ctx.is_ecore_class(class.idx) && class.is_interface(),
         "superTypes": super_types,
+        "superTypeOrder": super_type_order,
         "attributes": attributes,
         "containments": containments,
         "references": references,
@@ -350,7 +709,34 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
     if let Some(field) = semantics::transparent_field(class) {
         entry["transparent"] = json!(field);
     }
-    entry
+    Ok(entry)
+}
+
+/// `name` must be a class or enum the descriptor writes, `class` being the one that names it.
+fn require(
+    ctx: &Ctx,
+    pack: &Pack,
+    class: &Class,
+    name: idx::Class,
+    written: &HashSet<idx::Class>,
+) -> Result<()> {
+    if written.contains(&name) {
+        return Ok(());
+    }
+    Err(ArachneError::DescriptorNotClosed {
+        class: semantics::descriptor_class_name(ctx, pack, class.idx)?,
+        // Not written, so possibly outside `pack`: named from the document root then.
+        missing: semantics::descriptor_class_name(ctx, pack, name).unwrap_or_else(|_| {
+            let missing = &ctx[name];
+            missing
+                .path
+                .iter()
+                .map(|up| ctx[up].name())
+                .chain([missing.name()])
+                .collect::<Vec<_>>()
+                .join("::")
+        }),
+    })
 }
 
 /// Adds the four `formatVersion` 2 keys to one feature entry: the facets as
@@ -366,14 +752,63 @@ fn class_descriptor(ctx: &Ctx, class: &Class, included: &HashSet<idx::Class>) ->
 /// Nothing is removed and nothing existing moves, which is what keeps the
 /// phase 4 `Schema` parser (`deployment/conformance.rs`) and the model editor
 /// reading these descriptors unchanged: both read only the keys they name.
-fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structural::Structural) {
+fn add_semantics(
+    entry: &mut Value,
+    ctx: &Ctx,
+    pack: &Pack,
+    class: &Class,
+    feature: &structural::Structural,
+    written: &HashSet<idx::Class>,
+) -> Result<()> {
     let (merge, provenance) = semantics::merge_rule(feature, class, ctx);
+    // The merge rule's own class names (`merge.target`, `merge.leaf.class`) are names too.
+    let named = match &merge {
+        MergeRule::Containment { target, .. }
+        | MergeRule::Reference { target, .. }
+        | MergeRule::IdentityReference { target, .. } => Some(*target),
+        MergeRule::Attribute {
+            leaf: LeafRule::Enum { class, .. } | LeafRule::OptionalRegister { class: Some(class) },
+            ..
+        } => Some(*class),
+        _ => None,
+    };
+    let key = match &merge {
+        MergeRule::Attribute { shape, .. } | MergeRule::Containment { shape, .. } => match shape {
+            Shape::Keyed {
+                key: KeyKind::Enum { class },
+            } => Some(*class),
+            _ => None,
+        },
+        _ => None,
+    };
+    for slot in named.into_iter().chain(key) {
+        require(ctx, pack, class, idx::Class::from(slot.index()), written)?;
+    }
     entry["facets"] = semantics::facets_json(feature);
     entry["annotation"] = semantics::feature_datatype(feature, class, ctx)
         .map(|value| json!(value))
         .unwrap_or(Value::Null);
-    entry["merge"] = semantics::merge_json(&merge, ctx);
+    entry["merge"] = semantics::merge_json(&merge, ctx, pack)?;
     entry["provenance"] = semantics::provenance_json(&provenance);
+    // The facts the file declares and the rule does not read: bounds, default, flags and keys.
+    // Ecore's own classes are Léo's built-ins, which no file declares: his values.
+    if ctx.is_ecore_class(class.idx) {
+        let many = feature.bounds.ubound.is_none_or(|ubound| ubound > 1);
+        entry["lowerBound"] = json!(0);
+        entry["upperBound"] = json!(if many { -1 } else { 1 });
+        entry["default"] = Value::Null;
+        entry["changeable"] = json!(true);
+        entry["unsettable"] = json!(false);
+        entry["eKeys"] = json!([]);
+    } else {
+        entry["lowerBound"] = json!(feature.bounds.lbound);
+        entry["upperBound"] = json!(feature.bounds.ubound.map_or(-1, |ubound| ubound as i64));
+        entry["default"] = json!(feature.default_value_literal);
+        entry["changeable"] = json!(feature.changeable.unwrap_or(true));
+        entry["unsettable"] = json!(feature.unsettable.unwrap_or(false));
+        entry["eKeys"] = json!(feature.keys);
+    }
+    Ok(())
 }
 
 /// Adds to one reference entry what the `.ecore` declares about which end is
@@ -387,7 +822,12 @@ fn add_semantics(entry: &mut Value, ctx: &Ctx, class: &Class, feature: &structur
 /// byte for byte, and keeps its digest. They are data for a reader of the
 /// descriptor: no merge rule reads them, and nothing keeps two opposite ends
 /// in step.
-fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
+fn add_declarations(
+    entry: &mut Value,
+    ctx: &Ctx,
+    pack: &Pack,
+    feature: &structural::Structural,
+) -> Result<()> {
     if let Some(opposite) = feature.opposite() {
         let name = opposite.rsplit('/').next().unwrap_or(opposite);
         entry["eOpposite"] = json!(name);
@@ -399,24 +839,67 @@ fn add_declarations(entry: &mut Value, feature: &structural::Structural) {
             .filter(|annot| annot.source() == source)
             .flat_map(|annot| annot.references())
             .map(|reference| {
-                let (class, name) = class_and_feature(reference);
-                json!({"class": class, "feature": name})
+                let (class, name) = class_and_feature(ctx, pack, reference)?;
+                Ok(json!({"class": class, "feature": name}))
             })
-            .collect();
+            .collect::<Result<_>>()?;
         if !declared.is_empty() {
             entry[source] = Value::Array(declared);
         }
     }
+    Ok(())
 }
 
-/// The last two segments of a `#//Class/feature` fragment: the class and the
-/// feature it names.
-fn class_and_feature(reference: &str) -> (&str, &str) {
-    let path = reference.rsplit('#').next().unwrap_or(reference);
-    let mut segments = path.rsplit('/');
-    let feature = segments.next().unwrap_or("");
-    let class = segments.next().unwrap_or("");
-    (class, feature)
+/// A `#//a/Class/feature` fragment split into the class, as the descriptor keys it, and the
+/// feature. An in-document fragment is relative to the document's root package: its leading
+/// segments make a `::` path, below `pack`, only when they name a chain of subpackages from that
+/// root, and the chain must pass through `pack`, else the class is outside what is described and
+/// the fragment is refused. Any other leading segments, and a reference into another file (a
+/// dependency is described whole, under its own bare names), leave the class as its last segment.
+fn class_and_feature<'a>(ctx: &Ctx, pack: &Pack, reference: &'a str) -> Result<(String, &'a str)> {
+    let (file, path) = reference.rsplit_once('#').unwrap_or(("", reference));
+    let (class, feature) = path
+        .trim_start_matches('/')
+        .rsplit_once('/')
+        .unwrap_or(("", path.trim_start_matches('/')));
+    let bare = || class.rsplit('/').next().unwrap_or("").to_string();
+    let Some((subs, name)) = class
+        .rsplit_once('/')
+        .or(Some(("", class)))
+        .filter(|_| file.is_empty())
+    else {
+        return Ok((bare(), feature));
+    };
+    let mut dir = pack;
+    // The context's own `[root]` package, above every document, is not the document's root.
+    while let Some(up) = dir.sup().filter(|up| ctx[*up].sup().is_some()) {
+        dir = &ctx[up];
+    }
+    let mut seen_pack = dir.idx == pack.idx;
+    let mut written = Vec::new();
+    for seg in subs.split('/').filter(|seg| !seg.is_empty()) {
+        let Some(sub) = dir
+            .sub()
+            .iter()
+            .map(|sub| &ctx[*sub])
+            .find(|sub| sub.name() == seg)
+        else {
+            return Ok((bare(), feature));
+        };
+        dir = sub;
+        if seen_pack {
+            written.push(seg);
+        }
+        seen_pack |= dir.idx == pack.idx;
+    }
+    if !seen_pack {
+        return Err(ArachneError::InvalidModel(format!(
+            "the fragment `{reference}` names a class outside the described package `{}`, which has no name to write",
+            pack.name()
+        )));
+    }
+    written.push(name);
+    Ok((written.join("::"), feature))
 }
 
 /// The descriptor `kind` of an attribute, with the enum class name when the
@@ -426,7 +909,7 @@ fn attribute_kind(
     ctx: &Ctx,
     class: &Class,
     feature: &structural::Structural,
-) -> Option<(&'static str, Option<String>)> {
+) -> Option<(&'static str, Option<idx::Class>)> {
     let Some(target) = feature.typ else {
         warn!(
             "`{}.{}`: externally-typed attribute has no resolved type; \
@@ -438,21 +921,22 @@ fn attribute_kind(
     };
     let target = &ctx[target];
 
-    if target.is_enum() {
-        return Some(("enum", Some(target.name().to_string())));
+    if semantics::is_eenum(target) {
+        return Some(("enum", feature.typ));
     }
 
-    let kind = match target.name().parse::<builtin::Typ>() {
-        Ok(builtin::Typ::EString) | Ok(builtin::Typ::EChar) => "string",
-        Ok(builtin::Typ::EByte)
-        | Ok(builtin::Typ::EShort)
-        | Ok(builtin::Typ::EInt)
-        | Ok(builtin::Typ::ELong) => "int",
-        Ok(builtin::Typ::EFloat) | Ok(builtin::Typ::EDouble) => "float",
-        Ok(builtin::Typ::EBoolean) => "bool",
-        // `Object` and custom EDataTypes have no structure to offer a typed
-        // editor; a string field is the honest lowest common denominator.
-        Ok(builtin::Typ::Object) | Err(()) => {
+    let kind = match semantics::value_builtin(target) {
+        Some(builtin::Typ::EString) | Some(builtin::Typ::EChar) => "string",
+        Some(builtin::Typ::EByte)
+        | Some(builtin::Typ::EShort)
+        | Some(builtin::Typ::EInt)
+        | Some(builtin::Typ::ELong) => "int",
+        Some(builtin::Typ::EFloat) | Some(builtin::Typ::EDouble) => "float",
+        Some(builtin::Typ::EBoolean) => "bool",
+        // `Object` and a datatype whose instance class maps to nothing here
+        // have no structure to offer a typed editor; a string field is the
+        // honest lowest common denominator.
+        Some(builtin::Typ::Object) | None => {
             warn!(
                 "`{}.{}`: attribute type `{}` has no typed editor mapping; \
                  described as `string`",
@@ -508,64 +992,6 @@ mod tests {
                 descriptor["classes"].get("Status")
             ),
             (&json!(["RUNNING", "SUCCESS", "FAILURE"]), None)
-        );
-    }
-
-    /// A class carries its own declarations only, and every one of them carries
-    /// the four `formatVersion` 2 keys: the facets as written, the annotation,
-    /// the merge rule and its provenance.
-    ///
-    /// `TreeNode.ID` is the shape of a required text slot, its `presence`
-    /// `declared` because `lowerBound="1"` differs from Ecore's `0..1` default;
-    /// `TreeNode.name` the same leaf under an `OptionLog`, and although it
-    /// writes `lowerBound="0" upperBound="1"` it resolves to that default, so
-    /// the conservative reading calls it `ecoreDefault` rather than claim a
-    /// declaration the parsed feature no longer distinguishes.
-    #[test]
-    fn bt_tree_node_declares_only_its_own_features() {
-        let descriptor = bt_descriptor();
-        let tree_node = &descriptor["classes"]["TreeNode"];
-        assert_eq!(
-            tree_node["attributes"],
-            json!([
-                {"name": "ID", "kind": "string", "many": false,
-                 "required": true, "isId": false,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "attribute", "shape": {"kind": "single"},
-                           "leaf": {"kind": "text"}},
-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "declared"}},
-                {"name": "name", "kind": "string", "many": false,
-                 "required": false, "isId": false,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "attribute", "shape": {"kind": "optional"},
-                           "leaf": {"kind": "text"}},
-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
-                                "leaf": "declared", "presence": "ecoreDefault"}},
-            ])
-        );
-    }
-
-    /// The one entry the whole provenance argument rests on. `bt.ecore` writes
-    /// no `ordered` anywhere, and a behaviour tree's `Sequence` runs its
-    /// children left to right, so the sequence this compiles to is Arachne's
-    /// decision and the descriptor says so: `houseDefault`, with `facets`
-    /// showing the file was silent.
-    #[test]
-    fn bt_control_node_containment_is_many_ordered_and_subclass_typed() {
-        let descriptor = bt_descriptor();
-        let control_node = &descriptor["classes"]["ControlNode"];
-        assert_eq!(
-            control_node["containments"],
-            json!([
-                {"name": "children", "target": "TreeNode", "many": true,
-                 "required": false, "ordered": true,
-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
-                 "merge": {"kind": "containment", "shape": {"kind": "sequence"},
-                           "target": "TreeNode"},
-                 "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
-                                "leaf": "notApplicable", "presence": "declared"}},
-            ])
         );
     }
 
@@ -684,136 +1110,6 @@ mod tests {
 
     fn builtins_descriptor() -> Value {
         descriptor_of("pet_metamodels/ecore_builtins.ecore")
-    }
-
-    /// Ecore's classes are listed under a package-qualified key and a
-    /// metamodel's own are not, which is what lets a metamodel declaring its
-    /// own `EAnnotation` be described beside Ecore's. ModelSet holds 36 that
-    /// do.
-    ///
-    /// `EObject` is listed although it is never generated: it has no feature,
-    /// so it adds no rule, and listing it is what makes every supertype and
-    /// every target the descriptor writes resolve to a class the descriptor
-    /// lists — which `moirai-semantics` requires and which dropping the
-    /// supertype silently would buy at the price of contradicting EMF, where
-    /// an explicit `EObject` supertype is visible in the reflective API.
-    #[test]
-    fn ecore_classes_are_listed_under_a_package_qualified_key() {
-        let descriptor = builtins_descriptor();
-        let mut names: Vec<&str> = descriptor["classes"]
-            .as_object()
-            .expect("classes")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        names.sort_unstable();
-        assert_eq!(
-            names,
-            [
-                "Element",
-                "Model",
-                "Part",
-                "Port",
-                "ecore::EAnnotation",
-                "ecore::EModelElement",
-                "ecore::ENamedElement",
-                "ecore::EObject",
-                "ecore::EStringToStringMapEntry",
-            ]
-        );
-        assert_eq!(
-            descriptor["classes"]["Model"]["superTypes"],
-            json!(["ecore::EObject"])
-        );
-        assert_eq!(
-            descriptor["classes"]["Port"]["superTypes"],
-            json!(["ecore::ENamedElement"])
-        );
-        assert_eq!(
-            descriptor["classes"]["ecore::EObject"],
-            json!({
-                "abstract": false, "superTypes": [],
-                "attributes": [], "containments": [], "references": []
-            }),
-            "`EObject` is concrete and has no feature, as `Ecore.ecore` declares it"
-        );
-        // A `::` is not a character an Ecore name can hold, so the key cannot
-        // be one a metamodel's own class claims.
-        assert!(names.iter().filter(|name| name.contains("::")).count() == 5);
-    }
-
-    /// The four features of `EAnnotation` that carry a construction and the
-    /// three that do not, as data: the ordered containment of annotations,
-    /// the optional `source`, the `details` map to a register over an
-    /// optional text, and the two `EObject`-typed features and the transient
-    /// back-pointer recorded with their reason rather than dropped.
-    #[test]
-    fn the_annotation_features_carry_their_rules_and_their_refusals() {
-        let descriptor = builtins_descriptor();
-        let annotation = &descriptor["classes"]["ecore::EAnnotation"];
-        let rule = |array: &str, name: &str| -> Value {
-            annotation[array]
-                .as_array()
-                .unwrap_or_else(|| panic!("`{array}`"))
-                .iter()
-                .find(|entry| entry["name"] == json!(name))
-                .unwrap_or_else(|| panic!("`EAnnotation.{name}`"))["merge"]
-                .clone()
-        };
-
-        assert_eq!(
-            descriptor["classes"]["ecore::EModelElement"]["containments"][0],
-            json!({
-                "name": "eAnnotations", "target": "ecore::EAnnotation",
-                "many": true, "required": false, "ordered": true,
-                "facets": {"ordered": null, "unique": null}, "annotation": null,
-                "merge": {"kind": "containment", "shape": {"kind": "sequence"},
-                          "target": "ecore::EAnnotation"},
-                "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
-                               "leaf": "notApplicable", "presence": "declared"}
-            })
-        );
-        assert_eq!(
-            rule("attributes", "source"),
-            json!({"kind": "attribute", "shape": {"kind": "optional"},
-                   "leaf": {"kind": "text"}}),
-            "a silent `lowerBound` is Ecore's 0, so `source` is optional text"
-        );
-        assert_eq!(
-            rule("containments", "details"),
-            json!({"kind": "attribute",
-                   "shape": {"kind": "keyed", "key": {"kind": "str"}},
-                   "leaf": {"kind": "optionalRegister"}}),
-            "EMF's map entry convention makes `details` a map, and its optional \
-             value a register so that a key put with no value is read back"
-        );
-        assert_eq!(
-            rule("containments", "contents"),
-            json!({"kind": "unsupported", "reason": "eObjectContainment"})
-        );
-        assert_eq!(
-            rule("references", "references"),
-            json!({"kind": "unsupported", "reason": "eObjectReference"})
-        );
-        assert_eq!(
-            rule("references", "eModelElement"),
-            json!({"kind": "unsupported", "reason": "transient"}),
-            "the back-pointer of a containment, which `analysis.rs:74` drops"
-        );
-        // The map is Ecore's own convention and not a `urn:arachne:semantics`
-        // annotation, so the two collection facets are sourced to Ecore.
-        let details = descriptor["classes"]["ecore::EAnnotation"]["containments"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|entry| entry["name"] == json!("details"))
-            .unwrap();
-        assert_eq!(
-            details["provenance"],
-            json!({"ordered": "ecoreDefault", "unique": "ecoreDefault",
-                   "leaf": "houseDefault", "presence": "declared"})
-        );
-        assert_eq!(details["annotation"], Value::Null);
     }
 
     /// The descriptor `arachne describe` emits is one `moirai-semantics`

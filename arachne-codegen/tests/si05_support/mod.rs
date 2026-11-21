@@ -76,19 +76,66 @@ pub fn todays_rule(descriptor: &mut Value) -> usize {
     moved
 }
 
-/// `descriptor` read back by [`todays_rule`].
+/// EC.05 (`cea-cdrt-knowledge/spec/items/EC.05.md`): takes off the keys EC.05 adds (top level
+/// `nsPrefix` and `enumLiterals`; per class `interface` and `superTypeOrder`; per feature
+/// `lowerBound`, `upperBound`, `default`, `changeable`, `unsettable`, `eKeys`); answers how many.
+/// The tests that read through [`read_back`] guard everything else, as before; EC.05's oracles
+/// (`arachne-cli/tests/ec05_describe_carries.rs`, census N) hold the keys themselves.
+pub fn ec05_strip(descriptor: &mut Value) -> usize {
+    let mut taken = 0;
+    let mut take = |object: &mut serde_json::Map<String, Value>, keys: &[&str]| {
+        for key in keys {
+            taken += usize::from(object.remove(*key).is_some());
+        }
+    };
+    let Some(top) = descriptor.as_object_mut() else {
+        return 0;
+    };
+    // EC.06 (`spec/items/EC.06.md`) adds the top level `datatypes`, held by its own oracles.
+    take(top, &["nsPrefix", "enumLiterals", "datatypes"]);
+    if let Some(classes) = top.get_mut("classes").and_then(Value::as_object_mut) {
+        for body in classes.values_mut().filter_map(Value::as_object_mut) {
+            take(body, &["interface", "superTypeOrder"]);
+            for array in ["attributes", "containments", "references"] {
+                for entry in body
+                    .get_mut(array)
+                    .and_then(Value::as_array_mut)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_object_mut)
+                {
+                    take(
+                        entry,
+                        &[
+                            "lowerBound",
+                            "upperBound",
+                            "default",
+                            "changeable",
+                            "unsettable",
+                            "eKeys",
+                        ],
+                    );
+                }
+            }
+        }
+    }
+    taken
+}
+
+/// `descriptor` read back by [`todays_rule`] and, from EC.05, [`ec05_strip`].
 pub fn read_back(mut descriptor: Value) -> Value {
     todays_rule(&mut descriptor);
+    ec05_strip(&mut descriptor);
     descriptor
 }
 
-/// A rendered descriptor's bytes read back by [`todays_rule`] and rendered again; bytes that are
-/// not a JSON descriptor come back as they went in.
+/// A rendered descriptor's bytes read back by [`todays_rule`] and [`ec05_strip`] and rendered
+/// again; bytes that are not a JSON descriptor come back as they went in.
 pub fn read_back_bytes(bytes: Vec<u8>) -> Vec<u8> {
     let Ok(mut descriptor) = serde_json::from_slice::<Value>(&bytes) else {
         return bytes;
     };
-    if todays_rule(&mut descriptor) > 0 {
+    if todays_rule(&mut descriptor) + ec05_strip(&mut descriptor) > 0 {
         render(&descriptor).into_bytes()
     } else {
         bytes

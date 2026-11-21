@@ -1,0 +1,773 @@
+{
+  "classes": {
+    "Conference": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "acronym",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "description",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 1,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Edition"
+          },
+          "name": "editions",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Edition",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Edition": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "year",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "city",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "country",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "bool",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "flag",
+              "wins": "enable"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "isCurrent",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": false,
+            "unique": null
+          },
+          "lowerBound": 1,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Track"
+          },
+          "name": "tracks",
+          "ordered": false,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Track",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Main": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [
+        "Track"
+      ],
+      "superTypes": [
+        "Track"
+      ]
+    },
+    "Person": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "email",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "enum": "Role",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Role",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "role",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Session": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "title",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "startTime",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "int",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "counter",
+              "num": "i32",
+              "resettable": true
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "endTime",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "identityReference",
+            "many": true,
+            "target": "Person"
+          },
+          "name": "attendees",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Person",
+          "unsettable": false,
+          "upperBound": -1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "Person"
+          },
+          "name": "author",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Person",
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Track": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 1,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Session"
+          },
+          "name": "sessions",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "target": "Session",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Workshop": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "topic",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [
+        "Track"
+      ],
+      "superTypes": [
+        "Track"
+      ]
+    }
+  },
+  "enumLiterals": {
+    "Role": [
+      {
+        "literal": null,
+        "name": "CommitteeMember",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "Author",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "Guest",
+        "value": 2
+      }
+    ]
+  },
+  "enums": {
+    "Role": [
+      "CommitteeMember",
+      "Author",
+      "Guest"
+    ]
+  },
+  "formatVersion": 2,
+  "nsPrefix": "conference",
+  "nsURI": "http://www.example.org/conference",
+  "package": "confOrga",
+  "rootClasses": [
+    "Conference",
+    "Person"
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "classes": {
+    "model::Model": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "model::Part"
+          },
+          "name": "parts",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "model::Part",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "model::Part": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "enum": "Mode",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Mode",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "mode",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "enumLiterals": {
+    "Mode": [
+      {
+        "literal": null,
+        "name": "ON",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "OFF",
+        "value": 1
+      }
+    ]
+  },
+  "enums": {
+    "Mode": [
+      "ON",
+      "OFF"
+    ]
+  },
+  "formatVersion": 2,
+  "nsPrefix": "lib",
+  "nsURI": "urn:lib",
+  "package": "lib",
+  "packages": {
+    "model": {
+      "nsPrefix": "model",
+      "nsURI": "urn:lib/model"
+    }
+  },
+  "rootClasses": [
+    "model::Model"
+  ]
+}

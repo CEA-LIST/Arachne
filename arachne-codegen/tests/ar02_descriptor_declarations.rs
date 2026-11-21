@@ -436,8 +436,8 @@ fn ar02_d3_every_other_metamodel_that_declares_an_opposite_carries_it() {
         ),
         (
             "arachne-parser/rsc/AbstractEcore.ecore",
-            "f7ccba64b8f14c2e8992ce6f205d2fe2d8176f43209acc6f3d72c3ab79323721",
-            "b6dde99121707ec0aeae484e9362568394eeeff54f00b976a5157ddb31ffc245",
+            "c45b4f1b6dfc4d0b2fbda647c3ac0ad55c53128da7475f4dbed2aa12b8036797",
+            "910304ef097a97619d97531127494c0d5ca2de61b918eef8fd73003b25d7eee5",
             // AbstractEcore.ecore:17, 25
             vec![
                 // Both ends are named `refersClass2`, as the file declares them.
@@ -455,8 +455,8 @@ fn ar02_d3_every_other_metamodel_that_declares_an_opposite_carries_it() {
         ),
         (
             "arachne-parser/rsc/ExampleEcore.ecore",
-            "f5722f0b5b44bbe0818ef4dda2078c1a95281dfbc5289ae344a8d96ece919970",
-            "0f3cdf919b06f7118850c0c396fc49fc156e26fd41f224889d76052825eb26cb",
+            "4da742e26eaad38f9b24572cbe909469580c09c0084cb7597645c8ca6722c5a6",
+            "3d46ea8d23b17765843e62694f2a910e16a1025a650e1e992fe325aba6acfe95",
             // ExampleEcore.ecore:16, 24
             vec![
                 ("Teacher", "advises", json!({"eOpposite": "advisor"})),
@@ -618,17 +618,17 @@ fn ar02_d4_a_descriptor_whose_ecore_declares_none_is_unchanged() {
         (
             "examples/bt.metamodel.json",
             // SI.10: regenerated with the identity rule; ff452510... before.
-            "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+            "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
         ),
         (
             "examples/json.metamodel.json",
-            "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+            "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
         ),
         (
             "examples/notation.metamodel.json",
             // ED.16a; 8c98687d... before. SI.10: regenerated with the identity rule; 04ebb5c1...
             // before.
-            "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+            "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
         ),
     ];
     let repo = repo();

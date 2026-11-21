@@ -24,6 +24,26 @@ pub enum ArachneError {
     #[error("Failed to find a root class in `{0}` package")]
     RootClassNotFound(String),
 
+    /// A package with no EClass has no root class either; the second line says why, as the
+    /// first is the line every package without a root class gets.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the package declares no EClass"
+    )]
+    NoEClass(String),
+
+    /// A package whose EClasses are all abstract or interfaces: no model can hold an instance.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the package has no concrete EClass"
+    )]
+    NoConcreteEClass(String),
+
+    /// The roots are abstract classes, and classes that contain each other and that no class
+    /// outside them contains would be left out of the descriptor.
+    #[error(
+        "Failed to find a root class in `{0}` package\ncaused by: the classes {1} contain each other, no class outside them contains them, and the root classes do not list them"
+    )]
+    UnlistedComponent(String, String),
+
     #[error("No user-defined package found in the Ecore model")]
     NoValidPackageFound,
 
@@ -34,6 +54,19 @@ pub enum ArachneError {
     /// has never seen.
     #[error("two classifiers would be described under the one key `{0}`")]
     DuplicateDescriptorClass(String),
+
+    /// A class the descriptor writes names a class or enum the descriptor does not write, by
+    /// identity: a loader or a reader of the descriptor could not resolve the name, or would
+    /// resolve it to another class of the same name.
+    #[error(
+        "descriptor not closed: class `{class}` names `{missing}`, which the descriptor does not write"
+    )]
+    DescriptorNotClosed { class: String, missing: String },
+
+    /// A descriptor that writes a subpackage classifier cannot name the subpackage's namespace
+    /// or key its classifiers without clashing; the text says which.
+    #[error("subpackage refused: {0}")]
+    Subpackage(String),
 }
 
 /// Specialized Result type for Arachne

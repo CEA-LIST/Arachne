@@ -1,0 +1,443 @@
+{
+  "classes": {
+    "Model": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "Part"
+          },
+          "name": "parts",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "Part",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Part": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "label",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [
+        "ecore::ENamedElement"
+      ],
+      "superTypes": [
+        "ecore::ENamedElement"
+      ]
+    },
+    "ecore::EAnnotation": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": "mv-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "register",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "source",
+          "provenance": {
+            "leaf": "annotation",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "optionalRegister"
+            },
+            "shape": {
+              "key": {
+                "kind": "str"
+              },
+              "kind": "keyed"
+            }
+          },
+          "name": "details",
+          "ordered": true,
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "ecoreDefault",
+            "presence": "declared",
+            "unique": "ecoreDefault"
+          },
+          "required": false,
+          "target": "ecore::EStringToStringMapEntry",
+          "unsettable": false,
+          "upperBound": -1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "eObjectContainment"
+          },
+          "name": "contents",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ecore::EObject",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "transient"
+          },
+          "name": "eModelElement",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ecore::EModelElement",
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "unsupported",
+            "reason": "eObjectReference"
+          },
+          "name": "references",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ecore::EObject",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "superTypeOrder": [
+        "ecore::EModelElement"
+      ],
+      "superTypes": [
+        "ecore::EModelElement"
+      ]
+    },
+    "ecore::EModelElement": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "containment",
+            "shape": {
+              "kind": "sequence"
+            },
+            "target": "ecore::EAnnotation"
+          },
+          "name": "eAnnotations",
+          "ordered": true,
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "houseDefault",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "ecore::EAnnotation",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "ecore::ENamedElement": {
+      "abstract": true,
+      "attributes": [
+        {
+          "annotation": "lww-register",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "register",
+              "tie": "lww"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "name",
+          "provenance": {
+            "leaf": "annotation",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [
+        "ecore::EModelElement"
+      ],
+      "superTypes": [
+        "ecore::EModelElement"
+      ]
+    },
+    "ecore::EObject": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "ecore::EStringToStringMapEntry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "value",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "enumLiterals": {},
+  "enums": {},
+  "formatVersion": 2,
+  "nsPrefix": "builtinregs",
+  "nsURI": "http://www.example.org/builtinregs",
+  "package": "builtinregs",
+  "rootClasses": [
+    "Model"
+  ]
+}

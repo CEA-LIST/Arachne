@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="behaviortree" nsURI="http://www.example.org/behaviortree" nsPrefix="behaviortree">
+    <eClassifiers xsi:type="ecore:EClass" name="Root">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="behaviortrees" upperBound="-1" eType="#//BehaviorTree" containment="true" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="main" lowerBound="1" eType="#//BehaviorTree" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="BehaviorTree">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="ID" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="child" lowerBound="1" eType="#//TreeNode" containment="true" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="blackboard" lowerBound="1" eType="#//Blackboard" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="TreeNode" abstract="true">
+        <eOperations name="tick" lowerBound="1" eType="#//Status" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="ID" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" lowerBound="0" upperBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="ExecutionNode" abstract="true" eSuperTypes="#//TreeNode">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="outflowports" upperBound="-1" eType="#//OutFlowPort" containment="true" />
+        <eStructuralFeatures xsi:type="ecore:EReference" name="inflowports" upperBound="-1" eType="#//InFlowPort" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Decorator" abstract="true" eSuperTypes="#//TreeNode">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="child" lowerBound="1" eType="#//TreeNode" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="ControlNode" abstract="true" eSuperTypes="#//TreeNode">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="children" upperBound="-1" eType="#//TreeNode" containment="true" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Sequence" eSuperTypes="#//ControlNode" />
+    <eClassifiers xsi:type="ecore:EClass" name="Fallback" eSuperTypes="#//ControlNode" />
+    <eClassifiers xsi:type="ecore:EClass" name="Action" abstract="true" eSuperTypes="#//ExecutionNode" />
+    <eClassifiers xsi:type="ecore:EClass" name="Condition" abstract="true" eSuperTypes="#//ExecutionNode" />
+    <eClassifiers xsi:type="ecore:EClass" name="DataFlowPort" abstract="true">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entry" eType="#//BlackboardEntry" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="InFlowPort" eSuperTypes="#//DataFlowPort" />
+    <eClassifiers xsi:type="ecore:EClass" name="OutFlowPort" eSuperTypes="#//DataFlowPort" />
+    <eClassifiers xsi:type="ecore:EClass" name="Blackboard">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entries" upperBound="-1" containment="true" eType="#//BlackboardEntry">
+            <!-- <eAnnotations source="urn:arachne:semantics">
+                <details key="datatype" value="uw-map"/>
+                <details key="key-feature" value="key"/>
+                <details key="value-feature" value="value"/>
+            </eAnnotations> -->
+        </eStructuralFeatures>
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="Inverter" eSuperTypes="#//Decorator" />
+    <eClassifiers xsi:type="ecore:EEnum" name="Status">
+        <eLiterals name="RUNNING" />
+        <eLiterals name="SUCCESS" value="1" />
+        <eLiterals name="FAILURE" value="2" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="IsDoorOpen" eSuperTypes="#//Condition" />
+    <eClassifiers xsi:type="ecore:EClass" name="OpenDoor" eSuperTypes="#//Action" />
+    <eClassifiers xsi:type="ecore:EClass" name="EnterRoom" eSuperTypes="#//Action" />
+    <eClassifiers xsi:type="ecore:EClass" name="CloseDoor" eSuperTypes="#//Action" />
+    <eClassifiers xsi:type="ecore:EClass" name="BlackboardEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="key" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" lowerBound="1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString" />
+    </eClassifiers>
+    <eClassifiers xsi:type="ecore:EClass" name="SubTree" eSuperTypes="#//TreeNode">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="tree" containment="true" lowerBound="1" eType="#//BehaviorTree" />
+    </eClassifiers>
+</ecore:EPackage>

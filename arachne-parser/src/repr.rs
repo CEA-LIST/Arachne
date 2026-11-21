@@ -24,7 +24,7 @@ pub mod annot {
 pub struct Annot {
     source: annot::Source,
     details: HashMap<annot::Key, annot::Val>,
-    /// Raw `references` of the annotation, in document order; they are not resolved.
+    /// Decoded `references` in document order; they are not resolved.
     references: Vec<annot::Reference>,
 }
 
@@ -57,10 +57,10 @@ impl Annot {
     pub fn details(&self) -> &HashMap<annot::Key, annot::Val> {
         &self.details
     }
-    /// Raw `references` of the annotation, in document order.
+    /// Decoded `references` of the annotation, in document order.
     ///
-    /// These are the paths as written in the XML attribute, *e.g.* `#//Class/feature`, and are not
-    /// resolved.
+    /// These are paths from the XML attribute, *e.g.* `#//Class/feature`, with XML
+    /// escaping removed. They are not resolved.
     pub fn references(&self) -> &[annot::Reference] {
         &self.references
     }
@@ -199,7 +199,10 @@ impl Path {
 
         let rel_pref = "#//";
         if let Some(s) = s.strip_prefix(rel_pref) {
-            Self::resolve_relative_etype(ctx.path().clone(), ctx.ctx_mut(), s)
+            // EMF fragments start at the document's EPackage, below the synthetic root.
+            let document_pack = ctx.path().iter().nth(1).unwrap_or(ctx.path().first());
+            let path = Self::of_idx(ctx.ctx(), document_pack);
+            Self::resolve_relative_etype(path, ctx.ctx_mut(), s)
         } else {
             bail!("unsupported `eType` path `{}`", s);
         }
@@ -436,7 +439,6 @@ pub struct Class {
     instance_class_name: Option<String>,
     literals: Vec<ELit>,
     annotations: Annots,
-    /// Supertypes in the order `eSuperTypes` declares them, without duplicates.
     sup: Vec<idx::Class>,
     sub: BTreeSet<idx::Class>,
     structural: Vec<Structural>,
@@ -506,8 +508,8 @@ impl Class {
             structural,
             operations,
         } = self;
-        sup.shrink_to_fit();
         literals.shrink_to_fit();
+        sup.shrink_to_fit();
         annotations.shrink_to_fit();
         structural.shrink_to_fit();
         operations.shrink_to_fit();
@@ -570,20 +572,17 @@ impl Class {
         &self.typ
     }
 
-    /// Supertypes in the order `eSuperTypes` declares them.
-    ///
-    /// EMF lists inherited features in this order, and generates an implementation class that
-    /// extends the implementation of the first one.
+    /// Direct supertypes in declaration order, without duplicates.
     pub fn sup(&self) -> &[idx::Class] {
         &self.sup
     }
-    /// Appends `sup` to the supertypes, unless it is one already; returns true if it was not.
     pub fn add_sup(&mut self, sup: idx::Class) -> bool {
-        let is_new = !self.sup.contains(&sup);
-        if is_new {
-            self.sup.push(sup)
+        if self.sup.contains(&sup) {
+            false
+        } else {
+            self.sup.push(sup);
+            true
         }
-        is_new
     }
 
     pub fn sub(&self) -> &BTreeSet<idx::Class> {

@@ -1,0 +1,2 @@
+[ERROR arachne] Error: Failed to find a root class in `p` package
+    caused by: the package has no concrete EClass

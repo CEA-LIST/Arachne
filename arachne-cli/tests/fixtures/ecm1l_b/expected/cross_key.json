@@ -1,0 +1,163 @@
+{
+  "classes": {
+    "Entry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "enum": "tones::Tone",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "tones::Tone",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "string",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "value",
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Root": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "kind": "text"
+            },
+            "shape": {
+              "key": {
+                "class": "tones::Tone",
+                "kind": "enum"
+              },
+              "kind": "keyed"
+            }
+          },
+          "name": "entries",
+          "ordered": true,
+          "provenance": {
+            "leaf": "declared",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "Entry",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "0206fb3bed134730a149a5f074b426bfb7b9ad59ccad9cfaab71b5dc2e17f623",
+      "nsURI": "http://example.org/ecm1lb/tones"
+    }
+  ],
+  "enumLiterals": {
+    "tones::Tone": [
+      {
+        "literal": null,
+        "name": "LOW",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "HIGH",
+        "value": 1
+      }
+    ]
+  },
+  "enums": {
+    "tones::Tone": [
+      "LOW",
+      "HIGH"
+    ]
+  },
+  "formatVersion": 2,
+  "nsPrefix": "crosskey",
+  "nsURI": "http://example.org/ecm1lb/crosskey",
+  "package": "crosskey",
+  "rootClasses": [
+    "Root"
+  ]
+}

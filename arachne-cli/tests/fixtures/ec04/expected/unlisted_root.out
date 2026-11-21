@@ -1,0 +1,67 @@
+{
+  "classes": {
+    "Car": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [],
+      "interface": false,
+      "references": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "identityReference",
+            "many": false,
+            "target": "parts::Part"
+          },
+          "name": "part",
+          "provenance": {
+            "leaf": "notApplicable",
+            "ordered": "notApplicable",
+            "presence": "notApplicable",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "target": "parts::Part",
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "parts::Part": {
+      "abstract": true,
+      "attributes": [],
+      "containments": [],
+      "interface": false,
+      "origin": "http://example.org/ec04/unlisted/dep",
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "dependsOn": [
+    {
+      "digest": "5e93e2392e55aee143495b6c39e7cc14d4e9773c7ed51c8e2aa4c47db232af17",
+      "nsURI": "http://example.org/ec04/unlisted/dep"
+    }
+  ],
+  "enumLiterals": {},
+  "enums": {},
+  "formatVersion": 2,
+  "nsPrefix": null,
+  "nsURI": "http://example.org/ec04/unlisted/root",
+  "package": "cars",
+  "rootClasses": [
+    "Car"
+  ]
+}

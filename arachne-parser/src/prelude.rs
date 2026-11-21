@@ -14,7 +14,6 @@ pub use std::{
 };
 
 pub use log;
-pub use regex;
 pub use smallvec::{smallvec, SmallVec};
 
 #[macro_use]

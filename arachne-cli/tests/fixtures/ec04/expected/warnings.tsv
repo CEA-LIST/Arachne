@@ -1,0 +1,23 @@
+annotation	warning: dropped eAnnotation at Color	warning: dropped eAnnotation at Color.RED	warning: dropped eAnnotation at Root	warning: dropped eAnnotation at Root.label	warning: dropped eAnnotation at p
+bounds
+changeable
+clean
+combined	warning: dropped eAnnotation at Root.x	warning: dropped eOperation at Root.run	warning: dropped eOperation at sub::Item.ping
+cross/root	warning: dropped eOperation at Car.drive	warning: dropped eOperation at parts::Engine.start
+data_type
+default_value_literal
+derived	warning: dropped derived at Root.total
+e_keys
+instance_class_name	warning: dropped instanceClassName at Thing
+interface
+literal_value
+ns_prefix
+operation	warning: dropped eOperation at Root.reset
+refused
+resolve_proxies	warning: dropped resolveProxies at Root.next
+same_key/root	warning: dropped eOperation at dep2::X.pong
+super_type_order
+transient	warning: dropped transient at Root.scratch
+unlisted/root	warning: dropped eOperation at parts::Part.inspect
+unsettable
+volatile	warning: dropped volatile at Root.cache

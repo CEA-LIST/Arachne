@@ -1,0 +1,7 @@
+modelset/hallvard/jexercise/no.hal.learning/no.hal.learning.exercise/jdt.ecore/model/ast.ecore
+modelset/mde-subtyping/web/subtyping.sm.atl/extended/binding0_reuse_mm.ecore
+modelset/mde-subtyping/web/subtyping.sm.atl/models/smObservation.ecore
+modelset/mde-subtyping/web/subtyping.tests/src/test/resources/sle17/sm/evolution/smEvent.ecore
+modelset/mde-subtyping/web/subtyping.tests/src/test/resources/sle17/sm/evolution/smObservation_prunned.ecore
+modelset/mde-subtyping/web/subtyping.tests/src/test/resources/sle17/sm/example/sm.ecore
+modelset/mde-subtyping/web/subtyping.tests/src/test/resources/sle17/sm/simulation/sm.ecore

@@ -41,8 +41,12 @@ fn describe(ecore: &Path) -> Value {
         .unwrap_or_else(|e| panic!("set-up: {} should parse: {e}", ecore.display()));
     let pack = find_user_package(&parser.ctx)
         .unwrap_or_else(|e| panic!("set-up: {} has no user package: {e}", ecore.display()));
-    descriptor_json(&parser.ctx, pack)
-        .unwrap_or_else(|e| panic!("set-up: describing {}: {e}", ecore.display()))
+    let mut described = descriptor_json(&parser.ctx, pack)
+        .unwrap_or_else(|e| panic!("set-up: describing {}: {e}", ecore.display()));
+    // EC.05 (`spec/items/EC.05.md`): SI.05's claims are about the reference rule, so EC.05's added
+    // keys are taken off; its own oracles hold them.
+    si05_support::ec05_strip(&mut described);
+    described
 }
 
 fn read_json(path: &Path) -> Value {
@@ -180,7 +184,7 @@ const CHECKED_IN: [(&str, &str, &str, &str); 6] = [
     (
         "examples/json.metamodel.json",
         "examples/json.ecore",
-        "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+        "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
         "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30",
     ),
     (
@@ -219,7 +223,9 @@ fn si05_e2_the_emitter_moves_each_checked_in_descriptor_by_the_rule_alone() {
     let mut wrong = Vec::new();
     for (file, ecore, file_sha, new_digest) in CHECKED_IN {
         let path = today_path(file);
-        let checked_in = read_json(&path);
+        let mut checked_in = read_json(&path);
+        // EC.05: json's file is the shipped one, which carries EC.05's keys; `describe` strips them.
+        si05_support::ec05_strip(&mut checked_in);
         let described = describe(&repo().join(ecore));
         let expected = with_identity_rule(&checked_in);
         if render(&described) != render(&expected) {

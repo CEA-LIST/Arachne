@@ -14,6 +14,10 @@ pub enum Warning {
         property: String,
         value: String,
     },
+    UnsupportedFeatureDependency {
+        feature: String,
+        dependency: String,
+    },
     UnsupportedPropertyCombination {
         feature: String,
         properties: Vec<String>,
@@ -28,25 +32,29 @@ pub enum Warning {
         annotation: String,
         reason: String,
     },
-    /// A containment typed by Ecore's `EObject`, such as `EAnnotation.contents`, is not generated
-    AnyObjectContainmentNotSupported {
-        /// `Class.feature`
-        feature: String,
-    },
-    /// A non-containment reference typed by Ecore's `EObject`, such as `EAnnotation.references`,
-    /// is not generated: it would need an arc whose target is a vertex of any kind
-    AnyObjectReferenceNotSupported {
-        /// `Class.feature`
-        feature: String,
-    },
-    /// A transient reference of Ecore's own classes, `EAnnotation.eModelElement`, is not generated
-    TransientEcoreReferenceNotGenerated {
-        /// `Class.feature`
-        feature: String,
-    },
 }
 
 impl Warning {
+    /// Stable diagnostic codes for tools consuming the CLI JSON stream.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::UnsupportedAttributeBounds { .. } => {
+                "arachne_codegen::warning::bounds_normalized"
+            }
+            Self::UnsupportedFeatureProperty { .. } => "arachne_codegen::warning::feature_omitted",
+            Self::UnsupportedFeatureDependency { .. } => {
+                "arachne_codegen::warning::dependency_omitted"
+            }
+            Self::UnsupportedPropertyCombination { .. } => {
+                "arachne_codegen::warning::properties_transformed"
+            }
+            Self::AbstractWithNoSubclass(_) => "arachne_codegen::warning::class_omitted",
+            Self::OperationNotSupported(_) => "arachne_codegen::warning::operation_omitted",
+            Self::UnsupportedAnnotation { .. } => {
+                "arachne_codegen::warning::annotation_unsupported"
+            }
+        }
+    }
     /// Return a human-readable warning message
     pub fn message(&self) -> String {
         match self {
@@ -94,32 +102,22 @@ impl Warning {
                     feature, annotation, reason
                 )
             }
-            Warning::AnyObjectContainmentNotSupported { feature } => {
-                format!(
-                    "Containment `{}` holds objects of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated, and nothing it contains is replicated.",
-                    feature
-                )
-            }
-            Warning::AnyObjectReferenceNotSupported { feature } => {
-                format!(
-                    "Reference `{}` refers to an object of any class (it is typed by Ecore's `EObject`), which is not supported: it is not generated. It would need an arc whose target is a vertex of any kind, which Moirai's typed graph does not offer.",
-                    feature
-                )
-            }
-            Warning::TransientEcoreReferenceNotGenerated { feature } => {
-                format!(
-                    "Reference `{}` of Ecore's own classes is transient, the back-pointer of a containment: it is not generated.",
-                    feature
-                )
-            }
             Warning::UnsupportedFeatureProperty {
                 feature,
                 property,
                 value,
             } => {
                 format!(
-                    "Feature `{}` has unsupported property `{}` with value `{}`.",
+                    "Feature `{}` has unsupported property `{}` with value `{}`; the feature was skipped.",
                     feature, property, value
+                )
+            }
+            Warning::UnsupportedFeatureDependency {
+                feature,
+                dependency,
+            } => {
+                format!(
+                    "Feature `{feature}` depends on skipped feature `{dependency}`; the feature was skipped."
                 )
             }
         }
@@ -127,6 +125,6 @@ impl Warning {
 
     /// Emit the warning to stderr
     pub fn emit(&self) {
-        warn!("{}", self.message());
+        warn!(target: self.code(), "{}", self.message());
     }
 }

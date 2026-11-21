@@ -1,13 +1,8 @@
-use std::{
-    fs,
-    io::{BufWriter, Write},
-    path::PathBuf,
-    process::ExitCode,
-    time::Instant,
-};
+use std::io::{BufWriter, Write};
+use std::{fs, path::PathBuf, process::ExitCode, time::Instant};
 
-use anyhow::{Result, anyhow};
-use arachne_codegen::{Config, MoiraiPathStyle, generate_with_report};
+use anyhow::{Context, Result, anyhow};
+use arachne_codegen::{Config, generate_with_report};
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use ecore_rs::ctx::Ctx;
@@ -22,6 +17,9 @@ mod import_sirius;
     about = "Arachne CLI: translates Ecore metamodels into collaborative, CRDT-based applications in Rust."
 )]
 struct Cli {
+    /// Emit newline-delimited JSON diagnostics and a final result on stdout
+    #[arg(long, global = true)]
+    diagnostics_json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -72,25 +70,6 @@ enum OutputFormat {
     Pretty,
 }
 
-/// CLI mirror of [`MoiraiPathStyle`], so `clap` stays out of `arachne-codegen`.
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum MoiraiPathStyleArg {
-    /// Relative to the generated project — portable, keep the workspaces
-    /// in the same relative arrangement
-    Relative,
-    /// Absolute — tied to the machine that ran the generator
-    Absolute,
-}
-
-impl From<MoiraiPathStyleArg> for MoiraiPathStyle {
-    fn from(value: MoiraiPathStyleArg) -> Self {
-        match value {
-            MoiraiPathStyleArg::Relative => Self::Relative,
-            MoiraiPathStyleArg::Absolute => Self::Absolute,
-        }
-    }
-}
-
 #[derive(Debug, clap::Args)]
 struct GenerateArgs {
     /// Input Ecore metamodel path
@@ -104,23 +83,9 @@ struct GenerateArgs {
     #[arg(short = 'p', long = "project-name")]
     project_name: Option<String>,
 
-    /// Path to the Moirai workspace root
-    #[arg(
-        short = 'm',
-        long = "moirai-root",
-        alias = "moirai-path",
-        default_value = "../moirai",
-        env = "ATRAKTOS_MOIRAI_ROOT"
-    )]
-    moirai_root: PathBuf,
-
-    /// How Moirai `path` dependencies are written into the generated Cargo.toml
-    #[arg(
-        long = "moirai-path-style",
-        value_name = "STYLE",
-        default_value = "relative"
-    )]
-    moirai_path_style: MoiraiPathStyleArg,
+    /// Use crates from a local Moirai workspace
+    #[arg(long, value_name = "DIRECTORY")]
+    moirai_path: Option<PathBuf>,
 
     /// Increase log verbosity (`-v`, `-vv`)
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
@@ -166,14 +131,45 @@ struct ImportSiriusArgs {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let json = cli.diagnostics_json;
+    let stage = match &cli.command {
+        Command::Parse(_) => "parse",
+        Command::Generate(_) => "generate",
+        Command::Describe(_) => "describe",
+        Command::Digest(_) => "digest",
+        Command::ImportSirius(_) => "import-sirius",
+    };
+    if json {
+        log::set_logger(&JSON_LOGGER).expect("logger initialized once");
+        log::set_max_level(log::LevelFilter::Info);
+    }
 
     let result = match cli.command {
-        Command::Parse(args) => run_parse(args),
-        Command::Generate(args) => run_generate(args),
-        Command::Describe(args) => run_describe(args),
-        Command::Digest(args) => run_digest(args),
-        Command::ImportSirius(args) => run_import_sirius(args),
+        Command::Parse(args) => run_parse(args, json),
+        Command::Generate(args) => run_generate(args, json),
+        Command::Describe(args) => run_describe(args, json),
+        Command::Digest(args) => run_digest(args, json),
+        Command::ImportSirius(args) => run_import_sirius(args, json),
     };
+
+    if json {
+        let diagnostic = result.as_ref().err().map(|err| {
+            let (code, kind) = error_category(err, stage);
+            serde_json::json!({"code": code, "kind": kind, "message": format!("{err:#}")})
+        });
+        println!(
+            "{}",
+            serde_json::json!({
+                "reason": "arachne-result", "schema_version": 1,
+                "stage": stage, "ok": result.is_ok(), "error": diagnostic,
+            })
+        );
+        return if result.is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -184,11 +180,13 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_parse(args: ParseArgs) -> Result<()> {
-    if args.quiet {
-        init_logger_at("error");
-    } else {
-        init_logger(u8::from(args.verbose));
+fn run_parse(args: ParseArgs, json: bool) -> Result<()> {
+    if !json {
+        if args.quiet {
+            init_logger_at("error");
+        } else {
+            init_logger(u8::from(args.verbose));
+        }
     }
 
     if args.verbose {
@@ -200,7 +198,7 @@ fn run_parse(args: ParseArgs) -> Result<()> {
     }
 
     let content = fs::read_to_string(&args.input)
-        .map_err(|e| anyhow!("Failed to read file '{}': {}", args.input.display(), e))?;
+        .with_context(|| format!("Failed to read file '{}'", args.input.display()))?;
 
     let ctx = Ctx::parse(&content).map_err(|e| anyhow!("Failed to parse ecore file: {}", e))?;
 
@@ -208,10 +206,12 @@ fn run_parse(args: ParseArgs) -> Result<()> {
         info!("{}", "Parsing completed successfully ✓".green());
     }
 
-    match args.output_format {
-        OutputFormat::Pretty => {
-            for line in ctx.to_pretty_string().lines() {
-                info!("| {}", line);
+    if !args.quiet && !json {
+        match args.output_format {
+            OutputFormat::Pretty => {
+                for line in ctx.to_pretty_string().lines() {
+                    info!("| {}", line);
+                }
             }
         }
     }
@@ -219,18 +219,21 @@ fn run_parse(args: ParseArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_generate(args: GenerateArgs) -> Result<()> {
-    init_logger(args.verbose);
+fn run_generate(args: GenerateArgs, json: bool) -> Result<()> {
+    if !json {
+        init_logger(args.verbose);
+    }
 
     info!("{}", "Starting code generation".bold());
 
-    let mut config = Config::new(args.input)
-        .with_output_dir(args.output_dir)
-        .with_moirai_root(args.moirai_root)
-        .with_moirai_path_style(args.moirai_path_style.into());
+    let mut config = Config::new(args.input).with_output_dir(args.output_dir);
 
     if let Some(project_name) = args.project_name {
         config = config.with_project_name(project_name);
+    }
+
+    if let Some(path) = args.moirai_path {
+        config = config.with_moirai_path(path);
     }
 
     let start = Instant::now();
@@ -260,31 +263,49 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_describe(args: DescribeArgs) -> Result<()> {
+fn run_describe(args: DescribeArgs, json: bool) -> Result<()> {
     // `main` reports a failure through `log::error!`, which writes nothing until a logger is
     // installed, so a refusal from here — a metamodel using Ecore's own classes, say — used to
     // exit 1 in silence. `error` keeps stdout a descriptor and says why when there is none.
-    init_logger_at("error");
-    let parser = arachne_codegen::EcoreParser::from_file(&args.input)
-        .map_err(|e| anyhow!("Failed to parse '{}': {}", args.input.display(), e))?;
-    let pack = arachne_codegen::find_user_package(&parser.ctx)?;
-    let descriptor = arachne_codegen::descriptor_json(&parser.ctx, pack)?;
+    if !json {
+        init_logger_at("error");
+    }
+    arachne_codegen::codegen::descriptor::record_dropped();
+    // The parser's error goes out unchanged: it is the line Léo's `generate` prints for the same file.
+    // An unreadable file names its path as in f90795e; told apart by variant, never by message.
+    let described = arachne_codegen::describe(&args.input).map_err(|e| match e {
+        e @ arachne_codegen::ArachneError::FileRead(_) => {
+            anyhow!("Failed to parse '{}': {e}", args.input.display())
+        }
+        e => anyhow::Error::from(e),
+    })?;
+    let descriptor = &described.descriptor;
     let rendered = format!("{descriptor:#}\n");
 
     match args.output {
-        Some(path) => fs::write(&path, rendered)
-            .map_err(|e| anyhow!("Failed to write '{}': {}", path.display(), e))?,
+        Some(path) => {
+            fs::write(&path, rendered)
+                .map_err(|e| anyhow!("Failed to write '{}': {}", path.display(), e))?;
+            described.write_dependencies(path.parent().unwrap_or(".".as_ref()))?;
+        }
         None => print!("{rendered}"),
     }
-    // On stderr, so the descriptor on stdout stays a descriptor.
-    eprintln!("{}", metamodel_id(&descriptor));
+    // On stderr, so the descriptor on stdout stays a descriptor; what it left out comes first.
+    if !json {
+        for line in arachne_codegen::codegen::descriptor::take_dropped(descriptor) {
+            eprintln!("{line}");
+        }
+    }
+    eprintln!("{}", metamodel_id(descriptor));
 
     Ok(())
 }
 
 /// `{nsURI, digest}` for a descriptor file, as a registration names it.
-fn run_digest(args: DigestArgs) -> Result<()> {
-    init_logger_at("error");
+fn run_digest(args: DigestArgs, json: bool) -> Result<()> {
+    if !json {
+        init_logger_at("error");
+    }
     let text = fs::read_to_string(&args.input)
         .map_err(|e| anyhow!("Failed to read '{}': {}", args.input.display(), e))?;
     let descriptor: serde_json::Value = serde_json::from_str(&text)
@@ -294,8 +315,10 @@ fn run_digest(args: DigestArgs) -> Result<()> {
 }
 
 /// Live import when a node and model are supplied; otherwise the legacy offline batch.
-fn run_import_sirius(args: ImportSiriusArgs) -> Result<()> {
-    init_logger_at("error");
+fn run_import_sirius(args: ImportSiriusArgs, json: bool) -> Result<()> {
+    if !json {
+        init_logger_at("error");
+    }
     let read = |path: &PathBuf, what: &str| -> Result<serde_json::Value> {
         let text = fs::read_to_string(path)
             .map_err(|e| anyhow!("Failed to read '{}': {}", path.display(), e))?;
@@ -362,4 +385,64 @@ fn init_logger_at(default_level: &str) {
     env_logger::Builder::from_env(env)
         .format_timestamp(None)
         .init();
+}
+
+struct JsonLogger;
+static JSON_LOGGER: JsonLogger = JsonLogger;
+
+impl log::Log for JsonLogger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "reason": "arachne-diagnostic", "level": match record.level() {
+                        log::Level::Warn => "warning",
+                        log::Level::Error => "error",
+                        log::Level::Info => "info",
+                        log::Level::Debug => "debug",
+                        log::Level::Trace => "trace",
+                    },
+                    "code": record.target(), "message": record.args().to_string(),
+                })
+            );
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn error_category(err: &anyhow::Error, stage: &str) -> (&'static str, &'static str) {
+    use arachne_codegen::ArachneError;
+    if err.downcast_ref::<std::io::Error>().is_some() {
+        return ("io", "infrastructure");
+    }
+    if let Some(err) = err.downcast_ref::<ArachneError>() {
+        return match err {
+            ArachneError::FileRead(_) | ArachneError::Config(_) => {
+                ("configuration", "infrastructure")
+            }
+            ArachneError::RootClassNotFound(_) => ("root_selection", "unsupported_feature"),
+            ArachneError::NoEClass(_) => ("root_selection", "unsupported_feature"),
+            ArachneError::NoConcreteEClass(_) => ("root_selection", "unsupported_feature"),
+            ArachneError::UnlistedComponent(..) => ("root_selection", "unsupported_feature"),
+            ArachneError::NoValidPackageFound => ("package_selection", "unsupported_feature"),
+            ArachneError::DuplicateDescriptorClass(_)
+            | ArachneError::DescriptorNotClosed { .. } => ("invalid_model", "invalid_input"),
+            ArachneError::Subpackage(_) => ("invalid_model", "invalid_input"),
+            ArachneError::InvalidModel(_) => ("invalid_model", "invalid_input"),
+            ArachneError::SynParse(_) => ("generated_syntax", "implementation_bug"),
+            ArachneError::EcoreParse(_) => ("parse_error", "unknown"),
+            ArachneError::CodeGeneration(_) => ("generation_error", "unknown"),
+        };
+    }
+    if stage == "parse" {
+        ("parse_error", "unknown")
+    } else {
+        ("generation_error", "unknown")
+    }
 }

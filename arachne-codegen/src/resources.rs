@@ -1,4 +1,4 @@
-//! Local Ecore resource resolution for project generation.
+//! Local Ecore resource resolution for `describe`.
 //!
 //! The parser deliberately resolves only names within a resource and Ecore built-ins.
 //! Rewrite relative resource references to qualified local forward references, then
@@ -14,23 +14,36 @@ use std::{
 use anyhow::{Context, bail};
 use ecore_rs::{
     ctx::Ctx,
-    parser::raw::Parser,
-    prelude::regex::Regex,
+    parser,
     repr::{self, ecore, idx},
 };
+use regex::Regex;
 use serde_json::{Value, json};
 
-use crate::{ArachneError, EcoreParser, codegen::descriptor, find_user_package};
+use crate::{
+    ArachneError, EcoreParser,
+    codegen::{descriptor, semantics},
+    find_user_package,
+    ignored::blank,
+    literals::{Literals, enum_literals, plain_datatypes},
+};
 
 pub(crate) struct Resources {
     pub parser: EcoreParser,
-    pub own_classes: Vec<idx::Class>,
     pub descriptor: Value,
     dependencies: BTreeMap<String, Value>,
     origins: BTreeMap<String, String>,
+    /// The enum literals the descriptor writes, imported enums included, by key.
+    literals: Literals,
 }
 
-impl Resources {
+/// What `arachne describe` writes: the descriptor, and the descriptor of each model it depends on, by digest.
+pub struct Described {
+    pub descriptor: Value,
+    dependencies: BTreeMap<String, Value>,
+}
+
+impl Described {
     pub fn write_dependencies(&self, output: &Path) -> anyhow::Result<()> {
         if !self.dependencies.is_empty() {
             let directory = output.join("dependencies");
@@ -44,7 +57,69 @@ impl Resources {
         }
         Ok(())
     }
+}
 
+/// Describes `path`. The file is read alone first, so every file that was described before keeps
+/// its descriptor and, when it is refused, the parser's own error. Only a file the parser refuses
+/// is resolved against the resources it names; when that fails too, the parser's error stands.
+pub fn describe(path: &Path) -> crate::Result<Described> {
+    // Describe reads a package referenced before its definition; `generate` refuses it.
+    let first = fs::read_to_string(path)
+        .map_err(ArachneError::from)
+        .and_then(|text| {
+            let (text, ignored) = blank(&text, false);
+            let literals = enum_literals(&text);
+            let plain = plain_datatypes(&text);
+            Ok((
+                EcoreParser {
+                    ctx: Ctx::parse_filling_forward_packs(text)?,
+                },
+                ignored,
+                literals,
+                plain,
+            ))
+        });
+    match first {
+        Ok((parser, ignored, literals, plain)) => {
+            descriptor::record_ignored(ignored);
+            let pack = find_user_package(&parser.ctx)?;
+            Ok(Described {
+                descriptor: descriptor::descriptor_with_roots(
+                    &parser.ctx,
+                    pack,
+                    &descriptor::tree_classes(&parser.ctx, pack),
+                    &literals,
+                    &plain,
+                )?,
+                dependencies: BTreeMap::new(),
+            })
+        }
+        Err(refused) => {
+            // The parser already logged this file's errors; the second read must stay silent.
+            let level = log::max_level();
+            log::set_max_level(log::LevelFilter::Off);
+            let resolved = load(path);
+            log::set_max_level(level);
+            resolved
+                .map(|resources| Described {
+                    descriptor: resources.descriptor.clone(),
+                    dependencies: resources.dependencies.clone(),
+                })
+                .map_err(|cause| match refused {
+                    // The parser's line stays first; the loader's cause follows on one line.
+                    ArachneError::EcoreParse(parse) => ArachneError::EcoreParse(format!(
+                        "{parse}\ncaused by: {}",
+                        format!("{cause:#}").replace('\n', " ")
+                    )),
+                    // A file that cannot be read keeps its read error alone: the loader fails on
+                    // the same read, so a cause line would only repeat it.
+                    refused => refused,
+                })
+        }
+    }
+}
+
+impl Resources {
     fn qualified_name(&self, class: idx::Class) -> anyhow::Result<String> {
         let name = self.parser.ctx[class].name();
         Ok(if self.origins.contains_key(name) {
@@ -75,7 +150,11 @@ impl Loader {
         if !self.active.insert(path.clone()) {
             bail!("Cyclic Ecore resource dependencies at {}", path.display());
         }
-        let content = fs::read_to_string(&path)?;
+        // The root is the first file `active` holds; a later one is a dependency.
+        let (content, ignored) = blank(&fs::read_to_string(&path)?, self.active.len() > 1);
+        descriptor::record_ignored(ignored);
+        let mut literals = enum_literals(&content);
+        let plain = plain_datatypes(&content);
         let mut requested = BTreeMap::new();
         let mut dependencies = BTreeMap::new();
         let rewritten = rewrite_references(&content, |reference| {
@@ -115,14 +194,12 @@ impl Loader {
             Ok(Some(format!("#//{qualified}")))
         })?;
 
-        let mut ctx = Ctx::with_capacity(7, 7);
-        Parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
+        let mut ctx = Ctx::with_capacity_filling_forward_packs(7, 7);
+        parser::parse(&rewritten, &mut ctx).map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
         let pack_path = pack.path(&ctx);
-        let own_classes: Vec<_> = pack
-            .classes()
-            .iter()
-            .copied()
+        let own_classes: Vec<_> = descriptor::tree_classes(&ctx, pack)
+            .into_iter()
             .filter(|class| !requested.contains_key(ctx[*class].name()))
             .collect();
         let mut origins = BTreeMap::new();
@@ -135,11 +212,34 @@ impl Loader {
                 &pack_path,
                 &mut imported,
                 &mut origins,
+                &mut literals,
             )?;
         }
         ctx.finalize().map_err(ArachneError::from)?;
         let pack = find_user_package(&ctx)?;
-        let mut descriptor = descriptor::descriptor_with_roots(&ctx, pack, &own_classes)?;
+        // Before the descriptor, whose own duplicate-key refusal would otherwise answer first.
+        // Only a descriptor that writes a subpackage classifier is refused, and then every
+        // first-level subpackage named like an imported package, empty or not.
+        let writes_subpackage_classifier = pack.sub().iter().any(|sub| {
+            descriptor::tree_classes(&ctx, &ctx[*sub])
+                .iter()
+                .any(|class| {
+                    semantics::is_eclass(&ctx[*class]) || semantics::is_eenum(&ctx[*class])
+                })
+        });
+        for sub in pack.sub().iter().filter(|_| writes_subpackage_classifier) {
+            let name = ctx[*sub].name();
+            if origins.keys().any(|key| {
+                key.split_once("::")
+                    .is_some_and(|(prefix, _)| prefix == name)
+            }) {
+                bail!(ArachneError::Subpackage(format!(
+                    "`{name}` is named like an imported package"
+                )));
+            }
+        }
+        let mut descriptor =
+            descriptor::descriptor_with_roots(&ctx, pack, &own_classes, &literals, &plain)?;
         for (name, origin) in &origins {
             if let Some(class) = descriptor["classes"].get_mut(name) {
                 class["origin"] = json!(origin);
@@ -155,10 +255,10 @@ impl Loader {
         }
         let resource = Rc::new(Resources {
             parser: EcoreParser { ctx },
-            own_classes,
             descriptor,
             dependencies,
             origins,
+            literals,
         });
         self.active.remove(&path);
         self.loaded.insert(path, Rc::clone(&resource));
@@ -175,6 +275,7 @@ fn import_class(
     path: &repr::Path,
     imported: &mut BTreeMap<String, idx::Class>,
     origins: &mut BTreeMap<String, String>,
+    literals: &mut Literals,
 ) -> anyhow::Result<idx::Class> {
     let ctx = &resource.parser.ctx;
     if let Some((typ, _)) = ctx.builtins().iter().find(|(_, idx)| **idx == source) {
@@ -188,6 +289,13 @@ fn import_class(
             .map_err(ArachneError::from)?);
     }
     let class = &ctx[source];
+    // A subpackage classifier would be flattened under the dependency's name.
+    if class.path.last() != find_user_package(ctx)?.idx {
+        bail!(ArachneError::Subpackage(format!(
+            "`{}` of a dependency lies in one of its subpackages",
+            class.name()
+        )));
+    }
     let name = resource.qualified_name(source)?;
     let origin = resource
         .origins
@@ -212,6 +320,10 @@ fn import_class(
         )
         .map_err(ArachneError::from)?;
     imported.insert(name.clone(), index);
+    // The dependency's own key for the class is its name, which its descriptor wrote.
+    if let Some(carried) = resource.literals.get(class.name()) {
+        literals.insert(name.clone(), carried.clone());
+    }
     origins.insert(name, origin);
     if let Some(name) = class.instance_class_name() {
         destination[index].set_instance_class_name(name);
@@ -223,14 +335,32 @@ fn import_class(
         destination[index].add_literal(literal.clone());
     }
     for parent in class.sup() {
-        let parent = import_class(resource, *parent, destination, path, imported, origins)?;
+        let parent = import_class(
+            resource,
+            *parent,
+            destination,
+            path,
+            imported,
+            origins,
+            literals,
+        )?;
         destination.add_sup_class(parent, index);
     }
     for feature in class.structural() {
         let mut feature = feature.clone();
         feature.typ = feature
             .typ
-            .map(|target| import_class(resource, target, destination, path, imported, origins))
+            .map(|target| {
+                import_class(
+                    resource,
+                    target,
+                    destination,
+                    path,
+                    imported,
+                    origins,
+                    literals,
+                )
+            })
             .transpose()?;
         destination[index].add_structural(feature);
     }

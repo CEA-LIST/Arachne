@@ -81,6 +81,11 @@ struct Shipped {
     new_sha: &'static str,
     /// Its metamodel digest (SI.05's registered digests, `si05_identity_reference_emitter.rs`).
     new_digest: &'static str,
+    /// EC.05 (`spec/items/EC.05.md`): sha256 of the file regenerated with EC.05's keys, computed at
+    /// spec time from 40f4043's describe run extended by `arachne-cli/tests/ec05/model.py`.
+    ec05_sha: &'static str,
+    /// Its metamodel digest.
+    ec05_digest: &'static str,
     /// Reference entries on `identityReference` after SI.10, read by hand.
     identity: usize,
     /// Reference entries left on `reference`, every one declaring an `eOpposite`, read by hand.
@@ -96,6 +101,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "b899ec335e7dc46303d5a7871a1370a12db8858718bea57dc6f58f01c474feb5",
         new_sha: "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
         new_digest: "f19f730e4aaa7320d23e6b211a7856e7aa9042b56cef67cb3c0cb36091ad6822",
+        ec05_sha: "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
+        ec05_digest: "c05240840a30cd6c034c5b568d9789e67615abe7660920fd6b389aec2a3e994d",
         identity: 1,
         kept: 0,
     },
@@ -107,6 +114,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "21c50dea71938b861233b72116f5ead094fe1bbb3d67bf623864f52c3ead1c3f",
         new_sha: "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
         new_digest: "5d34af887ace294f008c96403a4e6dd442f374d4e23639ec1620c04a4cf301f3",
+        ec05_sha: "3aa1800ed183804ff3f0e5a066f507a3af8e5b7b1a26874a0ff85d82743c5f83",
+        ec05_digest: "48384ea3e496c5ce1e9039d0cd0424bb4b297c4121454af0fc648b48b4b696a9",
         identity: 4,
         kept: 2,
     },
@@ -118,6 +127,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "12e7d2beab5a6d0a44090ed0512228c170a19879a7ac25093d817d58fe5c4de1",
         new_sha: "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
         new_digest: "14377158866c6dd249915cdadbc5579efb64a3e742b5bd7aff1ced4396f57b86",
+        ec05_sha: "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
+        ec05_digest: "be47a0ce6ad9fed260a530603e8be2b837bd5512da902e5b8c06aacf3599e591",
         identity: 2,
         kept: 0,
     },
@@ -129,6 +140,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "a44920adc661d308b7bbb9a8e4ccf1549a093546a241c0e33b28596de8000f3b",
         new_sha: "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
         new_digest: "999ed54f0657c2c8e27162645b0676e94be56a16d9058429707a104d1e620dc9",
+        ec05_sha: "094295de8e91f5f9bb5b818ca620be98a526e6d6d79cd0970ffa48f5ad9fe277",
+        ec05_digest: "e5d3e67fb7bf25c66ec9c8414066b378f96feeb5bbe102386344f1fc9f54fa13",
         identity: 8,
         kept: 2,
     },
@@ -140,6 +153,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30",
         new_sha: "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
         new_digest: "a9d83505175d8d6708b86c7eb64d356d64197f066f752c1a9ea842c76a45bc30",
+        ec05_sha: "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
+        ec05_digest: "0c46390caab46431feafa07e5ef8429f7cd51b559b3c9de9d74ababe30b1647f",
         identity: 0,
         kept: 0,
     },
@@ -151,6 +166,8 @@ const SHIPPED: [Shipped; 6] = [
         legacy_digest: "2df00538ec6fc36639611b6e57d0926e8422bce4aa7a17d4083bdbcd1f761457",
         new_sha: "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83",
         new_digest: "a75d8af47bf99f51b908f909a468c75c629a505de80b5379f19085943d6ae066",
+        ec05_sha: "e6e406af9b8246c7d4efc4898763b2c39404bd8cbb6754217a42c364fb844178",
+        ec05_digest: "7130a3246754a6a5a5c12f64de9b9354fa8dd76f656324a60bd80b33319935e2",
         identity: 34,
         kept: 2,
     },
@@ -228,20 +245,20 @@ fn si10_d1_each_shipped_descriptor_is_what_describe_writes_byte_for_byte() {
                 s.file, s.ecore
             ));
         }
-        if sha256(&bytes) != s.new_sha {
+        if sha256(&bytes) != s.ec05_sha {
             wrong.push(format!(
                 "examples/{}: sha256 {}, registered {}",
                 s.file,
                 sha256(&bytes),
-                s.new_sha
+                s.ec05_sha
             ));
         }
-        if metamodel_digest(&checked_in) != s.new_digest {
+        if metamodel_digest(&checked_in) != s.ec05_digest {
             wrong.push(format!(
                 "examples/{}: digest {}, registered {}",
                 s.file,
                 metamodel_digest(&checked_in),
-                s.new_digest
+                s.ec05_digest
             ));
         }
         if (identity, bare, opposite) != (s.identity, 0, s.kept) {
@@ -285,8 +302,10 @@ fn si10_d2_each_shipped_descriptor_is_the_legacy_one_moved_by_the_rule_alone() {
             s.new_sha,
             "set-up: {name} moved by the rule does not have the registered sha256"
         );
-        let shipped = read_bytes(&repo().join("examples").join(s.file));
-        if shipped != expected.as_bytes() {
+        // EC.05: the shipped file carries EC.05's keys, taken off here; D1 holds them.
+        let mut shipped = read_json(&repo().join("examples").join(s.file));
+        si05_support::ec05_strip(&mut shipped);
+        if render(&shipped) != expected {
             wrong.push(format!(
                 "examples/{} is not {name} moved by the identity rule alone",
                 s.file
@@ -302,7 +321,8 @@ fn si10_d2_each_shipped_descriptor_is_the_legacy_one_moved_by_the_rule_alone() {
 
 /// The digest fixture after SI.10: today's text with the three moved digests replaced (json's
 /// does not move), as `sed` wrote it at spec time.
-const DIGEST_FIXTURE_SHA: &str = "9e4a4f24bc3f5485a1b54726cd2645a8ddf18c0f0bd55a539b4fb7dd2c277efe";
+// EC.05 (`spec/items/EC.05.md`): the four digests moved to EC.05's; `9e4a4f24...` before.
+const DIGEST_FIXTURE_SHA: &str = "862a749b89be207b2da20138d692994d8291cca32c58c5e86db37cd64a468055";
 
 /// D3. `examples/fixtures/metamodel-digests.json` (read by the editor's mp6 and the generated
 /// crate's mp13) names the shipped descriptors by their new digests, and is the registered bytes.
@@ -312,10 +332,10 @@ fn si10_d3_the_digest_fixture_names_the_shipped_descriptors() {
     let fixture = read_json(&path);
     let mut wrong = Vec::new();
     for (file, digest) in [
-        ("bt.metamodel.json", SHIPPED[0].new_digest),
-        ("uml.metamodel.json", SHIPPED[1].new_digest),
-        ("json.metamodel.json", SHIPPED[4].new_digest),
-        ("notation.metamodel.json", SHIPPED[2].new_digest),
+        ("bt.metamodel.json", SHIPPED[0].ec05_digest),
+        ("uml.metamodel.json", SHIPPED[1].ec05_digest),
+        ("json.metamodel.json", SHIPPED[4].ec05_digest),
+        ("notation.metamodel.json", SHIPPED[2].ec05_digest),
     ] {
         let shipped = read_json(&repo().join("examples").join(file));
         let want = json!({"nsURI": shipped["nsURI"], "digest": digest});
@@ -346,10 +366,13 @@ fn si10_d3_the_digest_fixture_names_the_shipped_descriptors() {
 #[test]
 fn si10_d4_the_workspace_sysml_descriptor_is_the_shipped_one_and_the_previous_is_kept() {
     let demo = workspace().join("demo");
+    // EC.05 (`spec/items/EC.05.md`): `demo/` is outside the repository and EC.05 does not move it;
+    // until the follow-up re-pin item does, `demo/sysml.json` is the shipped file as SI.10 left it
+    // (`SHIPPED[5].new_sha`), which is the shipped file with EC.05's keys taken off.
     let shipped = read_bytes(&repo().join("examples/sysml/sysml.metamodel.json"));
     let mut wrong = Vec::new();
     match fs::read(demo.join("sysml.json")) {
-        Ok(bytes) if bytes == shipped => {}
+        Ok(bytes) if sha256(&bytes) == SHIPPED[5].new_sha => {}
         Ok(bytes) => wrong.push(format!(
             "demo/sysml.json has sha256 {}, not the shipped examples/sysml/sysml.metamodel.json's {}",
             sha256(&bytes),
@@ -433,15 +456,20 @@ fn si10_d5_the_generated_crates_keep_their_descriptors() {
 
 /// Every file under `examples/` after SI.10, with its sha256: the five moved descriptors and the
 /// digest fixture at their new bytes, every other file at the bytes it held at `25ede18`
-/// (`sha256sum`, spec time).
-const EXAMPLES_AFTER: [(&str, &str); 25] = [
+/// (`sha256sum`, spec time). EC.M1b (`spec/items/EC.M1b.md`): `README.md` takes Léo's run-command
+/// lines (`3463d7c5...` before) and his `pub_crawl.ecore` is added, at its bytes at `ebc3141`.
+const EXAMPLES_AFTER: [(&str, &str); 26] = [
+    (
+        "pub_crawl.ecore",
+        "6739f4ec74652d201a805f09b957d2819ec2417f92be31fd0674e64f61f693ea",
+    ),
     (
         "GENERIC_NETWORK_GUIDE.md",
         "01ab74a6ad9ea4e0f7cf0465b10661f8953d095eafef3bb87d684ccc9c15adac",
     ),
     (
         "README.md",
-        "3463d7c5a2c6374e6bad364137eb89c0d838999b7da85307bbf50a9077efe3f5",
+        "d59d4f0672e541cb415a12828c008659418363d512f0752c2b5a673fa1d74523",
     ),
     (
         "SimpleUML.ecore",
@@ -457,7 +485,7 @@ const EXAMPLES_AFTER: [(&str, &str); 25] = [
     ),
     (
         "bt.metamodel.json",
-        "d3b20675a5df3f62e824b25467f00840ed506171e300c4b1aa0e787df995bd4e",
+        "993f585c64a5115a1b53bf36e018a262740de05f09184bd868ebf5b0c6630c40",
     ),
     (
         "class_diagram.ecore",
@@ -478,7 +506,7 @@ const EXAMPLES_AFTER: [(&str, &str); 25] = [
     ),
     (
         "json.metamodel.json",
-        "efdbde163d711b39e102ae7dc98585c3cb981ad9be82914ba4f4270e10113ec1",
+        "94b4fc08ee6f69568eb607a8479725e098efd98b1fc65a928863fb8d66cb64ba",
     ),
     (
         "notation.ecore",
@@ -486,7 +514,7 @@ const EXAMPLES_AFTER: [(&str, &str); 25] = [
     ),
     (
         "notation.metamodel.json",
-        "dcf9b2f02cf7066a5a51a7062c0cd019d585bec901cafc82149760ad93a1b040",
+        "5504db2f80f36d1d315559131f2f329796fda0fc9c676d5364eddcab9c53d38f",
     ),
     (
         "pet_metamodels/abstract_inherits_concrete.ecore",
@@ -518,7 +546,7 @@ const EXAMPLES_AFTER: [(&str, &str); 25] = [
     ),
     (
         "sysml/sysml.metamodel.json",
-        "8f41862402d936e54b9d6de9cd0ccd6e290ea0adaa8d0331ba21c3c13f7a1f83",
+        "e6e406af9b8246c7d4efc4898763b2c39404bd8cbb6754217a42c364fb844178",
     ),
     (
         "umlclass.ecore",
@@ -526,11 +554,11 @@ const EXAMPLES_AFTER: [(&str, &str); 25] = [
     ),
     (
         "umlclass.metamodel.json",
-        "9600cc395935773caa15518c3a3e1d337aaccfa31f1d5073deae53dc2064ec79",
+        "094295de8e91f5f9bb5b818ca620be98a526e6d6d79cd0970ffa48f5ad9fe277",
     ),
     (
         "uml.metamodel.json",
-        "8c50a7a89aedad54fd19c6939798ddf7ef1c3b7c4a7444a2ddf467748dc4c727",
+        "3aa1800ed183804ff3f0e5a066f507a3af8e5b7b1a26874a0ff85d82743c5f83",
     ),
 ];
 

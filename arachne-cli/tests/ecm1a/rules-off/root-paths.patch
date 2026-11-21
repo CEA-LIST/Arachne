@@ -1,0 +1,13 @@
+--- a/arachne-parser/src/repr.rs
++++ b/arachne-parser/src/repr.rs
+@@ -200,9 +200,7 @@
+         let rel_pref = "#//";
+         if let Some(s) = s.strip_prefix(rel_pref) {
+             // EMF fragments start at the document's EPackage, below the synthetic root.
+-            let document_pack = ctx.path().iter().nth(1).unwrap_or(ctx.path().first());
+-            let path = Self::of_idx(ctx.ctx(), document_pack);
+-            Self::resolve_relative_etype(path, ctx.ctx_mut(), s)
++            Self::resolve_relative_etype(ctx.path().clone(), ctx.ctx_mut(), s)
+         } else {
+             bail!("unsupported `eType` path `{}`", s);
+         }

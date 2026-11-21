@@ -6,10 +6,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -33,16 +37,23 @@
               "feature": "memberEnd"
             }
           ],
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 2,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -57,14 +68,20 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -85,8 +102,13 @@
               "feature": "ownedEnd"
             }
           ],
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         }
+      ],
+      "superTypeOrder": [
+        "Classifier"
       ],
       "superTypes": [
         "Classifier"
@@ -98,10 +120,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -119,10 +145,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Parameter"
+          "target": "Parameter",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Feature"
+      ],
       "superTypes": [
         "Feature"
       ]
@@ -133,11 +165,15 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "eOpposite": "implementingClassifier",
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -155,10 +191,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "InterfaceRealization"
+          "target": "InterfaceRealization",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Classifier"
+      ],
       "superTypes": [
         "Classifier"
       ]
@@ -169,10 +211,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -190,14 +236,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -215,10 +267,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Operation"
+          "target": "Operation",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "BehavioredClassifier"
+      ],
       "superTypes": [
         "BehavioredClassifier"
       ]
@@ -228,12 +286,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": "false",
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -252,17 +314,23 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "eOpposite": "specific",
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -280,10 +348,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Generalization"
+          "target": "Generalization",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Type"
+      ],
       "superTypes": [
         "Type"
       ]
@@ -293,12 +367,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -316,17 +394,24 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -341,8 +426,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Element"
+          "target": "Element",
+          "unsettable": false,
+          "upperBound": -1
         }
+      ],
+      "superTypeOrder": [
+        "Element"
       ],
       "superTypes": [
         "Element"
@@ -354,10 +444,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -375,14 +469,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -400,10 +500,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Operation"
+          "target": "Operation",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Classifier"
+      ],
       "superTypes": [
         "Classifier"
       ]
@@ -412,13 +518,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -433,14 +544,20 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "NamedElement"
+          "target": "NamedElement",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": true,
           "merge": {
             "kind": "identityReference",
@@ -455,8 +572,13 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "NamedElement"
+          "target": "NamedElement",
+          "unsettable": false,
+          "upperBound": -1
         }
+      ],
+      "superTypeOrder": [
+        "PackageableElement"
       ],
       "superTypes": [
         "PackageableElement"
@@ -468,10 +590,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -489,10 +615,14 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Comment"
+          "target": "Comment",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [],
       "superTypes": []
     },
     "Enumeration": {
@@ -501,10 +631,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -522,10 +656,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "EnumerationLiteral"
+          "target": "EnumerationLiteral",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "DataType"
+      ],
       "superTypes": [
         "DataType"
       ]
@@ -534,7 +674,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "NamedElement"
+      ],
       "superTypes": [
         "NamedElement"
       ]
@@ -544,12 +688,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": "false",
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -568,11 +716,17 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "NamedElement"
+      ],
       "superTypes": [
         "NamedElement"
       ]
@@ -581,13 +735,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -602,15 +761,21 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "Classifier"
+          "target": "Classifier",
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "eOpposite": "generalization",
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "reference",
@@ -625,8 +790,13 @@
             "unique": "notApplicable"
           },
           "required": true,
-          "target": "Classifier"
+          "target": "Classifier",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "Element"
       ],
       "superTypes": [
         "Element"
@@ -638,10 +808,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -659,14 +833,20 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Property"
+          "target": "Property",
+          "unsettable": false,
+          "upperBound": -1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -684,10 +864,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Operation"
+          "target": "Operation",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Classifier"
+      ],
       "superTypes": [
         "Classifier"
       ]
@@ -696,13 +882,18 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -723,15 +914,21 @@
               "feature": "supplier"
             }
           ],
-          "target": "Interface"
+          "target": "Interface",
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "eOpposite": "interfaceRealization",
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "reference",
@@ -752,8 +949,13 @@
               "feature": "client"
             }
           ],
-          "target": "BehavioredClassifier"
+          "target": "BehavioredClassifier",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "Dependency"
       ],
       "superTypes": [
         "Dependency"
@@ -764,12 +966,16 @@
       "attributes": [
         {
           "annotation": "mv-register",
+          "changeable": true,
+          "default": "1",
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "int",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -788,16 +994,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": "mv-register",
+          "changeable": true,
+          "default": "1",
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "int",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -816,11 +1028,17 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Element"
+      ],
       "superTypes": [
         "Element"
       ]
@@ -830,12 +1048,16 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -853,10 +1075,15 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "enum": "VisibilityKind",
           "facets": {
             "ordered": null,
@@ -864,6 +1091,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -883,11 +1111,17 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Element"
+      ],
       "superTypes": [
         "Element"
       ]
@@ -896,7 +1130,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "BehavioralFeature"
+      ],
       "superTypes": [
         "BehavioralFeature"
       ]
@@ -907,10 +1145,14 @@
       "containments": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": true,
           "merge": {
             "kind": "containment",
@@ -928,10 +1170,16 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "PackageableElement"
+          "target": "PackageableElement",
+          "unsettable": false,
+          "upperBound": -1
         }
       ],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "PackageableElement"
+      ],
       "superTypes": [
         "PackageableElement"
       ]
@@ -940,7 +1188,11 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "NamedElement"
+      ],
       "superTypes": [
         "NamedElement"
       ]
@@ -950,6 +1202,9 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": "in",
+          "eKeys": [],
           "enum": "ParameterDirectionKind",
           "facets": {
             "ordered": null,
@@ -957,6 +1212,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -976,11 +1232,18 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "MultiplicityElement",
+        "TypedElement"
+      ],
       "superTypes": [
         "MultiplicityElement",
         "TypedElement"
@@ -990,7 +1253,11 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "DataType"
+      ],
       "superTypes": [
         "DataType"
       ]
@@ -1000,6 +1267,9 @@
       "attributes": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": "none",
+          "eKeys": [],
           "enum": "AggregationKind",
           "facets": {
             "ordered": null,
@@ -1007,6 +1277,7 @@
           },
           "isId": false,
           "kind": "enum",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -1026,16 +1297,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "string",
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -1053,16 +1330,22 @@
             "presence": "ecoreDefault",
             "unique": "notApplicable"
           },
-          "required": false
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
         },
         {
           "annotation": null,
+          "changeable": true,
+          "default": "false",
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
           "isId": false,
           "kind": "bool",
+          "lowerBound": 1,
           "many": false,
           "merge": {
             "kind": "attribute",
@@ -1081,11 +1364,19 @@
             "presence": "declared",
             "unique": "notApplicable"
           },
-          "required": true
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
         }
       ],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Feature",
+        "MultiplicityElement",
+        "TypedElement"
+      ],
       "superTypes": [
         "Feature",
         "MultiplicityElement",
@@ -1096,7 +1387,11 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "PackageableElement"
+      ],
       "superTypes": [
         "PackageableElement"
       ]
@@ -1105,13 +1400,18 @@
       "abstract": true,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [
         {
           "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
           "facets": {
             "ordered": null,
             "unique": null
           },
+          "lowerBound": 0,
           "many": false,
           "merge": {
             "kind": "identityReference",
@@ -1126,8 +1426,13 @@
             "unique": "notApplicable"
           },
           "required": false,
-          "target": "Type"
+          "target": "Type",
+          "unsettable": false,
+          "upperBound": 1
         }
+      ],
+      "superTypeOrder": [
+        "NamedElement"
       ],
       "superTypes": [
         "NamedElement"
@@ -1137,11 +1442,78 @@
       "abstract": false,
       "attributes": [],
       "containments": [],
+      "interface": false,
       "references": [],
+      "superTypeOrder": [
+        "Dependency"
+      ],
       "superTypes": [
         "Dependency"
       ]
     }
+  },
+  "enumLiterals": {
+    "AggregationKind": [
+      {
+        "literal": null,
+        "name": "none",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "shared",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "composite",
+        "value": 2
+      }
+    ],
+    "ParameterDirectionKind": [
+      {
+        "literal": null,
+        "name": "in",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "inout",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "out",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "return",
+        "value": 3
+      }
+    ],
+    "VisibilityKind": [
+      {
+        "literal": null,
+        "name": "public",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "private",
+        "value": 1
+      },
+      {
+        "literal": null,
+        "name": "protected",
+        "value": 2
+      },
+      {
+        "literal": null,
+        "name": "package",
+        "value": 3
+      }
+    ]
   },
   "enums": {
     "AggregationKind": [
@@ -1163,6 +1535,7 @@
     ]
   },
   "formatVersion": 2,
+  "nsPrefix": "umlclass",
   "nsURI": "http://cea.fr/crdt/umlclass/0.1",
   "package": "umlclass",
   "rootClasses": [

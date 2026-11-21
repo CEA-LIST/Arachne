@@ -78,7 +78,9 @@ fn si05_r1_the_digest_fixture_names_the_checked_in_descriptors_and_the_emitter_m
 /// still hold; the rule's kind is SI.05's.
 #[test]
 fn si05_r2_the_bt_non_containment_reference_is_described_on_the_identity_rule() {
-    let descriptor = describe("behavior_tree.ecore");
+    let mut descriptor = describe("behavior_tree.ecore");
+    // EC.05 (`spec/items/EC.05.md`): the entry is held without EC.05's added keys.
+    si05_support::ec05_strip(&mut descriptor);
     assert_eq!(
         descriptor["classes"]["DataFlowPort"]["references"],
         json!([

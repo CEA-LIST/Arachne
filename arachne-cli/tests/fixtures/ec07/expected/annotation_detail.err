@@ -1,0 +1,7 @@
+warning: dropped eAnnotation at Color.RED
+warning: dropped eAnnotation at Root
+warning: dropped eAnnotation at Root.label
+warning: dropped eAnnotation at p
+warning: dropped eDataType at Date
+warning: dropped eOperation at Root.reset
+{"digest":"f17876ba9f683e2a06253e3b0629509208b2fcaca074118816d0d1bf9a0adf9b","nsURI":"http://example.org/ec07/annotation_detail"}

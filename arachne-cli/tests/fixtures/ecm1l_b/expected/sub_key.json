@@ -1,0 +1,177 @@
+{
+  "classes": {
+    "Entry": {
+      "abstract": false,
+      "attributes": [
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "enum": "sub::Shade",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 1,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "sub::Shade",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "single"
+            }
+          },
+          "name": "key",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "declared",
+            "unique": "notApplicable"
+          },
+          "required": true,
+          "unsettable": false,
+          "upperBound": 1
+        },
+        {
+          "annotation": null,
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "enum": "Alpha",
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "isId": false,
+          "kind": "enum",
+          "lowerBound": 0,
+          "many": false,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Alpha",
+              "kind": "enum",
+              "tie": "mv"
+            },
+            "shape": {
+              "kind": "optional"
+            }
+          },
+          "name": "value",
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "notApplicable",
+            "presence": "ecoreDefault",
+            "unique": "notApplicable"
+          },
+          "required": false,
+          "unsettable": false,
+          "upperBound": 1
+        }
+      ],
+      "containments": [],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    },
+    "Root": {
+      "abstract": false,
+      "attributes": [],
+      "containments": [
+        {
+          "annotation": "uw-map",
+          "changeable": true,
+          "default": null,
+          "eKeys": [],
+          "facets": {
+            "ordered": null,
+            "unique": null
+          },
+          "lowerBound": 0,
+          "many": true,
+          "merge": {
+            "kind": "attribute",
+            "leaf": {
+              "class": "Alpha",
+              "kind": "optionalRegister"
+            },
+            "shape": {
+              "key": {
+                "class": "sub::Shade",
+                "kind": "enum"
+              },
+              "kind": "keyed"
+            }
+          },
+          "name": "entries",
+          "ordered": true,
+          "provenance": {
+            "leaf": "houseDefault",
+            "ordered": "annotation",
+            "presence": "declared",
+            "unique": "annotation"
+          },
+          "required": false,
+          "target": "Entry",
+          "unsettable": false,
+          "upperBound": -1
+        }
+      ],
+      "interface": false,
+      "references": [],
+      "superTypeOrder": [],
+      "superTypes": []
+    }
+  },
+  "enumLiterals": {
+    "Alpha": [
+      {
+        "literal": null,
+        "name": "A",
+        "value": null
+      }
+    ],
+    "sub::Shade": [
+      {
+        "literal": null,
+        "name": "DARK",
+        "value": null
+      },
+      {
+        "literal": null,
+        "name": "LIGHT",
+        "value": 1
+      }
+    ]
+  },
+  "enums": {
+    "Alpha": [
+      "A"
+    ],
+    "sub::Shade": [
+      "DARK",
+      "LIGHT"
+    ]
+  },
+  "formatVersion": 2,
+  "nsPrefix": "subkey",
+  "nsURI": "http://example.org/ecm1lb/subkey",
+  "package": "subkey",
+  "packages": {
+    "sub": {
+      "nsPrefix": "sub",
+      "nsURI": "http://example.org/ecm1lb/subkey/sub"
+    }
+  },
+  "rootClasses": [
+    "Root"
+  ]
+}

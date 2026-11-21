@@ -96,7 +96,9 @@
 
 use ecore_rs::{
     ctx::Ctx,
-    repr::{Class, Structural, annot::Val, builtin::Typ as BuiltinTyp, ecore, idx, structural},
+    repr::{
+        Class, Pack, Structural, annot::Val, builtin::Typ as BuiltinTyp, ecore, idx, structural,
+    },
 };
 use moirai_semantics::{
     ClassSlot, FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, Provenance, SetTie,
@@ -104,8 +106,10 @@ use moirai_semantics::{
 };
 use serde_json::{Value, json};
 
-use crate::codegen::annotation::{ecore_feature_datatype, map_spec};
-use crate::codegen::ecore::is_eobject;
+use crate::{
+    codegen::ecore::{ecore_feature_datatype, is_eobject, map_spec},
+    error::{ArachneError, Result},
+};
 
 /// The annotation source a `datatype` override is written under.
 const SEMANTICS_SOURCE: &str = "urn:arachne:semantics";
@@ -235,33 +239,33 @@ pub fn merge_rule(feature: &Structural, class: &Class, ctx: &Ctx) -> (MergeRule,
 /// The shape and every leaf but an enum's serialize straight out of
 /// `moirai-semantics`, so the emitter and the parser cannot drift on a tag
 /// name; only the two name-typed fields are written by hand.
-pub fn merge_json(rule: &MergeRule, ctx: &Ctx) -> Value {
-    match rule {
+pub fn merge_json(rule: &MergeRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match rule {
         MergeRule::Attribute { shape, leaf } => json!({
             "kind": "attribute",
-            "shape": to_value(shape),
-            "leaf": leaf_json(leaf, ctx),
+            "shape": shape_json(shape, ctx, root)?,
+            "leaf": leaf_json(leaf, ctx, root)?,
         }),
         MergeRule::Containment { shape, target } => json!({
             "kind": "containment",
-            "shape": to_value(shape),
-            "target": class_name(*target, ctx),
+            "shape": shape_json(shape, ctx, root)?,
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::Reference { many, target } => json!({
             "kind": "reference",
             "many": many,
-            "target": class_name(*target, ctx),
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::IdentityReference { many, target } => json!({
             "kind": "identityReference",
             "many": many,
-            "target": class_name(*target, ctx),
+            "target": class_name(*target, ctx, root)?,
         }),
         MergeRule::Unsupported { reason } => json!({
             "kind": "unsupported",
             "reason": reason.as_str(),
         }),
-    }
+    })
 }
 
 /// The provenance as the descriptor spells it: four facets, four sources.
@@ -321,9 +325,8 @@ pub fn transparent_field<'a>(class: &'a Class) -> Option<&'a str> {
 
 /// The classifier a slot produced by this module names, under the key the
 /// descriptor lists it by.
-pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
-    let index = idx::Class::from(slot.index());
-    descriptor_class_name(ctx, index)
+pub fn class_name(slot: ClassSlot, ctx: &Ctx, root: &Pack) -> Result<String> {
+    descriptor_class_name(ctx, root, idx::Class::from(slot.index()))
 }
 
 /// The key the descriptor lists a classifier under.
@@ -350,16 +353,77 @@ pub fn class_name(slot: ClassSlot, ctx: &Ctx) -> String {
 /// The two spellings therefore differ across the paths — `ecore::EAnnotation`
 /// here and `EcoreEAnnotation` there — and the census's `Agreement::Nominal`
 /// is where that is recorded and checked.
-pub fn descriptor_class_name(ctx: &Ctx, class: idx::Class) -> String {
-    let name = ctx
+///
+/// A classifier of a subpackage is keyed by its path below `root`, the package being described
+/// (`a::b::Name`). A class outside `root` that is not Ecore's has no name to write: refused.
+pub fn descriptor_class_name(ctx: &Ctx, root: &Pack, class: idx::Class) -> Result<String> {
+    let class = ctx
         .classes()
         .get(*class)
-        .expect("a slot this module minted indexes the context it was minted from")
-        .name();
-    if ctx.is_ecore_class(class) {
-        format!("{}::{name}", ecore::PACKAGE_NAME)
-    } else {
-        name.to_string()
+        .expect("a slot this module minted indexes the context it was minted from");
+    if ctx.is_ecore_class(class.idx) {
+        return Ok(format!("{}::{}", ecore::PACKAGE_NAME, class.name()));
+    }
+    let Some(at) = class.path.iter().position(|pack| pack == root.idx) else {
+        return Err(ArachneError::InvalidModel(format!(
+            "`{}` is outside the described package `{}` and is not Ecore's, so it has no name to write",
+            class.name(),
+            root.name()
+        )));
+    };
+    let mut key = String::new();
+    for pack in class.path.iter().skip(at + 1) {
+        key.push_str(ctx[pack].name());
+        key.push_str("::");
+    }
+    Ok(key + class.name())
+}
+
+/* ---------- what a classifier is ---------- */
+
+// `describe` decides what a classifier is by the `xsi:type` the parser keeps, never by the
+// shared `Class::is_enum` (has literals) or `is_instantiable_class`, which take a datatype, and
+// an enum with no literal, for a class.
+
+/// An `ecore:EClass`, Ecore's own included.
+pub(crate) fn is_eclass(class: &Class) -> bool {
+    class.typ() == "ecore:EClass"
+}
+
+/// An `ecore:EEnum`, with or without literals.
+pub(crate) fn is_eenum(class: &Class) -> bool {
+    class.typ() == "ecore:EEnum"
+}
+
+/// The built-in Ecore type a value-typed classifier is described as: a built-in itself, or a
+/// user `EDataType` by EMF's instance class, `instanceClassName` else `instanceTypeName` up to its
+/// first `<`. The eight primitives and `java.lang.String` are the built-in of their name, a wrapper
+/// is its primitive (null comes from `lowerBound="0"`, which the feature's bounds already say), and
+/// anything else, an unqualified name like `String` included, is `Object`. `None` for a classifier
+/// that is no value type.
+pub(crate) fn value_builtin(class: &Class) -> Option<BuiltinTyp> {
+    match class.typ().as_str() {
+        "ecore:Builtin" => class.name().parse().ok(),
+        "ecore:EDataType" => Some(
+            match class
+                .instance_class_name()
+                .or(class.inst_name())
+                .and_then(|name| name.split('<').next())
+                .map(str::trim)
+            {
+                Some("boolean" | "java.lang.Boolean") => BuiltinTyp::EBoolean,
+                Some("byte" | "java.lang.Byte") => BuiltinTyp::EByte,
+                Some("short" | "java.lang.Short") => BuiltinTyp::EShort,
+                Some("int" | "java.lang.Integer") => BuiltinTyp::EInt,
+                Some("long" | "java.lang.Long") => BuiltinTyp::ELong,
+                Some("float" | "java.lang.Float") => BuiltinTyp::EFloat,
+                Some("double" | "java.lang.Double") => BuiltinTyp::EDouble,
+                Some("char" | "java.lang.Character") => BuiltinTyp::EChar,
+                Some("java.lang.String") => BuiltinTyp::EString,
+                _ => BuiltinTyp::Object,
+            },
+        ),
+        _ => None,
     }
 }
 
@@ -439,7 +503,7 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
             }
             let class = value_feature
                 .typ
-                .filter(|typ| ctx.classes().get(**typ).is_some_and(Class::is_enum))
+                .filter(|typ| ctx.classes().get(**typ).is_some_and(is_eenum))
                 .map(slot);
             Some((
                 MergeRule::Attribute {
@@ -489,7 +553,7 @@ fn keyed_rule(feature: &Structural, ctx: &Ctx) -> Option<(MergeRule, Provenance)
 fn key_kind(key_feature: &Structural, ctx: &Ctx) -> Option<KeyKind> {
     let typ = key_feature.typ?;
     let declared = ctx.classes().get(*typ)?;
-    if declared.is_enum() {
+    if is_eenum(declared) {
         return Some(KeyKind::Enum { class: slot(typ) });
     }
     Some(match declared.name().parse::<BuiltinTyp>() {
@@ -615,7 +679,7 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
         .expect("a resolved attribute type is a classifier of this context");
 
     // The declared type's own leaf, before any annotation.
-    let (from_type, from_type_source) = if declared.is_enum() {
+    let (from_type, from_type_source) = if is_eenum(declared) {
         (
             LeafRule::Enum {
                 class: slot(typ),
@@ -625,20 +689,23 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
             FacetSource::HouseDefault,
         )
     } else {
-        match declared.name().parse::<BuiltinTyp>() {
-            Ok(BuiltinTyp::EByte) => (counter(NumKind::I8), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EShort) => (counter(NumKind::I16), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EInt) => (counter(NumKind::I32), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::ELong) => (counter(NumKind::I64), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EFloat) => (counter(NumKind::F32), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EDouble) => (counter(NumKind::F64), FacetSource::HouseDefault),
-            Ok(BuiltinTyp::EBoolean) => (
+        match value_builtin(declared) {
+            Some(BuiltinTyp::EByte) => (counter(NumKind::I8), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EShort) => (counter(NumKind::I16), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EInt) => (counter(NumKind::I32), FacetSource::HouseDefault),
+            Some(BuiltinTyp::ELong) => (counter(NumKind::I64), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EFloat) => (counter(NumKind::F32), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EDouble) => (counter(NumKind::F64), FacetSource::HouseDefault),
+            Some(BuiltinTyp::EBoolean) => (
                 LeafRule::Flag {
                     wins: FlagWins::Enable,
                 },
                 FacetSource::HouseDefault,
             ),
-            Ok(BuiltinTyp::EChar) => (
+            // `Object` and a datatype whose instance class maps to nothing here hold a value
+            // this crate cannot type, and text would merge two concurrent writes into a value
+            // neither wrote: one of them wins, as for a char.
+            Some(BuiltinTyp::EChar | BuiltinTyp::Object) => (
                 LeafRule::Register {
                     tie: TieBreak::MultiValue,
                 },
@@ -646,12 +713,10 @@ fn leaf_rule(feature: &Structural, datatype: Option<&Val>, ctx: &Ctx) -> (LeafRu
             ),
             // The declared type decides the whole leaf and leaves Arachne no
             // choice to make, which is what `Declared` means here.
-            Ok(BuiltinTyp::EString) => (LeafRule::Text, FacetSource::Declared),
-            // `Object` and custom `EDataType`s: `descriptor.rs`'s
-            // `attribute_kind` describes them as `string`, and this follows it
-            // so `arachne describe` keeps working on a metamodel the generator
-            // itself would refuse. Nothing in the file said text.
-            Ok(BuiltinTyp::Object) | Err(()) => (LeafRule::Text, FacetSource::HouseDefault),
+            Some(BuiltinTyp::EString) => (LeafRule::Text, FacetSource::Declared),
+            // Not a value type at all (an attribute typed by a class):
+            // `descriptor.rs`'s `attribute_kind` describes it as `string`.
+            None => (LeafRule::Text, FacetSource::HouseDefault),
         }
     };
 
@@ -778,11 +843,24 @@ fn set_tie(datatype: Option<&Val>) -> SetTie {
 /* ---------- rendering ---------- */
 
 /// A leaf, with an enum's class by name.
-fn leaf_json(leaf: &LeafRule, ctx: &Ctx) -> Value {
-    match leaf {
+/// A shape as the descriptor spells it: an enum key by the enum's name, since its slot is a `Ctx` index.
+fn shape_json(shape: &Shape, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match shape {
+        Shape::Keyed {
+            key: KeyKind::Enum { class },
+        } => json!({
+            "kind": "keyed",
+            "key": { "kind": "enum", "class": class_name(*class, ctx, root)? },
+        }),
+        other => to_value(other),
+    })
+}
+
+fn leaf_json(leaf: &LeafRule, ctx: &Ctx, root: &Pack) -> Result<Value> {
+    Ok(match leaf {
         LeafRule::Enum { class, tie } => json!({
             "kind": "enum",
-            "class": class_name(*class, ctx),
+            "class": class_name(*class, ctx, root)?,
             "tie": to_value(tie),
         }),
         // Written by hand for the same reason the enum leaf is: the slot this
@@ -792,12 +870,12 @@ fn leaf_json(leaf: &LeafRule, ctx: &Ctx) -> Value {
         LeafRule::OptionalRegister { class } => match class {
             Some(class) => json!({
                 "kind": "optionalRegister",
-                "class": class_name(*class, ctx),
+                "class": class_name(*class, ctx, root)?,
             }),
             None => json!({ "kind": "optionalRegister" }),
         },
         other => to_value(other),
-    }
+    })
 }
 
 /// `serde_json::to_value` on a type of the shared vocabulary, which cannot
@@ -809,23 +887,16 @@ fn to_value<T: serde::Serialize>(value: &T) -> Value {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::io::Write;
     use std::path::{Path, PathBuf};
 
-    use ecore_rs::repr::{Class, Structural, builtin::Typ as BuiltinTyp, idx, structural};
-    use heck::ToUpperCamelCase;
+    use ecore_rs::repr::{Structural, idx};
     use moirai_semantics::{
         FacetSource, FlagWins, KeyKind, LeafRule, MergeRule, NumKind, SetTie, Shape, TieBreak,
     };
 
-    use super::{datatype_annotation, merge_rule};
+    use super::merge_rule;
     use crate::EcoreParser;
-    use crate::codegen::{
-        cycles::analyze_cycles,
-        ecore::is_eobject,
-        feature::{attribute::AttributeGenerator, containment::ContainmentGenerator},
-        generate::Generate,
-    };
+    use crate::codegen::ecore::is_eobject;
 
     fn example(file: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -852,28 +923,6 @@ mod tests {
         "pet_metamodels/ecore_builtins.ecore",
     ];
 
-    /// The Rust type the generator writes for a declared Ecore type, stated
-    /// here rather than taken from `to_crdt.rs` so the comparison is between
-    /// two implementations and not one.
-    fn rust_type(class: &Class) -> String {
-        if class.is_enum() {
-            return class.name().to_upper_camel_case();
-        }
-        match class.name().parse::<BuiltinTyp>() {
-            Ok(BuiltinTyp::EByte) => "i8",
-            Ok(BuiltinTyp::EShort) => "i16",
-            Ok(BuiltinTyp::EInt) => "i32",
-            Ok(BuiltinTyp::ELong) => "i64",
-            Ok(BuiltinTyp::EFloat) => "f32",
-            Ok(BuiltinTyp::EDouble) => "f64",
-            Ok(BuiltinTyp::EChar) => "char",
-            Ok(BuiltinTyp::EBoolean) => "bool",
-            Ok(BuiltinTyp::EString) => "std::string::String",
-            other => panic!("no Rust type for {other:?}"),
-        }
-        .to_string()
-    }
-
     /// Every class a generated crate would hold, in the order
     /// `generate_from_parser` ranges over them: the package's own, then
     /// Ecore's but `EObject`, which has no feature and is never generated.
@@ -892,617 +941,6 @@ mod tests {
             .chain(ecore_classes)
             .filter(|class| !ctx[*class].is_enum())
             .collect()
-    }
-
-    /// The declared type whose Rust type the leaf is over.
-    ///
-    /// The feature's own, for an attribute. For a keyed collection over an
-    /// attribute value the feature is a *containment* and the scalar comes
-    /// from the entry class's value feature, which
-    /// `containment.rs:96-101` finds by the `urn:arachne:semantics`
-    /// `value-feature` detail and, failing that, by the name `value` — EMF's
-    /// own convention for a map entry class (spec 05 §3.4). Restated here
-    /// rather than called, like the rest of this table.
-    fn leaf_rust(feature: &Structural, ctx: &ecore_rs::ctx::Ctx) -> String {
-        let declared = |typ: idx::Class| {
-            rust_type(
-                ctx.classes()
-                    .get(*typ)
-                    .expect("a resolved type is a classifier"),
-            )
-        };
-        if feature.kind == structural::Typ::EAttribute {
-            return declared(
-                feature
-                    .typ
-                    .expect("a generated attribute has a resolved type"),
-            );
-        }
-        let entry = ctx
-            .classes()
-            .get(
-                *feature
-                    .typ
-                    .expect("a generated containment has a resolved target"),
-            )
-            .expect("a classifier");
-        let value_name = datatype_annotation(feature)
-            .is_some()
-            .then(|| {
-                feature
-                    .annotations()
-                    .iter()
-                    .find(|annot| annot.source() == "urn:arachne:semantics")
-                    .and_then(|annot| annot.details().get("value-feature").cloned())
-            })
-            .flatten()
-            .unwrap_or_else(|| "value".to_string());
-        let value = entry
-            .structural()
-            .iter()
-            .find(|f| f.name == value_name)
-            .expect("a keyed collection's entry class declares its value feature");
-        declared(value.typ.expect("a value feature has a resolved type"))
-    }
-
-    /// The construction the generator emits for one feature, chosen by the
-    /// feature's *kind* and never by the rule's: a keyed collection over an
-    /// attribute value carries an `Attribute` rule on a containment, and it
-    /// is `ContainmentGenerator` that writes it.
-    fn emitted_type(
-        feature: &Structural,
-        class: &Class,
-        ctx: &ecore_rs::ctx::Ctx,
-        cycles: &crate::codegen::cycles::CycleAnalysis,
-    ) -> Result<String, String> {
-        let fragment = match feature.kind {
-            structural::Typ::EAttribute => AttributeGenerator::new(feature, ctx).generate(),
-            structural::Typ::EReference => {
-                ContainmentGenerator::new(feature, class.idx, ctx, cycles).generate()
-            }
-        };
-        fragment
-            .map(|fragment| normalize(fragment.tokens()))
-            .map_err(|error| error.to_string())
-    }
-
-    /// The log type of one leaf, over the attribute's declared Rust type.
-    ///
-    /// This is the readable half of the table: a `MergeRule` on the left, the
-    /// construction the generator emits on the right.
-    fn leaf_log(leaf: &LeafRule, rust: &str) -> String {
-        match leaf {
-            LeafRule::Text => "GraphLog<List<char>>".to_string(),
-            LeafRule::Counter { .. } => format!("VecLog<Counter<{rust}>>"),
-            LeafRule::Flag {
-                wins: FlagWins::Enable,
-            } => "VecLog<EWFlag>".to_string(),
-            LeafRule::Flag {
-                wins: FlagWins::Disable,
-            } => "VecLog<DWFlag>".to_string(),
-            LeafRule::Register { tie } | LeafRule::Enum { tie, .. } => {
-                format!("VecLog<{}<{rust}>>", register_name(*tie))
-            }
-            // `containment.rs:242-246`: a multi-value register over the
-            // declared type wrapped in `Option`, at no other tie-break.
-            LeafRule::OptionalRegister { .. } => format!("VecLog<MVRegister<Option<{rust}>>>"),
-        }
-    }
-
-    fn register_name(tie: TieBreak) -> &'static str {
-        match tie {
-            TieBreak::MultiValue => "MVRegister",
-            TieBreak::LastWriterWins => "LwwRegister",
-            TieBreak::Fair => "FairRegister",
-            TieBreak::PartialOrder => "PORegister",
-            TieBreak::TotalOrder => "TORegister",
-        }
-    }
-
-    /// The field type an `Attribute` rule implies.
-    ///
-    /// A set and a bag are the two shapes that drop the leaf log and hold the
-    /// bare Rust value, which is `attribute.rs:199-217`.
-    fn attribute_type(shape: &Shape, leaf: &LeafRule, rust: &str) -> String {
-        match shape {
-            Shape::Single => leaf_log(leaf, rust),
-            Shape::Optional => format!("OptionLog<{}>", leaf_log(leaf, rust)),
-            Shape::Sequence => format!("NestedListLog<{}>", leaf_log(leaf, rust)),
-            // An ordered set holds the bare Rust value under one graph log,
-            // the way a set and a bag hold it, and not one log per element:
-            // `attribute.rs:152-162`.
-            Shape::OrderedSet => format!("GraphLog<List<{rust}>>"),
-            Shape::Set {
-                tie: SetTie::AddWins,
-            } => format!("VecLog<AWSet<{rust}>>"),
-            Shape::Set {
-                tie: SetTie::RemoveWins,
-            } => format!("VecLog<RWSet<{rust}>>"),
-            Shape::Bag => format!("AWBagLog<{rust}>"),
-            Shape::Keyed { key } => {
-                format!("UWMapLog<{},{}>", key_rust(*key), leaf_log(leaf, rust))
-            }
-        }
-    }
-
-    /// The Rust key type `containment.rs:150-163` compiles for a `uw-map`.
-    fn key_rust(key: KeyKind) -> String {
-        match key {
-            KeyKind::Str => "std::string::String".to_string(),
-            KeyKind::Bool => "bool".to_string(),
-            KeyKind::Char => "char".to_string(),
-            KeyKind::Num { num } => num_rust(num).to_string(),
-            KeyKind::Enum { .. } => {
-                panic!("no checked-in metamodel keys a `uw-map` by an enum literal")
-            }
-        }
-    }
-
-    /// The log ident a containment's target contributes: the family log when
-    /// the target is abstract, an interface or has subclasses, the class's own
-    /// log otherwise (`classifier/mod.rs:36-59`, restated).
-    fn target_log(target: &Class) -> String {
-        let kind = if target.is_abstract() || target.is_interface() || !target.sub().is_empty() {
-            format!("{}Kind", target.name().to_upper_camel_case())
-        } else {
-            target.name().to_upper_camel_case()
-        };
-        format!("{kind}Log")
-    }
-
-    /// The field type a `Containment` rule implies.
-    fn containment_type(shape: &Shape, target: &Class) -> String {
-        let log = target_log(target);
-        match shape {
-            Shape::Single => log,
-            Shape::Optional => format!("OptionLog<{log}>"),
-            Shape::Sequence => format!("NestedListLog<{log}>"),
-            Shape::Keyed { key } => format!("UWMapLog<{},{log}>", key_rust(*key)),
-            other => panic!("a containment cannot be {other:?}"),
-        }
-    }
-
-    /// The emitted fragment as a comparable string: the field name dropped,
-    /// the read-out after `=>` dropped, the private classifiers module
-    /// dropped, `Box` dropped and every space squeezed out.
-    ///
-    /// The read-out is dropped because the rule is about the merge, and a
-    /// value type is a projection of the log, not a choice the rule makes:
-    /// since Moirai v0.7 a `record!` field is `name : Log => Value`, and the
-    /// `Value` half is `codegen/value.rs`'s function of the `Log` half.
-    ///
-    /// `Box` — `BoxedLog` since Moirai v0.6 — is a Rust representation choice
-    /// the cycle analysis makes so a log has a finite size; it changes no
-    /// merge, and the rule does not name it.
-    fn normalize(tokens: &proc_macro2::TokenStream) -> String {
-        let rendered = tokens.to_string();
-        let (_, typ) = rendered
-            .split_once(" : ")
-            .unwrap_or_else(|| panic!("a field fragment is `name : type`, got `{rendered}`"));
-        let typ = typ
-            .split_once(" => ")
-            .map(|(log, _)| log)
-            .unwrap_or_else(|| {
-                panic!("a field fragment is `name : log => value`, got `{rendered}`")
-            });
-        let mut out = String::with_capacity(typ.len());
-        for chunk in typ.replace("__classifiers :: ", "").split_whitespace() {
-            out.push_str(chunk);
-        }
-        while let Some((start, opener)) = ["BoxedLog<", "Box<"]
-            .iter()
-            .filter_map(|opener| out.find(opener).map(|start| (start, *opener)))
-            .min_by_key(|(start, _)| *start)
-        {
-            let width = opener.len();
-            let mut depth = 0usize;
-            let mut end = None;
-            for (offset, ch) in out[start + width..].char_indices() {
-                match ch {
-                    '<' => depth += 1,
-                    '>' if depth == 0 => {
-                        end = Some(start + width + offset);
-                        break;
-                    }
-                    '>' => depth -= 1,
-                    _ => {}
-                }
-            }
-            let end = end.expect("a balanced `Box<...>` or `BoxedLog<...>`");
-            out = format!(
-                "{}{}{}",
-                &out[..start],
-                &out[start + width..end],
-                &out[end + 1..]
-            );
-        }
-        out
-    }
-
-    /// How an expected construction and an emitted one compare.
-    ///
-    /// The rule names a *construction*, and a construction is a tree of log
-    /// and value types; what a classifier inside it is spelled is `ident.rs`'s
-    /// business and not the rule's. Two of `ident.rs`'s spellings are pure
-    /// renamings that carry no meaning:
-    ///
-    /// - the reserved `Ecore` prefix, which exists so a metamodel class called
-    ///   `EObject` keeps its own name and Ecore's becomes `EcoreEObject`;
-    /// - the `Model` clash suffix, which `classifier_type_name` appends when a
-    ///   class's name would collide with a macro-generated one, so a class
-    ///   called `ArcKind` beside a class called `Arc` becomes `ArcKindModel`.
-    ///
-    /// Neither changes one log, one merge or one read-out. [`Agreement::Nominal`]
-    /// is the bucket for a pair the two sides build identically and spell
-    /// apart, and it is its own answer and never folded into
-    /// [`Agreement::Exact`]: the census writes it into the `agree` column, so
-    /// every such pair is listed with both spellings beside it and a reader
-    /// can check for himself that nothing but a name moved.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    enum Agreement {
-        /// The same string.
-        Exact,
-        /// The same construction, one classifier spelled two ways.
-        Nominal,
-        /// A real disagreement.
-        Differ,
-    }
-
-    impl Agreement {
-        /// The word the `agree` column carries.
-        const fn as_str(self) -> &'static str {
-            match self {
-                Agreement::Exact => "yes",
-                Agreement::Nominal => "nominal",
-                Agreement::Differ => "NO",
-            }
-        }
-    }
-
-    /// The suffixes `ident.rs` reserves for macro-generated type names, which
-    /// is what a clash is a clash with.
-    const MACRO_SUFFIXES: [&str; 17] = [
-        "KindChildValueRank",
-        "ChildValueRank",
-        "KindChildValue",
-        "KindRejection",
-        "KindContainer",
-        "KindVariant",
-        "ChildValue",
-        "Rejection",
-        "Container",
-        "KindChild",
-        "KindValue",
-        "Variant",
-        "KindLog",
-        "Child",
-        "Value",
-        "Kind",
-        "Log",
-    ];
-
-    /// One emitted or expected type with the two nominal renamings undone.
-    ///
-    /// Written over the string rather than looked up in the [`Ctx`] on
-    /// purpose: asking `classifier_type_name` what it spelled a class would be
-    /// the comparison quoting one of its two sides.
-    fn nominal(typ: &str) -> String {
-        let mut out = String::with_capacity(typ.len());
-        let mut ident = String::new();
-        for ch in typ.chars() {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                ident.push(ch);
-            } else {
-                out.push_str(&strip_renamings(&ident));
-                ident.clear();
-                out.push(ch);
-            }
-        }
-        out.push_str(&strip_renamings(&ident));
-        out
-    }
-
-    /// The two renamings, undone on one identifier.
-    fn strip_renamings(ident: &str) -> String {
-        // The reserved prefix, and only in front of a name that still looks
-        // like one of Ecore's own: every class the branch builds in is
-        // `E` + an upper-camel word.
-        let ident = match ident.strip_prefix(super::super::ident::ECORE_CLASS_PREFIX) {
-            Some(rest)
-                if rest.starts_with('E')
-                    && rest
-                        .chars()
-                        .nth(1)
-                        .is_some_and(|ch| ch.is_ascii_uppercase()) =>
-            {
-                rest
-            }
-            _ => ident,
-        };
-        // The clash suffix, before the macro suffix it was inserted in front
-        // of, or at the very end. `attempt` past the first appends a digit.
-        for suffix in std::iter::once("").chain(MACRO_SUFFIXES) {
-            let Some(head) = ident.strip_suffix(suffix) else {
-                continue;
-            };
-            let head = head.trim_end_matches(|ch: char| ch.is_ascii_digit());
-            if let Some(base) = head.strip_suffix("Model")
-                && !base.is_empty()
-            {
-                return format!("{base}{suffix}");
-            }
-        }
-        ident.to_string()
-    }
-
-    /// Whether the rule's construction and the generator's are the same one,
-    /// and if so whether they are spelled the same way.
-    fn agreement(expected: &str, emitted: &str) -> Agreement {
-        if expected == emitted {
-            Agreement::Exact
-        } else if nominal(expected) == nominal(emitted) {
-            Agreement::Nominal
-        } else {
-            Agreement::Differ
-        }
-    }
-
-    /// The nominal normalisation does exactly two things and stops.
-    ///
-    /// The pairs below are the two families the ModelSet run of 2026-09-18
-    /// reported as 295 disagreements over 152 files: 187 of the reserved
-    /// `Ecore` prefix and 108 of the `Model` clash suffix. They are the same
-    /// construction on both sides and the last two rows are the control — a
-    /// real difference in the construction is still a difference, and a class
-    /// the metamodel itself calls `EcoreThing` is not Ecore's.
-    ///
-    /// **The `EObject` half of that 187 is no longer reachable**, and the two
-    /// rows that carry it are kept as the rule's own statement rather than as
-    /// a census family. A feature typed by `EObject` carries
-    /// `UnsupportedReason::EObjectContainment` or `EObjectReference` since
-    /// 2026-09-18, so it is compared on neither path and reaches the
-    /// `no-field` column instead; the replay in
-    /// `experiments/ip5-corpus-census/README.md` says what that does to the
-    /// run's numbers. The prefix family itself is alive: `EAnnotation` and
-    /// `EModelElement` are generated, and `pet_metamodels/ecore_builtins.ecore`
-    /// reaches them through `ip2`.
-    #[test]
-    fn the_two_renamings_are_nominal_and_nothing_else_is() {
-        for (expected, emitted) in [
-            ("OptionLog<EObjectLog>", "OptionLog<EcoreEObjectLog>"),
-            (
-                "NestedListLog<EObjectLog>",
-                "NestedListLog<EcoreEObjectLog>",
-            ),
-            ("EAnnotationLog", "EcoreEAnnotationLog"),
-            (
-                "NestedListLog<EAnnotationLog>",
-                "NestedListLog<EcoreEAnnotationLog>",
-            ),
-            ("EModelElementLog", "EcoreEModelElementLog"),
-            (
-                "VecLog<MVRegister<ArcKind>>",
-                "VecLog<MVRegister<ArcKindModel>>",
-            ),
-            (
-                "NestedListLog<ArcKindLog>",
-                "NestedListLog<ArcKindModelLog>",
-            ),
-            (
-                "UWMapLog<std::string::String,NodeKindLog>",
-                "UWMapLog<std::string::String,NodeKindModelLog>",
-            ),
-        ] {
-            assert_eq!(
-                agreement(expected, emitted),
-                Agreement::Nominal,
-                "`{expected}` against `{emitted}`"
-            );
-        }
-
-        for (expected, emitted) in [
-            // The 259: two constructions, not two spellings.
-            (
-                "NestedListLog<GraphLog<List<char>>>",
-                "GraphLog<List<std::string::String>>",
-            ),
-            // The 6: a bag against a set.
-            (
-                "AWBagLog<std::string::String>",
-                "VecLog<AWSet<std::string::String>>",
-            ),
-            // The 5: one width against another.
-            (
-                "OptionLog<VecLog<Counter<u8>>>",
-                "OptionLog<VecLog<Counter<i8>>>",
-            ),
-            // A metamodel's own class whose name happens to start with the
-            // prefix is not Ecore's, and is not normalised away.
-            ("EcoreThingLog", "ThingLog"),
-        ] {
-            assert_eq!(
-                agreement(expected, emitted),
-                Agreement::Differ,
-                "`{expected}` against `{emitted}`"
-            );
-        }
-
-        assert_eq!(
-            agreement("VecLog<EWFlag>", "VecLog<EWFlag>"),
-            Agreement::Exact
-        );
-    }
-
-    /// **ip2** — for every structural feature of every class of the checked-in
-    /// metamodels, the rule `merge_rule` derives names the construction
-    /// `AttributeGenerator` or `ContainmentGenerator` emits for that feature.
-    ///
-    /// This is criterion I-A3 and leg 2 of the paper: the descriptor may be
-    /// called *derived* only if what it publishes is what the generator would
-    /// have compiled. The two sides are written independently — the table
-    /// above against Léo's emitters — and a disagreement on any one of the
-    /// features named in the failure is the falsification the criterion asks
-    /// for.
-    #[test]
-    fn ip2_the_rule_names_the_construction_the_generator_emits() {
-        let mut compared = 0usize;
-        let mut references = 0usize;
-        let mut unsupported = 0usize;
-
-        for metamodel in METAMODELS {
-            let parser = EcoreParser::from_file(example(metamodel))
-                .unwrap_or_else(|e| panic!("{metamodel} should parse: {e}"));
-            let ctx = &parser.ctx;
-            let pack = crate::find_user_package(ctx).expect("a user package");
-            let cycles = analyze_cycles(ctx).expect("the cycle analysis");
-
-            // Ecore's own classes are compared like anyone else's, so a
-            // metamodel that reaches them has its whole generated slice here.
-            for class_idx in &generated_classes(ctx, pack) {
-                let class = &ctx[*class_idx];
-                // A spelling, never a construction: `ident.rs` gives Ecore's
-                // own classes a reserved prefix and the rule names them as
-                // the `.ecore` file does, so a construction that mentions one
-                // of them agrees nominally and never exactly. Anything else
-                // must agree exactly, which is what the flag is narrowed for.
-                let names_an_ecore_class = |feature: &Structural| {
-                    ctx.is_ecore_class(*class_idx)
-                        || feature.typ.is_some_and(|typ| ctx.is_ecore_class(typ))
-                };
-                for feature in class.structural() {
-                    let (rule, _) = merge_rule(feature, class, ctx);
-                    let at = format!("{metamodel} `{}.{}`", class.name(), feature.name);
-                    let agrees = |expected: &str, emitted: &str| {
-                        let agreement = agreement(expected, emitted);
-                        let allowed = if names_an_ecore_class(feature) {
-                            agreement != Agreement::Differ
-                        } else {
-                            agreement == Agreement::Exact
-                        };
-                        assert!(
-                            allowed,
-                            "{at}: {rule:?} names `{expected}` and the generator emits \
-                             `{emitted}` ({agreement:?})"
-                        );
-                    };
-
-                    match &rule {
-                        MergeRule::Unsupported { .. } => unsupported += 1,
-                        // `process_structural_features` skips a non-containment
-                        // reference, so there is no field to compare; the
-                        // generated `bt_crdt` shows it as the empty
-                        // `record!(DataFlowPort {})`, and
-                        // `no_field_is_emitted_for_a_non_containment_reference`
-                        // pins that.
-                        MergeRule::Reference { many, target }
-                        | MergeRule::IdentityReference { many, target } => {
-                            assert_eq!(
-                                (feature.kind, feature.containment),
-                                (structural::Typ::EReference, false),
-                                "{at}: the rule says reference"
-                            );
-                            assert_eq!(
-                                *many,
-                                feature.bounds.ubound.is_none_or(|ubound| ubound > 1),
-                                "{at}: multiplicity"
-                            );
-                            assert_eq!(
-                                super::class_name(*target, ctx),
-                                super::descriptor_class_name(
-                                    ctx,
-                                    feature.typ.expect("a resolved target")
-                                ),
-                                "{at}: target"
-                            );
-                            references += 1;
-                        }
-                        MergeRule::Attribute { shape, leaf } => {
-                            let rust = leaf_rust(feature, ctx);
-                            if let LeafRule::Counter { num, .. } = leaf {
-                                assert_eq!(
-                                    num_rust(*num),
-                                    rust,
-                                    "{at}: the counter's width is not the declared one"
-                                );
-                            }
-                            let expected = attribute_type(shape, leaf, &rust);
-                            let emitted = emitted_type(feature, class, ctx, &cycles)
-                                .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
-                            agrees(&expected, &emitted);
-                            compared += 1;
-                        }
-                        MergeRule::Containment { shape, target } => {
-                            let target = ctx.classes().get(target.index()).expect("a classifier");
-                            let expected = containment_type(shape, target);
-                            let emitted = emitted_type(feature, class, ctx, &cycles)
-                                .unwrap_or_else(|e| panic!("{at} should generate: {e}"));
-                            agrees(&expected, &emitted);
-                            compared += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // The counts are asserted so a metamodel silently losing its features
-        // — a parse that yields nothing, a package that resolves to the
-        // builtins — cannot make this test vacuous.
-        // Fifty on 2026-09-07, when `json.ecore`'s five keyed and transparent
-        // features carried no rule and were counted as unsupported. D6's
-        // amendment gives all five a rule, and each is compared against the
-        // construction the generator emits like any other: `Object.entry`
-        // against the `UWMapLog<std::string::String, JsonKindLog>`
-        // `containment.rs` writes, and the four transparent fields against
-        // what their own generator writes, which is what
-        // `transparent_field_types` then lifts into the `JsonKind` union.
-        // Sixty-nine and eleven on 2026-09-09, when `class_diagram.ecore`
-        // joined the list: fourteen more attributes, two more references, and
-        // the first `Shape::Set`, `DWFlag`, `LwwRegister`, `FairRegister`,
-        // `PORegister`, `TORegister` and enum-typed attribute the rule and
-        // the generator have ever been compared on.
-        // Seventy-eight, twelve and four on 2026-09-18, when
-        // `ecore_builtins.ecore` joined the list and Ecore's own classes
-        // began to be compared: nine more constructions — the ordered
-        // containment of annotations, the `details` map, the optional
-        // `source` and `name`, the entry class's own `key` and `value`, and
-        // the pet metamodel's three — one more reference, `Port.annotated`,
-        // and the first four features that carry no construction at all: two
-        // typed by `EObject`, one containment of `EObject`, and the transient
-        // back-pointer `EAnnotation.eModelElement`.
-        assert_eq!(
-            (compared, references, unsupported),
-            (78, 12, 4),
-            "the census of what was compared moved"
-        );
-    }
-
-    fn num_rust(num: NumKind) -> &'static str {
-        match num {
-            NumKind::I8 => "i8",
-            NumKind::I16 => "i16",
-            NumKind::I32 => "i32",
-            NumKind::I64 => "i64",
-            NumKind::F32 => "f32",
-            NumKind::F64 => "f64",
-        }
-    }
-
-    /// The other half of ip2's reference arm: a non-containment reference is
-    /// not merely absent from the comparison, it is absent from the generated
-    /// record. `DataFlowPort` declares exactly one feature, `entry`, and its
-    /// record is empty.
-    #[test]
-    fn no_field_is_emitted_for_a_non_containment_reference() {
-        let parser = EcoreParser::from_file(example("behavior_tree.ecore"))
-            .expect("behavior_tree.ecore should parse");
-        let pack = crate::find_user_package(&parser.ctx).expect("a user package");
-        let (classifiers, _references, _package, _count) =
-            crate::generate_from_parser(&parser, pack).expect("generation should succeed");
-        let rendered = classifiers.build().to_string().replace(' ', "");
-        assert!(
-            rendered.contains("record!(DataFlowPort{})"),
-            "`DataFlowPort.entry` reached the record: {rendered}"
-        );
     }
 
     /// **ip3** — `bt.ecore` declares `ordered` and `unique` zero times, so the
@@ -2117,721 +1555,6 @@ mod tests {
                 FacetSource::EcoreDefault,
             ),
             "`Foo.myChar` is a multi-value register, which is Arachne's pick among five"
-        );
-    }
-
-    /* ---------- the corpus census: `ip2` over a whole directory tree ---------- */
-
-    /// Where the panic hook parks the message of the panic it just caught.
-    static PANIC_MESSAGE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-    /// Replace the default hook with one that records instead of printing, so
-    /// a corpus of thousands of files does not bury the census in backtraces.
-    fn quiet_panics() {
-        static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| {
-            std::panic::set_hook(Box::new(|info| {
-                let payload = info
-                    .payload()
-                    .downcast_ref::<&str>()
-                    .map(|text| (*text).to_string())
-                    .or_else(|| info.payload().downcast_ref::<String>().cloned())
-                    .unwrap_or_else(|| "panicked".to_string());
-                let at = info.location().map_or_else(String::new, |loc| {
-                    format!(" at {}:{}", loc.file(), loc.line())
-                });
-                *PANIC_MESSAGE.lock().expect("the panic slot") = Some(format!("{payload}{at}"));
-            }));
-        });
-    }
-
-    /// The file the census is inside right now, with its size and the moment
-    /// it started, which is all the watchdog below needs.
-    static CENSUS_CURRENT: std::sync::Mutex<Option<(String, u64, std::time::Instant)>> =
-        std::sync::Mutex::new(None);
-
-    /// A per-file deadline, because one pathological file in a corpus of
-    /// thousands must not stall the run.
-    ///
-    /// A hang is not a panic and cannot be caught like one: the thread that is
-    /// stuck cannot be unwound, so the watchdog writes the file's row itself
-    /// with the status `hang` and ends the process. Every file already named
-    /// in `files.csv` is skipped, so the next invocation resumes past it and
-    /// the hung file stays in the record as a hang rather than vanishing.
-    fn watchdog(files_path: PathBuf, seconds: u64) {
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(250));
-                let stuck = match &*CENSUS_CURRENT.lock().expect("the census slot") {
-                    Some((rel, bytes, started)) if started.elapsed().as_secs() >= seconds => {
-                        Some((rel.clone(), *bytes))
-                    }
-                    _ => None,
-                };
-                let Some((rel, bytes)) = stuck else { continue };
-                if let Ok(mut files) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&files_path)
-                {
-                    let _ = writeln!(
-                        files,
-                        "{}",
-                        csv(&[
-                            rel.clone(),
-                            bytes.to_string(),
-                            "hang".to_string(),
-                            "0".to_string(),
-                            "0".to_string(),
-                            "0".to_string(),
-                            String::new(),
-                            String::new(),
-                            format!("no answer in {seconds}s, ended by the census watchdog"),
-                        ])
-                    );
-                    let _ = files.flush();
-                }
-                println!("{rel}: hang after {seconds}s");
-                let _ = std::io::stdout().flush();
-                std::process::exit(7);
-            }
-        });
-    }
-
-    /// Run `body`, turning a panic into an `Err` carrying its message.
-    ///
-    /// `merge_rule` and the two generators both `expect` their way through
-    /// facts every checked-in metamodel happens to satisfy — a resolved
-    /// `eType`, fewer classifiers than a `u16` addresses, a builtin the table
-    /// has a Rust type for. A corpus nobody wrote for us does not, and a
-    /// census that aborted on the first one would measure nothing.
-    fn catching<T>(body: impl FnOnce() -> T) -> Result<T, String> {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).map_err(|_| {
-            PANIC_MESSAGE
-                .lock()
-                .expect("the panic slot")
-                .take()
-                .unwrap_or_else(|| "panicked".to_string())
-        })
-    }
-
-    /// One error, flattened to a CSV field with the quoted source dropped.
-    ///
-    /// The parser's error prints its cause chain, then the line and column,
-    /// then `current parser state:` followed by the bytes of the file it
-    /// stopped inside. The chain and the position are the measurement and the
-    /// bytes are somebody else's metamodel: 432 KB of them over ModelSet, and
-    /// no part of a third-party corpus belongs in this repository or in the
-    /// vault, so the field stops where the quoting starts.
-    fn diagnostic(error: &str) -> String {
-        let flat = error.lines().collect::<Vec<_>>().join(" | ");
-        match flat.find("current parser state:") {
-            Some(at) => format!("{}current parser state elided", &flat[..at]),
-            None => flat,
-        }
-    }
-
-    /// Every `.ecore` under `root`, sorted, skipping build and VCS directories.
-    fn ecore_files(root: &Path) -> Vec<PathBuf> {
-        fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
-            let Ok(entries) = std::fs::read_dir(dir) else {
-                return;
-            };
-            let mut here: Vec<PathBuf> = Vec::new();
-            let mut deeper: Vec<PathBuf> = Vec::new();
-            for entry in entries.flatten() {
-                let Ok(kind) = entry.file_type() else {
-                    continue;
-                };
-                let path = entry.path();
-                if kind.is_dir() {
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    if name == "target" || name == "node_modules" || name == ".git" {
-                        continue;
-                    }
-                    deeper.push(path);
-                } else if kind.is_file()
-                    && path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ecore"))
-                {
-                    here.push(path);
-                }
-            }
-            here.sort();
-            deeper.sort();
-            found.append(&mut here);
-            for dir in deeper {
-                walk(&dir, found);
-            }
-        }
-        let mut found = Vec::new();
-        walk(root, &mut found);
-        found
-    }
-
-    /// One CSV record, every field quoted so a type string full of commas and
-    /// angle brackets survives the round trip.
-    fn csv(fields: &[String]) -> String {
-        fields
-            .iter()
-            .map(|field| format!("\"{}\"", field.replace('"', "\"\"")))
-            .collect::<Vec<_>>()
-            .join(",")
-    }
-
-    /// The `LeafLog` arm `moirai-interp` would hold for this rule, which is
-    /// the vocabulary the two-path proof is stated in. A set and a bag replace
-    /// the leaf log outright, so they name the arm themselves.
-    fn leaf_arm(shape: &Shape, leaf: &LeafRule) -> String {
-        match shape {
-            Shape::Set {
-                tie: SetTie::AddWins,
-            } => "SetAw".to_string(),
-            Shape::Set {
-                tie: SetTie::RemoveWins,
-            } => "SetRw".to_string(),
-            Shape::Bag => "Bag".to_string(),
-            Shape::OrderedSet => "OrderedSet".to_string(),
-            _ => match leaf {
-                LeafRule::Text => "Text".to_string(),
-                LeafRule::Counter { num, resettable } => format!(
-                    "{}{}",
-                    if *resettable {
-                        "Counter"
-                    } else {
-                        "SimpleCounter"
-                    },
-                    num_arm(*num)
-                ),
-                LeafRule::Flag {
-                    wins: FlagWins::Enable,
-                } => "FlagEw".to_string(),
-                LeafRule::Flag {
-                    wins: FlagWins::Disable,
-                } => "FlagDw".to_string(),
-                LeafRule::Register { tie } | LeafRule::Enum { tie, .. } => {
-                    format!("Register{}", tie_arm(*tie))
-                }
-                LeafRule::OptionalRegister { .. } => "RegisterOptional".to_string(),
-            },
-        }
-    }
-
-    fn num_arm(num: NumKind) -> &'static str {
-        match num {
-            NumKind::I8 => "I8",
-            NumKind::I16 => "I16",
-            NumKind::I32 => "I32",
-            NumKind::I64 => "I64",
-            NumKind::F32 => "F32",
-            NumKind::F64 => "F64",
-        }
-    }
-
-    fn tie_arm(tie: TieBreak) -> &'static str {
-        match tie {
-            TieBreak::MultiValue => "Mv",
-            TieBreak::LastWriterWins => "Lww",
-            TieBreak::Fair => "Fair",
-            TieBreak::PartialOrder => "Po",
-            TieBreak::TotalOrder => "To",
-        }
-    }
-
-    /// The shape's own name, in the descriptor's spelling.
-    fn shape_name(shape: &Shape) -> String {
-        match shape {
-            Shape::Single => "single".to_string(),
-            Shape::Optional => "optional".to_string(),
-            Shape::Sequence => "sequence".to_string(),
-            Shape::Set {
-                tie: SetTie::AddWins,
-            } => "set-aw".to_string(),
-            Shape::Set {
-                tie: SetTie::RemoveWins,
-            } => "set-rw".to_string(),
-            Shape::Bag => "bag".to_string(),
-            Shape::Keyed { key } => format!("keyed-{}", key_name(*key)),
-            Shape::OrderedSet => "ordered-set".to_string(),
-        }
-    }
-
-    fn key_name(key: KeyKind) -> String {
-        match key {
-            KeyKind::Str => "str".to_string(),
-            KeyKind::Bool => "bool".to_string(),
-            KeyKind::Char => "char".to_string(),
-            KeyKind::Num { num } => num_arm(num).to_ascii_lowercase(),
-            KeyKind::Enum { .. } => "enum".to_string(),
-        }
-    }
-
-    /// Whether this feature sits inside the constructions the oracles have
-    /// proven two-path equal, and when it does not, which way it falls out.
-    ///
-    /// `reference` is the capability the interpreted path does not implement
-    /// at all. `unsupported` is a behavioural flag, which carries no
-    /// construction on either path. The ordered set used to be a third cell
-    /// with no construction of its own; it is `GraphLog<List<T>>` on the
-    /// generated path and `LeafLog::OrderedSet` on the interpreted one now,
-    /// driven by the matrix through `Foo.uniqueList`, so it is proven like the
-    /// rest.
-    fn proof_standing(rule: &MergeRule) -> &'static str {
-        match rule {
-            MergeRule::Attribute { leaf, .. } => match leaf {
-                LeafRule::Counter {
-                    resettable: false, ..
-                } => "unreachable-arm",
-                _ => "proven",
-            },
-            MergeRule::Containment { shape, .. } => match shape {
-                Shape::Single | Shape::Optional | Shape::Sequence | Shape::Keyed { .. } => "proven",
-                _ => "unreachable-arm",
-            },
-            MergeRule::Reference { .. } => "reference",
-            // SI.05: two-path equal by the twin of its spec, section 5.3.
-            MergeRule::IdentityReference { .. } => "proven",
-            MergeRule::Unsupported { .. } => "unsupported",
-        }
-    }
-
-    /// Whether the file wrote a facet down at all: `true`, `false` or silence.
-    fn facet(value: Option<bool>) -> String {
-        match value {
-            Some(true) => "true".to_string(),
-            Some(false) => "false".to_string(),
-            None => "absent".to_string(),
-        }
-    }
-
-    /// The census of one feature: the derived rule, the type the generator
-    /// emits, and whether they agree.
-    ///
-    /// This is `ip2`'s loop body with the assertion removed. It calls the same
-    /// `attribute_type` and `containment_type` the assertion calls, so a
-    /// disagreement found here is a disagreement `ip2` would have failed on.
-    fn census_feature(
-        rel: &str,
-        class: &Class,
-        feature: &Structural,
-        ctx: &ecore_rs::ctx::Ctx,
-        cycles: &crate::codegen::cycles::CycleAnalysis,
-    ) -> Vec<String> {
-        let (rule, provenance) = merge_rule(feature, class, ctx);
-        let many = !matches!(
-            (feature.bounds.lbound, feature.bounds.ubound),
-            (0, Some(1)) | (0, Some(0)) | (1, Some(1))
-        );
-
-        // The generator runs first. When it refuses the feature there is no
-        // type to compare against and no reason to ask the table for one,
-        // which is also what keeps a metamodel the generator would reject from
-        // being counted as a disagreement.
-        let emitted = match &rule {
-            MergeRule::Attribute { .. } | MergeRule::Containment { .. } => {
-                Some(emitted_type(feature, class, ctx, cycles))
-            }
-            _ => None,
-        };
-
-        let (shape_column, leaf_column, arm, expected, emitted_column, agree) =
-            match (&rule, emitted) {
-                (MergeRule::Unsupported { reason }, _) => (
-                    String::new(),
-                    reason.as_str().to_string(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    "no-field".to_string(),
-                ),
-                (
-                    MergeRule::Reference { many, .. } | MergeRule::IdentityReference { many, .. },
-                    _,
-                ) => (
-                    if *many { "many" } else { "single" }.to_string(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    "no-field".to_string(),
-                ),
-                (_, Some(Err(error))) => (
-                    match &rule {
-                        MergeRule::Attribute { shape, .. }
-                        | MergeRule::Containment { shape, .. } => shape_name(shape),
-                        _ => String::new(),
-                    },
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    error,
-                    "generator-refused".to_string(),
-                ),
-                (MergeRule::Attribute { shape, leaf }, Some(Ok(emitted))) => {
-                    let rust = leaf_rust(feature, ctx);
-                    let expected = attribute_type(shape, leaf, &rust);
-                    let agree = agreement(&expected, &emitted);
-                    (
-                        shape_name(shape),
-                        format!("{leaf:?}"),
-                        leaf_arm(shape, leaf),
-                        expected,
-                        emitted,
-                        agree.as_str().to_string(),
-                    )
-                }
-                (MergeRule::Containment { shape, target }, Some(Ok(emitted))) => {
-                    let target = ctx
-                        .classes()
-                        .get(target.index())
-                        .expect("a containment target is a classifier");
-                    let expected = containment_type(shape, target);
-                    let agree = agreement(&expected, &emitted);
-                    (
-                        shape_name(shape),
-                        String::new(),
-                        String::new(),
-                        expected,
-                        emitted,
-                        agree.as_str().to_string(),
-                    )
-                }
-                (_, None) => {
-                    unreachable!("only a reference and an unsupported feature emit nothing")
-                }
-            };
-
-        vec![
-            rel.to_string(),
-            class.name().to_string(),
-            feature.name.clone(),
-            match feature.kind {
-                structural::Typ::EAttribute => "attribute",
-                structural::Typ::EReference if feature.containment => "containment",
-                structural::Typ::EReference => "reference",
-            }
-            .to_string(),
-            match &rule {
-                MergeRule::Attribute { .. } => "attribute",
-                MergeRule::Containment { .. } => "containment",
-                MergeRule::Reference { .. } => "reference",
-                MergeRule::IdentityReference { .. } => "identityReference",
-                MergeRule::Unsupported { .. } => "unsupported",
-            }
-            .to_string(),
-            many.to_string(),
-            feature.bounds.lbound.to_string(),
-            feature
-                .bounds
-                .ubound
-                .map_or_else(|| "*".to_string(), |bound| bound.to_string()),
-            facet(feature.ordered),
-            facet(feature.unique),
-            shape_column,
-            leaf_column,
-            arm,
-            expected,
-            emitted_column,
-            agree,
-            proof_standing(&rule).to_string(),
-            format!("{:?}", provenance.ordered),
-            format!("{:?}", provenance.unique),
-            format!("{:?}", provenance.leaf),
-            format!("{:?}", provenance.presence),
-            datatype_annotation(feature).cloned().unwrap_or_default(),
-        ]
-    }
-
-    /// The header of `results.csv`, one column per field `census_feature`
-    /// returns.
-    const CENSUS_COLUMNS: [&str; 22] = [
-        "file",
-        "class",
-        "feature",
-        "ecore_kind",
-        "rule_kind",
-        "multivalued",
-        "lower_bound",
-        "upper_bound",
-        "ordered_declared",
-        "unique_declared",
-        "shape",
-        "leaf",
-        "leaf_arm",
-        "expected_type",
-        "emitted_type",
-        "agree",
-        "proof_standing",
-        "src_ordered",
-        "src_unique",
-        "src_leaf",
-        "src_presence",
-        "annotation",
-    ];
-
-    /// The header of `files.csv`.
-    const FILE_COLUMNS: [&str; 9] = [
-        "file",
-        "bytes",
-        "status",
-        "classes",
-        "features",
-        "compared",
-        "descriptor",
-        "table",
-        "detail",
-    ];
-
-    /// **The corpus census** — `ip2` run as a measurement rather than as an
-    /// assertion, over every `.ecore` file under `CENSUS_ROOT`.
-    ///
-    /// For each file it records whether the parser accepts it; for each
-    /// structural feature of each class of its user package it records the
-    /// rule `merge_rule` derives, the type `AttributeGenerator` or
-    /// `ContainmentGenerator` emits, and whether the two agree. It asserts
-    /// nothing at all: a disagreement is a row in `results.csv` with `NO` in
-    /// the `agree` column, and the aggregate is computed from the CSV by the
-    /// experiment's own script so it can be recomputed without a rebuild.
-    ///
-    /// It is restartable. Every file already named in `files.csv` is skipped
-    /// and both files are appended to, so an interrupted run resumes where it
-    /// stopped rather than starting over.
-    ///
-    /// Knobs, all from the environment because a test takes no arguments:
-    /// `CENSUS_ROOT` is the directory walked, `CENSUS_OUT` the directory the
-    /// two CSVs are written to, `CENSUS_LIMIT` an optional cap on how many
-    /// files this invocation processes, `CENSUS_TIMEOUT` the per-file deadline
-    /// in seconds, 60 by default and disabled by 0.
-    #[test]
-    #[ignore = "a corpus census, not a gate; run it from experiments/ip5-corpus-census/run.sh"]
-    fn corpus_census_of_derived_rules_against_emitted_types() {
-        let Ok(root) = std::env::var("CENSUS_ROOT") else {
-            println!("CENSUS_ROOT is unset; nothing to census");
-            return;
-        };
-        let root = PathBuf::from(root);
-        let out = PathBuf::from(
-            std::env::var("CENSUS_OUT").unwrap_or_else(|_| "target/census".to_string()),
-        );
-        let limit: usize = std::env::var("CENSUS_LIMIT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(usize::MAX);
-        std::fs::create_dir_all(&out).expect("the census output directory");
-
-        let results_path = out.join("results.csv");
-        let files_path = out.join("files.csv");
-
-        // Restart: every file already in `files.csv` has been censused.
-        let mut done: BTreeMap<String, ()> = BTreeMap::new();
-        if let Ok(text) = std::fs::read_to_string(&files_path) {
-            for line in text.lines().skip(1) {
-                if let Some(name) = line
-                    .strip_prefix('"')
-                    .and_then(|rest| rest.split('"').next())
-                {
-                    done.insert(name.to_string(), ());
-                }
-            }
-        }
-
-        let fresh = done.is_empty();
-        let mut results = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&results_path)
-            .expect("results.csv");
-        let mut files = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&files_path)
-            .expect("files.csv");
-        if fresh {
-            let header = |columns: &[&str]| {
-                csv(&columns
-                    .iter()
-                    .map(|column| (*column).to_string())
-                    .collect::<Vec<_>>())
-            };
-            writeln!(results, "{}", header(&CENSUS_COLUMNS)).expect("the results header");
-            writeln!(files, "{}", header(&FILE_COLUMNS)).expect("the files header");
-        }
-
-        quiet_panics();
-        let timeout: u64 = std::env::var("CENSUS_TIMEOUT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(60);
-        if timeout > 0 {
-            watchdog(files_path.clone(), timeout);
-        }
-        let corpus = ecore_files(&root);
-        println!(
-            "corpus: {} .ecore files under {}",
-            corpus.len(),
-            root.display()
-        );
-
-        let mut processed = 0usize;
-        for path in &corpus {
-            let rel = path
-                .strip_prefix(&root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-            if done.contains_key(&rel) {
-                continue;
-            }
-            if processed >= limit {
-                break;
-            }
-            processed += 1;
-            let bytes = std::fs::metadata(path).map_or(0, |meta| meta.len());
-            *CENSUS_CURRENT.lock().expect("the census slot") =
-                Some((rel.clone(), bytes, std::time::Instant::now()));
-            println!("> {rel}");
-            let _ = std::io::stdout().flush();
-
-            let mut rows: Vec<String> = Vec::new();
-            let mut status = "ok".to_string();
-            let mut detail = String::new();
-            let mut classes = 0usize;
-            let mut features = 0usize;
-            let mut compared = 0usize;
-            let mut descriptor_status = String::new();
-            let mut table_status = String::new();
-
-            let parsed = catching(|| EcoreParser::from_file(path));
-            match parsed {
-                Err(panic) => {
-                    status = "parse-panic".to_string();
-                    detail = panic;
-                }
-                Ok(Err(error)) => {
-                    status = "parse-error".to_string();
-                    detail = error.to_string();
-                }
-                Ok(Ok(parser)) => {
-                    let ctx = &parser.ctx;
-                    match crate::find_user_package(ctx) {
-                        Err(error) => {
-                            status = "no-package".to_string();
-                            detail = error.to_string();
-                        }
-                        Ok(pack) => match catching(|| analyze_cycles(ctx)) {
-                            Err(panic) => {
-                                status = "cycles-panic".to_string();
-                                detail = panic;
-                            }
-                            Ok(Err(error)) => {
-                                status = "cycles-error".to_string();
-                                detail = error.to_string();
-                            }
-                            Ok(Ok(cycles)) => {
-                                match catching(|| {
-                                    crate::codegen::descriptor::descriptor_json(ctx, pack)
-                                }) {
-                                    Err(panic) => {
-                                        descriptor_status = format!("panic: {panic}");
-                                        table_status = "skipped".to_string();
-                                    }
-                                    Ok(Err(error)) => {
-                                        descriptor_status = format!("error: {error}");
-                                        table_status = "skipped".to_string();
-                                    }
-                                    Ok(Ok(descriptor)) => {
-                                        descriptor_status = "ok".to_string();
-                                        table_status = match catching(|| {
-                                            moirai_semantics::from_descriptor(&descriptor)
-                                        }) {
-                                            Err(panic) => format!("panic: {panic}"),
-                                            Ok(Err(error)) => format!("error: {error}"),
-                                            Ok(Ok(_)) => "ok".to_string(),
-                                        };
-                                    }
-                                }
-
-                                for class_idx in pack.classes() {
-                                    let class = &ctx[*class_idx];
-                                    if class.is_enum() {
-                                        continue;
-                                    }
-                                    classes += 1;
-                                    for feature in class.structural() {
-                                        features += 1;
-                                        match catching(|| {
-                                            census_feature(&rel, class, feature, ctx, &cycles)
-                                        }) {
-                                            Ok(fields) => {
-                                                compared += 1;
-                                                rows.push(csv(&fields));
-                                            }
-                                            Err(panic) => {
-                                                rows.push(csv(&[
-                                                    rel.clone(),
-                                                    class.name().to_string(),
-                                                    feature.name.clone(),
-                                                    String::new(),
-                                                    "panic".to_string(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    facet(feature.ordered),
-                                                    facet(feature.unique),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    panic,
-                                                    "derivation-panic".to_string(),
-                                                    "panic".to_string(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                    String::new(),
-                                                ]));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                    }
-                }
-            }
-
-            for row in &rows {
-                writeln!(results, "{row}").expect("a results row");
-            }
-            writeln!(
-                files,
-                "{}",
-                csv(&[
-                    rel.clone(),
-                    bytes.to_string(),
-                    status.clone(),
-                    classes.to_string(),
-                    features.to_string(),
-                    compared.to_string(),
-                    descriptor_status,
-                    table_status,
-                    diagnostic(&detail),
-                ])
-            )
-            .expect("a files row");
-            results.flush().expect("flush results");
-            files.flush().expect("flush files");
-            *CENSUS_CURRENT.lock().expect("the census slot") = None;
-            println!("{rel}: {status}, {features} features");
-        }
-
-        println!(
-            "censused {processed} files this invocation; {} were already in {}",
-            done.len(),
-            files_path.display()
         );
     }
 }

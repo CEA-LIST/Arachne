@@ -1,0 +1,204 @@
+--- a/arachne-codegen/src/codegen/descriptor.rs
++++ b/arachne-codegen/src/codegen/descriptor.rs
+@@ -972,64 +972,6 @@
+         );
+     }
+ 
+-    /// A class carries its own declarations only, and every one of them carries
+-    /// the four `formatVersion` 2 keys: the facets as written, the annotation,
+-    /// the merge rule and its provenance.
+-    ///
+-    /// `TreeNode.ID` is the shape of a required text slot, its `presence`
+-    /// `declared` because `lowerBound="1"` differs from Ecore's `0..1` default;
+-    /// `TreeNode.name` the same leaf under an `OptionLog`, and although it
+-    /// writes `lowerBound="0" upperBound="1"` it resolves to that default, so
+-    /// the conservative reading calls it `ecoreDefault` rather than claim a
+-    /// declaration the parsed feature no longer distinguishes.
+-    #[test]
+-    fn bt_tree_node_declares_only_its_own_features() {
+-        let descriptor = bt_descriptor();
+-        let tree_node = &descriptor["classes"]["TreeNode"];
+-        assert_eq!(
+-            tree_node["attributes"],
+-            json!([
+-                {"name": "ID", "kind": "string", "many": false,
+-                 "required": true, "isId": false,
+-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+-                 "merge": {"kind": "attribute", "shape": {"kind": "single"},
+-                           "leaf": {"kind": "text"}},
+-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+-                                "leaf": "declared", "presence": "declared"}},
+-                {"name": "name", "kind": "string", "many": false,
+-                 "required": false, "isId": false,
+-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+-                 "merge": {"kind": "attribute", "shape": {"kind": "optional"},
+-                           "leaf": {"kind": "text"}},
+-                 "provenance": {"ordered": "notApplicable", "unique": "notApplicable",
+-                                "leaf": "declared", "presence": "ecoreDefault"}},
+-            ])
+-        );
+-    }
+-
+-    /// The one entry the whole provenance argument rests on. `bt.ecore` writes
+-    /// no `ordered` anywhere, and a behaviour tree's `Sequence` runs its
+-    /// children left to right, so the sequence this compiles to is Arachne's
+-    /// decision and the descriptor says so: `houseDefault`, with `facets`
+-    /// showing the file was silent.
+-    #[test]
+-    fn bt_control_node_containment_is_many_ordered_and_subclass_typed() {
+-        let descriptor = bt_descriptor();
+-        let control_node = &descriptor["classes"]["ControlNode"];
+-        assert_eq!(
+-            control_node["containments"],
+-            json!([
+-                {"name": "children", "target": "TreeNode", "many": true,
+-                 "required": false, "ordered": true,
+-                 "facets": {"ordered": null, "unique": null}, "annotation": null,
+-                 "merge": {"kind": "containment", "shape": {"kind": "sequence"},
+-                           "target": "TreeNode"},
+-                 "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
+-                                "leaf": "notApplicable", "presence": "declared"}},
+-            ])
+-        );
+-    }
+-
+     /// The digest is a function of the descriptor's content: rendering it
+     /// pretty, compact or with its keys in another order gives one digest, a
+     /// second generation from the same `.ecore` gives the same one, and one
+@@ -1147,136 +1089,6 @@
+         descriptor_of("pet_metamodels/ecore_builtins.ecore")
+     }
+ 
+-    /// Ecore's classes are listed under a package-qualified key and a
+-    /// metamodel's own are not, which is what lets a metamodel declaring its
+-    /// own `EAnnotation` be described beside Ecore's. ModelSet holds 36 that
+-    /// do.
+-    ///
+-    /// `EObject` is listed although it is never generated: it has no feature,
+-    /// so it adds no rule, and listing it is what makes every supertype and
+-    /// every target the descriptor writes resolve to a class the descriptor
+-    /// lists — which `moirai-semantics` requires and which dropping the
+-    /// supertype silently would buy at the price of contradicting EMF, where
+-    /// an explicit `EObject` supertype is visible in the reflective API.
+-    #[test]
+-    fn ecore_classes_are_listed_under_a_package_qualified_key() {
+-        let descriptor = builtins_descriptor();
+-        let mut names: Vec<&str> = descriptor["classes"]
+-            .as_object()
+-            .expect("classes")
+-            .keys()
+-            .map(String::as_str)
+-            .collect();
+-        names.sort_unstable();
+-        assert_eq!(
+-            names,
+-            [
+-                "Element",
+-                "Model",
+-                "Part",
+-                "Port",
+-                "ecore::EAnnotation",
+-                "ecore::EModelElement",
+-                "ecore::ENamedElement",
+-                "ecore::EObject",
+-                "ecore::EStringToStringMapEntry",
+-            ]
+-        );
+-        assert_eq!(
+-            descriptor["classes"]["Model"]["superTypes"],
+-            json!(["ecore::EObject"])
+-        );
+-        assert_eq!(
+-            descriptor["classes"]["Port"]["superTypes"],
+-            json!(["ecore::ENamedElement"])
+-        );
+-        assert_eq!(
+-            descriptor["classes"]["ecore::EObject"],
+-            json!({
+-                "abstract": false, "superTypes": [],
+-                "attributes": [], "containments": [], "references": []
+-            }),
+-            "`EObject` is concrete and has no feature, as `Ecore.ecore` declares it"
+-        );
+-        // A `::` is not a character an Ecore name can hold, so the key cannot
+-        // be one a metamodel's own class claims.
+-        assert!(names.iter().filter(|name| name.contains("::")).count() == 5);
+-    }
+-
+-    /// The four features of `EAnnotation` that carry a construction and the
+-    /// three that do not, as data: the ordered containment of annotations,
+-    /// the optional `source`, the `details` map to a register over an
+-    /// optional text, and the two `EObject`-typed features and the transient
+-    /// back-pointer recorded with their reason rather than dropped.
+-    #[test]
+-    fn the_annotation_features_carry_their_rules_and_their_refusals() {
+-        let descriptor = builtins_descriptor();
+-        let annotation = &descriptor["classes"]["ecore::EAnnotation"];
+-        let rule = |array: &str, name: &str| -> Value {
+-            annotation[array]
+-                .as_array()
+-                .unwrap_or_else(|| panic!("`{array}`"))
+-                .iter()
+-                .find(|entry| entry["name"] == json!(name))
+-                .unwrap_or_else(|| panic!("`EAnnotation.{name}`"))["merge"]
+-                .clone()
+-        };
+-
+-        assert_eq!(
+-            descriptor["classes"]["ecore::EModelElement"]["containments"][0],
+-            json!({
+-                "name": "eAnnotations", "target": "ecore::EAnnotation",
+-                "many": true, "required": false, "ordered": true,
+-                "facets": {"ordered": null, "unique": null}, "annotation": null,
+-                "merge": {"kind": "containment", "shape": {"kind": "sequence"},
+-                          "target": "ecore::EAnnotation"},
+-                "provenance": {"ordered": "houseDefault", "unique": "notApplicable",
+-                               "leaf": "notApplicable", "presence": "declared"}
+-            })
+-        );
+-        assert_eq!(
+-            rule("attributes", "source"),
+-            json!({"kind": "attribute", "shape": {"kind": "optional"},
+-                   "leaf": {"kind": "text"}}),
+-            "a silent `lowerBound` is Ecore's 0, so `source` is optional text"
+-        );
+-        assert_eq!(
+-            rule("containments", "details"),
+-            json!({"kind": "attribute",
+-                   "shape": {"kind": "keyed", "key": {"kind": "str"}},
+-                   "leaf": {"kind": "optionalRegister"}}),
+-            "EMF's map entry convention makes `details` a map, and its optional \
+-             value a register so that a key put with no value is read back"
+-        );
+-        assert_eq!(
+-            rule("containments", "contents"),
+-            json!({"kind": "unsupported", "reason": "eObjectContainment"})
+-        );
+-        assert_eq!(
+-            rule("references", "references"),
+-            json!({"kind": "unsupported", "reason": "eObjectReference"})
+-        );
+-        assert_eq!(
+-            rule("references", "eModelElement"),
+-            json!({"kind": "unsupported", "reason": "transient"}),
+-            "the back-pointer of a containment, which `analysis.rs:74` drops"
+-        );
+-        // The map is Ecore's own convention and not a `urn:arachne:semantics`
+-        // annotation, so the two collection facets are sourced to Ecore.
+-        let details = descriptor["classes"]["ecore::EAnnotation"]["containments"]
+-            .as_array()
+-            .unwrap()
+-            .iter()
+-            .find(|entry| entry["name"] == json!("details"))
+-            .unwrap();
+-        assert_eq!(
+-            details["provenance"],
+-            json!({"ordered": "ecoreDefault", "unique": "ecoreDefault",
+-                   "leaf": "houseDefault", "presence": "declared"})
+-        );
+-        assert_eq!(details["annotation"], Value::Null);
+-    }
+-
+     /// The descriptor `arachne describe` emits is one `moirai-semantics`
+     /// parses into a table, which is the whole point of emitting it: the
+     /// supertypes resolve, the targets resolve, the inherited `eAnnotations`

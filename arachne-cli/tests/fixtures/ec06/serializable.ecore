@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="ser" nsURI="http://example.org/ec06/ser" nsPrefix="ser">
+  <eClassifiers xsi:type="ecore:EClass" name="Root">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="handle" eType="#//Handle"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EDataType" name="Handle" instanceClassName="java.lang.Object" serializable="false"/>
+</ecore:EPackage>

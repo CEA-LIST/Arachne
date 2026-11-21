@@ -1,0 +1,4 @@
+[ERROR arachne] Error: Failed to parse Ecore metamodel: Unsupported attribute `serializable` in `eClassifiers`
+    at `eClassifiers` named `Handle`, line 6, column 3
+    at `EPackage` named `ser`, line 2, column 1
+    caused by: Failed to parse Ecore metamodel: Unsupported attribute `serializable` in `eClassifiers` at `eClassifiers` named `Handle`, line 6, column 3 at `EPackage` named `ser`, line 2, column 1

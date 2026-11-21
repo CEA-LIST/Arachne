@@ -1,0 +1,4 @@
+modelset/diverse-project/k3/k3-samples-deployed/logo/k3.sample.maven.logo.model/model/ASMLogo.ecore
+modelset/diverse-project/k3/k3-tools/fr.inria.diverse.k3.tools.aspectGenerator/ASMLogo.ecore
+modelset/gemoc/ale-lang/examples/logo.model/model/ASMLogo.ecore
+modelset/tue-mdse/ocl-dataset/dataset/repos/MDEGroup/MDEForge/mdeforge/githubmetamodels/ASMLogo.ecore

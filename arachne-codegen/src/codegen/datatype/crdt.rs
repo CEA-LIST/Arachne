@@ -70,7 +70,6 @@ impl Named for Collection {
 
 #[derive(Clone, Debug, Default)]
 pub enum Counter {
-    Counter,
     #[default]
     ResettableCounter,
 }
@@ -78,7 +77,6 @@ pub enum Counter {
 impl Named for Counter {
     fn name(&self) -> &str {
         match self {
-            Counter::Counter => "Counter",
             Counter::ResettableCounter => "Counter",
         }
     }
@@ -123,7 +121,7 @@ pub enum Graph {
 impl Named for Graph {
     fn name(&self) -> &str {
         match self {
-            Graph::AWMultigraph => "AWMultigraph",
+            Graph::AWMultigraph => "Graph",
         }
     }
 }
