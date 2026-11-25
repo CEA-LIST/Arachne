@@ -32,6 +32,7 @@ use moirai_protocol::{
 /// The const IDs select generated metadata; they add no per-instance storage.
 /// Fuzz generators and footprint implementations belong to application code.
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "test_utils", derive(deepsize::DeepSizeOf))]
 pub struct ProjectedLog<L: IsLog, const CLASS: usize, const FIELD: usize>(L);
 

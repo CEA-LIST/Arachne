@@ -496,6 +496,7 @@ impl<'a> ClassGenerator<'a> {
         let tokens = if let Some((first, rest)) = variants.split_first() {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+                #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
                 pub enum #name {
                     #[default]
                     #first,
@@ -505,6 +506,7 @@ impl<'a> ClassGenerator<'a> {
         } else {
             quote! {
                 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+                #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
                 pub enum #name {
                     #(#variants,)*
                 }
