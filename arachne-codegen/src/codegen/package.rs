@@ -283,6 +283,7 @@ impl<'a> PackageGenerator<'a> {
 
         quote! {
             #[derive(Debug, Clone, Default)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
             pub struct #package_log_name {
                 #(#root_fields,)*
                 #reference_field
